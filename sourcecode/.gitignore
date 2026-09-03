@@ -1,0 +1,17 @@
+# Python
+backend/venv/
+backend/__pycache__/
+backend/**/__pycache__/
+backend/.env
+backend/chroma_data/
+backend/chat_log.db
+backend/orders.db
+*.pyc
+
+# Node
+frontend/node_modules/
+frontend/dist/
+frontend/.env
+
+# OS
+.DS_Store
