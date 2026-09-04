@@ -5,6 +5,9 @@ FastAPI 入口。
 「訂單查詢」（#2，比對訂單編號格式）還是「產品問題」（#1，交給 ProductQueryAgent 做 RAG），
 對應提案「單一對話框、後端自動判斷」的架構。
 """
+import os
+os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
+
 import re
 import time
 from collections import defaultdict, deque

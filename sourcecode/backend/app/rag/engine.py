@@ -22,7 +22,10 @@ def get_retriever():
     elif settings.RAG_ENGINE == "custom":
         from app.rag.custom_engine import CustomRetriever
         _retriever = CustomRetriever()
+    elif settings.RAG_ENGINE in ("online", "gemini"):
+        from app.rag.online_engine import OnlineRetriever
+        _retriever = OnlineRetriever()
     else:
-        raise ValueError(f"未知的 RAG_ENGINE 設定：{settings.RAG_ENGINE}（可用值：custom, llamaindex）")
+        raise ValueError(f"未知的 RAG_ENGINE 設定：{settings.RAG_ENGINE}（可用值：custom, llamaindex, online）")
 
     return _retriever
