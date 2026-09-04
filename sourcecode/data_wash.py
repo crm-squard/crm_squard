@@ -11,3 +11,4 @@ print(unique_list)
 'Power Bank', 'Wireless Mouse', 'Laptop Stand', 'Notebook', 'Webcam', 'Fitness Band', 'Tablet', 'Headphones', 
 'Gaming Controller', 'Microphone', 'Smart Watch', 'Bluetooth Speaker', 'Monitor'
 """
+# test
