@@ -38,12 +38,15 @@ DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # 啟動時就預載 Embedding / LLM 模型（已快取在本機，只是載入記憶體，不會重新下載），
-    # 避免第一位使用者送出訊息時要空等模型載入。
-    init_chat_log_db()
-    init_orders_db()
-    get_agent()
+    # 啟動時預載 DB 與模型；若缺少 API Key 或環境變數，以警告日誌紀錄，避免容器啟動失敗
+    try:
+        init_chat_log_db()
+        init_orders_db()
+        get_agent()
+    except Exception as e:
+        print(f"[Warning] Backend startup warmup failed: {e}")
     yield
+
 
 
 app = FastAPI(title="智慧CRM系統 API", version="0.1.0", lifespan=lifespan)
