@@ -1,0 +1,12 @@
+{
+  "context": { "fileName": ["AGENTS.md"] },
+  "experimental": { "enableAgents": false },
+  "agents": {
+    "overrides": {
+      "pm": { "enabled": false },
+      "frontend": { "enabled": false },
+      "backend": { "enabled": false },
+      "qa": { "enabled": false }
+    }
+  }
+}
