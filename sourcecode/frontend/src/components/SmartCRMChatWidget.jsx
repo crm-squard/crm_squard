@@ -145,10 +145,10 @@ export default function SmartCRMChatWidget() {
     }
   }
 
-  function handleKeyDown(e) {
+  function handleKey(e) {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      sendMessage(input);
+      sendMessage(e.currentTarget.value);
     }
   }
 
@@ -529,7 +529,7 @@ export default function SmartCRMChatWidget() {
               value={input}
               placeholder="輸入您的問題或訂單編號…"
               onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
+              onKeyUp={handleKey}
               aria-label="輸入訊息"
             />
             <button
