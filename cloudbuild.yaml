@@ -2,51 +2,27 @@
 # 用法：gcloud builds submit --config=cloudbuild.yaml .
 
 steps:
-  # 1. 建置 Backend 容器鏡像
-  - name: 'gcr.io/cloud-builders/docker'
-    args:
-      - 'build'
-      - '-t'
-      - 'gcr.io/$PROJECT_ID/crm-backend:latest'
-      - './sourcecode/backend'
-
-  # 2. 推送 Backend 鏡像至 Registry
-  - name: 'gcr.io/cloud-builders/docker'
-    args: ['push', 'gcr.io/$PROJECT_ID/crm-backend:latest']
-
-  # 3. 部署 Backend 至 Cloud Run
+  # 1. 自動建置並部署 Backend 至 Cloud Run
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: gcloud
     args:
       - 'run'
       - 'deploy'
       - 'crm-backend'
-      - '--image=gcr.io/$PROJECT_ID/crm-backend:latest'
+      - '--source=./sourcecode/backend'
       - '--region=asia-east1'
       - '--platform=managed'
       - '--allow-unauthenticated'
       - '--set-env-vars=USE_SMALL_MODEL=true,RAG_ENGINE=gemini'
 
-  # 4. 建置 Frontend 容器鏡像
-  - name: 'gcr.io/cloud-builders/docker'
-    args:
-      - 'build'
-      - '-t'
-      - 'gcr.io/$PROJECT_ID/crm-frontend:latest'
-      - './sourcecode/frontend'
-
-  # 5. 推送 Frontend 鏡像
-  - name: 'gcr.io/cloud-builders/docker'
-    args: ['push', 'gcr.io/$PROJECT_ID/crm-frontend:latest']
-
-  # 6. 部署 Frontend 至 Cloud Run
+  # 2. 自動建置並部署 Frontend 至 Cloud Run
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: gcloud
     args:
       - 'run'
       - 'deploy'
       - 'crm-frontend'
-      - '--image=gcr.io/$PROJECT_ID/crm-frontend:latest'
+      - '--source=./sourcecode/frontend'
       - '--region=asia-east1'
       - '--platform=managed'
       - '--allow-unauthenticated'
@@ -54,7 +30,3 @@ steps:
 
 options:
   logging: CLOUD_LOGGING_ONLY
-
-images:
-  - 'gcr.io/$PROJECT_ID/crm-backend:latest'
-  - 'gcr.io/$PROJECT_ID/crm-frontend:latest'
