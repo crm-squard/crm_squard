@@ -9,6 +9,7 @@ API key／要用的模型名稱存在 settings.LLM_KEYS_PATH 指到的 JSON 檔�
 所有 generate_xxx() 函式吃同一種 messages 格式：[{"role": "system"|"user"|"assistant", "content": str}]，
 跟本地模型（app/llm.py 的 generate()）介面一致，agent.py 呼叫時不需要知道背後是哪家供應商。
 """
+import os
 import json
 import threading
 
@@ -40,14 +41,18 @@ def _load_keys() -> dict:
 def is_configured(provider: str) -> bool:
     if provider == "local":
         return True
+    if provider == "google" and os.getenv("GEMINI_API_KEY"):
+        return True
     return bool(_load_keys().get(provider, {}).get("api_key"))
 
 
 def _get_config(provider: str) -> dict:
-    config = _load_keys().get(provider) or {}
+    config = dict(_load_keys().get(provider) or {})
+    if provider == "google" and not config.get("api_key") and os.getenv("GEMINI_API_KEY"):
+        config["api_key"] = os.getenv("GEMINI_API_KEY")
     if not config.get("api_key"):
         raise ProviderNotConfigured(
-            f"尚未設定 {provider} 的 API key，請在 backend/llm_keys.json 填入後重啟後端。"
+            f"尚未設定 {provider} 的 API key，請在 backend/llm_keys.json 或環境變數 GEMINI_API_KEY 填入後重啟後端。"
         )
     return config
 

@@ -28,6 +28,7 @@ steps:
       - '--platform=managed'
       - '--allow-unauthenticated'
       - '--set-env-vars=USE_SMALL_MODEL=true,RAG_ENGINE=gemini'
+      - '--set-secrets=GEMINI_API_KEY=GEMINI_API_KEY:latest'
 
   # 4. 建置 Frontend 容器鏡像
   - name: 'gcr.io/cloud-builders/docker'

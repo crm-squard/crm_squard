@@ -75,7 +75,7 @@ class ProductQueryAgent:
         )
 
     def generate_answer(
-        self, query: str, history=None, provider: str = "local", top_k: int = 3, max_new_tokens: int = 512
+        self, query: str, history=None, provider: str = "google", top_k: int = 3, max_new_tokens: int = 512
     ):
         """
         history：之前幾輪對話 [{"role": "user"|"assistant", "content": ...}, ...]，
