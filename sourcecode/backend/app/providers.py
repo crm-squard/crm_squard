@@ -45,6 +45,19 @@ def is_configured(provider: str) -> bool:
     return bool(_load_keys().get(provider, {}).get("api_key"))
 
 
+def key_prefix(provider: str, length: int = 4) -> str:
+    """只回傳金鑰前幾碼，debug 用（例如 log 裡確認載入的是不是預期那把 key、
+    有沒有多餘空白字元），不要把完整金鑰印出來或回傳給前端。"""
+    key = ""
+    if provider == "google":
+        key = os.getenv("GEMINI_API_KEY") or ""
+    if not key:
+        key = _load_keys().get(provider, {}).get("api_key") or ""
+    if not key:
+        return "(未設定)"
+    return key[:length] + "..."
+
+
 def _get_config(provider: str) -> dict:
     config = dict(_load_keys().get(provider) or {})
     if provider == "google" and not config.get("api_key") and os.getenv("GEMINI_API_KEY"):
