@@ -1,4 +1,4 @@
-import SmartCRMChatWidget from "./components/SmartCRMChatWidget";
+import SmartCRMChatWidget from "./features/chat/SmartCRMChatWidget";
 
 export default function App() {
   return <SmartCRMChatWidget />;
