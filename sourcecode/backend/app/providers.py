@@ -130,7 +130,7 @@ def generate_google(messages: list[dict], max_new_tokens: int) -> str:
     genai.configure(api_key=config["api_key"])
     system_prompt, rest = _split_system(messages)
     model = genai.GenerativeModel(
-        config.get("model", "gemini-2.0-flash"),
+        config.get("model", "gemini-3.1-flash-lite"),
         system_instruction=system_prompt or None,
     )
 
