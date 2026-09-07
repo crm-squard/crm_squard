@@ -44,7 +44,7 @@ NO_INFO_ANSWER = "目前查無此資訊，建議聯繫真人客服（0800-123-45
 class ProductQueryAgent:
     def __init__(self):
         self.retriever = get_retriever()
-        get_llm()  # 建構時就把本地 LLM 一併載入，讓 get_agent() 真正做到完整預載
+        # get_llm()  # 建構時就把本地 LLM 一併載入，讓 get_agent() 真正做到完整預載
 
     def receive_query(self, query: str) -> str:
         return query.strip()
