@@ -103,8 +103,8 @@ export default function SmartCRMChatWidget() {
   ]);
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
-  const [providers, setProviders] = useState([{ id: "local", label: "本地 1.5B/7B（免費，速度較慢）", configured: true }]);
-  const [provider, setProvider] = useState("local");
+  const [providers, setProviders] = useState([{ id: "google", label: "Google Gemini", configured: true }]);
+  const [provider, setProvider] = useState("google");
   const listRef = useRef(null);
 
   useEffect(() => {
@@ -115,9 +115,18 @@ export default function SmartCRMChatWidget() {
 
   useEffect(() => {
     fetchProviders()
-      .then(setProviders)
+      .then((list) => {
+        setProviders(list);
+        const googleP = list.find((p) => p.id === "google" && p.configured);
+        if (googleP) {
+          setProvider("google");
+        } else {
+          const firstConfigured = list.find((p) => p.configured);
+          if (firstConfigured) setProvider(firstConfigured.id);
+        }
+      })
       .catch(() => {
-        // 拿不到 provider 清單就維持預設只有本地模型，不影響聊天功能
+        // 拿不到 provider 清單就維持預設
       });
   }, []);
 

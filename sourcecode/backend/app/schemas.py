@@ -17,7 +17,7 @@ class ChatRequest(BaseModel):
     # 只有產品問答（type == "product"）這條路徑會用到；訂單查詢是規則比對，不需要歷史。
     history: List[HistoryTurn] = Field(default_factory=list, max_length=20)
     # 要用哪個 LLM 回答；local 是本地 1.5B/7B 模型，其餘是線上付費 API（見 app/providers.py）
-    provider: Literal["local", "anthropic", "openai", "google", "xai"] = "local"
+    provider: Literal["local", "anthropic", "openai", "google", "xai"] = "google"
 
 
 class SourceRef(BaseModel):
