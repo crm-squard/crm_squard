@@ -27,7 +27,7 @@ steps:
       - '--region=europe-west1'
       - '--platform=managed'
       - '--allow-unauthenticated'
-      - '--set-env-vars=USE_SMALL_MODEL=true,RAG_ENGINE=gemini'
+      - '--set-env-vars=USE_SMALL_MODEL=true,RAG_ENGINE=gemini,CORS_ORIGINS=*'
       - '--set-secrets=GEMINI_API_KEY=GEMINI_API_KEY:latest'
       - '--port=8000'
 
