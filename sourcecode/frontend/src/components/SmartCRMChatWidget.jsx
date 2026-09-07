@@ -19,7 +19,8 @@ async function askBackend(message, history, provider) {
     body: JSON.stringify({ message, history, provider }),
   });
   if (!res.ok) {
-    throw new Error(`後端回應錯誤：${res.status}`);
+    const errorBody = await res.text().catch(() => "");
+    throw new Error(`後端回應狀態碼 ${res.status}: ${errorBody}`);
   }
   return res.json();
 }
@@ -141,6 +142,7 @@ export default function SmartCRMChatWidget() {
       const reply = await askBackend(trimmed, history, provider);
       setMessages((prev) => [...prev, { role: "bot", ...reply }]);
     } catch (err) {
+      console.error("[askBackend 呼叫失敗]", err);
       setMessages((prev) => [
         ...prev,
         {
