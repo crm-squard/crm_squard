@@ -1,9 +1,54 @@
-import { useState, useRef, useEffect } from "react";
-import { MessageCircle, X, Send, Sparkles, Package, Truck, CheckCircle2, Clock } from "lucide-react";
+import { useState, useRef, useEffect, type KeyboardEvent } from "react";
+import {
+  MessageCircle,
+  X,
+  Send,
+  Sparkles,
+  Package,
+  Truck,
+  CheckCircle2,
+  Clock,
+  type LucideIcon,
+} from "lucide-react";
+
+import type {
+  ChatRequest,
+  ChatResponse,
+  HistoryTurn,
+  ProviderId,
+  ProviderInfo,
+} from "../types/api";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
 
-const ORDER_STAGES = [
+interface OrderStage {
+  key: string;
+  label: string;
+  icon: LucideIcon;
+}
+
+type UserMessage = {
+  role: "user";
+  type: "text";
+  text: string;
+};
+
+type BotMessage = { role: "bot" } & ChatResponse;
+type ChatMessage = UserMessage | BotMessage;
+
+interface ProductAnswerProps {
+  text: string;
+  source: string | null;
+}
+
+interface OrderCardProps {
+  code: string;
+  status: number;
+  eta: string;
+  items: string;
+}
+
+const ORDER_STAGES: OrderStage[] = [
   { key: "placed", label: "已下單", icon: Clock },
   { key: "shipped", label: "備貨出貨", icon: Package },
   { key: "delivering", label: "配送中", icon: Truck },
@@ -12,31 +57,43 @@ const ORDER_STAGES = [
 
 const QUICK_REPLIES = ["無線滑鼠支援多少 DPI？", "查詢訂單 A12345", "退貨要幾天內申請？"];
 
-async function askBackend(message, history, provider) {
+async function askBackend(
+  message: string,
+  history: HistoryTurn[],
+  provider: ProviderId
+): Promise<ChatResponse> {
+  const requestBody: ChatRequest = { message, history, provider };
   const res = await fetch(`${API_BASE_URL}/api/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ message, history, provider }),
+    body: JSON.stringify(requestBody),
   });
   if (!res.ok) {
     const errorBody = await res.text().catch(() => "");
     throw new Error(`後端回應狀態碼 ${res.status}: ${errorBody}`);
   }
-  return res.json();
+  return (await res.json()) as ChatResponse;
 }
 
-async function fetchProviders() {
+async function fetchProviders(): Promise<ProviderInfo[]> {
   const res = await fetch(`${API_BASE_URL}/api/providers`);
   if (!res.ok) throw new Error(`後端回應錯誤：${res.status}`);
-  return res.json();
+  return (await res.json()) as ProviderInfo[];
 }
 
 // 訂單卡片沒有單一文字內容（type == "order"），不適合塞進對話歷史給 LLM，直接略過；
 // 只有文字類回覆（type == "text" | "product"）才會被記進歷史，讓機器人記得上下文。
-function buildHistory(messages) {
-  return messages
-    .filter((m) => typeof m.text === "string" && m.text.length > 0)
-    .map((m) => ({ role: m.role === "user" ? "user" : "assistant", content: m.text }));
+function buildHistory(messages: ChatMessage[]): HistoryTurn[] {
+  return messages.flatMap((message) => {
+    if (typeof message.text !== "string" || message.text.length === 0) return [];
+
+    return [
+      {
+        role: message.role === "user" ? "user" : "assistant",
+        content: message.text,
+      },
+    ];
+  });
 }
 
 function TypingIndicator() {
@@ -51,7 +108,7 @@ function TypingIndicator() {
   );
 }
 
-function ProductAnswer({ text, source }) {
+function ProductAnswer({ text, source }: ProductAnswerProps) {
   return (
     <div className="ccw-row ccw-row-bot">
       <div className="ccw-bubble ccw-bubble-bot">
@@ -62,7 +119,7 @@ function ProductAnswer({ text, source }) {
   );
 }
 
-function OrderCard({ code, status, eta, items }) {
+function OrderCard({ code, status, eta, items }: OrderCardProps) {
   return (
     <div className="ccw-row ccw-row-bot">
       <div className="ccw-order-card">
@@ -72,17 +129,17 @@ function OrderCard({ code, status, eta, items }) {
         </div>
         <p className="ccw-order-items">{items}</p>
         <div className="ccw-timeline">
-          {ORDER_STAGES.map((stage, i) => {
+          {ORDER_STAGES.map((stage, stageIndex) => {
             const Icon = stage.icon;
-            const state = i < status ? "done" : i === status ? "active" : "pending";
+            const state = stageIndex < status ? "done" : stageIndex === status ? "active" : "pending";
             return (
               <div className="ccw-timeline-step" key={stage.key}>
                 <div className={`ccw-timeline-node ccw-node-${state}`}>
                   <Icon size={14} strokeWidth={2.4} />
                 </div>
                 <span className={`ccw-timeline-label ccw-label-${state}`}>{stage.label}</span>
-                {i < ORDER_STAGES.length - 1 && (
-                  <div className={`ccw-timeline-bar ${i < status ? "ccw-bar-done" : ""}`} />
+                {stageIndex < ORDER_STAGES.length - 1 && (
+                  <div className={`ccw-timeline-bar ${stageIndex < status ? "ccw-bar-done" : ""}`} />
                 )}
               </div>
             );
@@ -95,20 +152,28 @@ function OrderCard({ code, status, eta, items }) {
 
 export default function SmartCRMChatWidget() {
   const [isOpen, setIsOpen] = useState(true);
-  const [messages, setMessages] = useState([
+  const [messages, setMessages] = useState<ChatMessage[]>([
     {
       role: "bot",
       type: "text",
       text: "您好，我是線上客服，可以問我任何產品的規格、特色，或是輸入訂單編號查詢配送狀態喔。",
+      source: null,
+      sources: null,
+      code: null,
+      status: null,
+      eta: null,
+      items: null,
     },
   ]);
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
-  const [providers, setProviders] = useState([{ id: "google", label: "Google Gemini", configured: true }]);
-  const [provider, setProvider] = useState("google");
-  const listRef = useRef(null);
-  const inputRef = useRef(null);
-  const composingRef = useRef(false);
+  const [providers, setProviders] = useState<ProviderInfo[]>([
+    { id: "google", label: "Google Gemini", configured: true },
+  ]);
+  const [provider, setProvider] = useState<ProviderId>("google");
+  const listRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const composingRef = useRef<boolean>(false);
 
   useEffect(() => {
     if (listRef.current) {
@@ -130,11 +195,13 @@ export default function SmartCRMChatWidget() {
     fetchProviders()
       .then((list) => {
         setProviders(list);
-        const googleP = list.find((p) => p.id === "google" && p.configured);
-        if (googleP) {
+        const googleProvider = list.find(
+          (providerInfo) => providerInfo.id === "google" && providerInfo.configured
+        );
+        if (googleProvider) {
           setProvider("google");
         } else {
-          const firstConfigured = list.find((p) => p.configured);
+          const firstConfigured = list.find((providerInfo) => providerInfo.configured);
           if (firstConfigured) setProvider(firstConfigured.id);
         }
       })
@@ -143,7 +210,7 @@ export default function SmartCRMChatWidget() {
       });
   }, []);
 
-  async function sendMessage(text) {
+  async function sendMessage(text: string) {
     const trimmed = text.trim();
     if (!trimmed || isTyping) return;
     const history = buildHistory(messages);
@@ -152,15 +219,22 @@ export default function SmartCRMChatWidget() {
     setIsTyping(true);
     try {
       const reply = await askBackend(trimmed, history, provider);
-      setMessages((prev) => [...prev, { role: "bot", ...reply }]);
+      const botMessage: BotMessage = { role: "bot", ...reply };
+      setMessages((previousMessages) => [...previousMessages, botMessage]);
     } catch (err) {
       console.error("[askBackend 呼叫失敗]", err);
-      setMessages((prev) => [
-        ...prev,
+      setMessages((previousMessages) => [
+        ...previousMessages,
         {
           role: "bot",
           type: "text",
           text: "客服暫時無法連線，請確認後端服務是否已啟動，或稍後再試一次。",
+          source: null,
+          sources: null,
+          code: null,
+          status: null,
+          eta: null,
+          items: null,
         },
       ]);
     } finally {
@@ -168,7 +242,7 @@ export default function SmartCRMChatWidget() {
     }
   }
 
-  function handleKeyDown(event) {
+  function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
     const isComposing =
       composingRef.current || event.nativeEvent.isComposing || event.keyCode === 229;
 
@@ -505,7 +579,7 @@ export default function SmartCRMChatWidget() {
               id="ccw-model-select"
               className="ccw-model-select"
               value={provider}
-              onChange={(e) => setProvider(e.target.value)}
+              onChange={(event) => setProvider(event.target.value as ProviderId)}
             >
               {providers.map((p) => (
                 <option key={p.id} value={p.id} disabled={!p.configured}>
