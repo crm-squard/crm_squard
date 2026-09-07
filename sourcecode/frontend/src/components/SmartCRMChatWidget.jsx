@@ -107,12 +107,24 @@ export default function SmartCRMChatWidget() {
   const [providers, setProviders] = useState([{ id: "google", label: "Google Gemini", configured: true }]);
   const [provider, setProvider] = useState("google");
   const listRef = useRef(null);
+  const inputRef = useRef(null);
+  const composingRef = useRef(false);
 
   useEffect(() => {
     if (listRef.current) {
       listRef.current.scrollTop = listRef.current.scrollHeight;
     }
   }, [messages, isTyping]);
+
+  useEffect(() => {
+    const textarea = inputRef.current;
+    if (!textarea) return;
+
+    textarea.style.height = "auto";
+    const maxHeight = Number.parseFloat(getComputedStyle(textarea).maxHeight);
+    textarea.style.height = `${Math.min(textarea.scrollHeight, maxHeight)}px`;
+    textarea.style.overflowY = textarea.scrollHeight > maxHeight ? "auto" : "hidden";
+  }, [input, isOpen]);
 
   useEffect(() => {
     fetchProviders()
@@ -156,10 +168,13 @@ export default function SmartCRMChatWidget() {
     }
   }
 
-  function handleKey(e) {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      sendMessage(e.currentTarget.value);
+  function handleKeyDown(event) {
+    const isComposing =
+      composingRef.current || event.nativeEvent.isComposing || event.keyCode === 229;
+
+    if (event.key === "Enter" && !event.shiftKey && !isComposing) {
+      event.preventDefault();
+      sendMessage(event.currentTarget.value);
     }
   }
 
@@ -430,13 +445,18 @@ export default function SmartCRMChatWidget() {
         }
         .ccw-input {
           flex: 1;
+          box-sizing: border-box;
+          min-height: 40px;
+          max-height: 106px;
           border: 1px solid var(--border);
           border-radius: 12px;
           padding: 10px 13px;
           font-size: 14px;
+          line-height: 21px;
           font-family: inherit;
           color: var(--text);
           outline: none;
+          resize: none;
         }
         .ccw-input:focus-visible { border-color: var(--amber); }
         .ccw-send-btn {
@@ -535,12 +555,20 @@ export default function SmartCRMChatWidget() {
           )}
 
           <div className="ccw-input-bar">
-            <input
+            <textarea
+              ref={inputRef}
+              rows={1}
               className="ccw-input"
               value={input}
               placeholder="輸入您的問題或訂單編號…"
-              onChange={(e) => setInput(e.target.value)}
-              onKeyUp={handleKey}
+              onChange={(event) => setInput(event.target.value)}
+              onKeyDown={handleKeyDown}
+              onCompositionStart={() => {
+                composingRef.current = true;
+              }}
+              onCompositionEnd={() => {
+                composingRef.current = false;
+              }}
               aria-label="輸入訊息"
             />
             <button
