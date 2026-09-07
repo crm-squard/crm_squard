@@ -111,7 +111,13 @@ def admin_summary(date: str | None = None):
     elif not DATE_PATTERN.match(date):
         raise HTTPException(status_code=400, detail="date 格式須為 YYYY-MM-DD")
 
-    result = summarize_day(date)
+    try:
+        result = summarize_day(date)
+    except Exception as e:
+        # 同 /api/chat：未預期的例外要在應用程式層處理掉，回傳正常的錯誤回應，
+        # 避免整個請求掛掉變成 Cloud Run 層級的 502/503（不帶 CORS 標頭）。
+        print(f"[Summary Error] {e}")
+        raise HTTPException(status_code=502, detail="產生摘要時發生錯誤，請稍後再試。")
     return DailySummaryResponse(**result)
 
 
@@ -123,7 +129,14 @@ def chat(req: ChatRequest, request: Request):
     text = req.message.strip()
     history = [{"role": h.role, "content": h.content} for h in req.history]
     history = history[-(settings.MAX_HISTORY_TURNS * 2):]
-    response = _handle_chat(text, history, req.provider)
+    try:
+        response = _handle_chat(text, history, req.provider)
+    except Exception as e:
+        # 任何未預期的例外（金鑰失效、首次建索引逾時等）都要回傳正常的 200 回應，
+        # 讓 FastAPI/CORSMiddleware 有機會處理，避免請求整個掛掉變成 Cloud Run
+        # 的 502/503（那種回應不是應用程式產生的，不會帶 CORS 標頭，前端只會看到 CORS 錯誤）。
+        print(f"[Chat Error] {e}")
+        response = ChatResponse(type="text", text="系統暫時發生錯誤，請稍後再試或聯繫真人客服（0800-123-456）。")
 
     try:
         log_text = response.text if response.text is not None else f"[訂單 {response.code}]"

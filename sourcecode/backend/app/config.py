@@ -4,9 +4,25 @@
 - EMBEDDING_MODEL_NAME / LLM_MODEL_NAME_*: 對應提案中「Embedding 模型」與「生成模型」的技術選型
 """
 import os
+import json
 from dotenv import load_dotenv
 
 load_dotenv()
+
+
+def _has_gemini_key() -> bool:
+    """判斷是否有可用的 Gemini API key，用來在未明確指定 RAG_ENGINE 時自動選擇引擎。"""
+    if os.getenv("GEMINI_API_KEY"):
+        return True
+    llm_keys_path = os.getenv("LLM_KEYS_PATH", "./llm_keys.json")
+    try:
+        if os.path.exists(llm_keys_path):
+            with open(llm_keys_path, encoding="utf-8") as f:
+                if json.load(f).get("google", {}).get("api_key"):
+                    return True
+    except Exception:
+        pass
+    return False
 
 
 class Settings:
@@ -39,9 +55,12 @@ class Settings:
     # 線上付費 LLM 的 API key／模型名稱設定檔（不進 git，範本見 llm_keys.example.json）
     LLM_KEYS_PATH: str = os.getenv("LLM_KEYS_PATH", "./llm_keys.json")
 
-    # RAG 檢索引擎："custom"（自訂 Chroma + 手寫檢索，預設）或 "llamaindex"（用 LlamaIndex 的 VectorStoreIndex）
+    # RAG 檢索引擎："custom"（自訂 Chroma + 手寫檢索）、"llamaindex"（本地 LlamaIndex embedding）
+    # 或 "gemini"/"online"（線上 Gemini embedding）。
+    # 未明確設定 RAG_ENGINE 時自動判斷：偵測到 Gemini API key（GCP 部署會設定）就用 gemini，
+    # 沒有 key（例如本機開發未設定）則退回 llamaindex，避免因缺 key 導致服務起不來。
     # 兩套引擎介面相同，見 app/rag/engine.py；語意拆分規則兩套共用（app/rag/product_parser.py）。
-    RAG_ENGINE: str = os.getenv("RAG_ENGINE", "gemini")
+    RAG_ENGINE: str = os.getenv("RAG_ENGINE") or ("gemini" if _has_gemini_key() else "llamaindex")
 
     # LlamaIndex 引擎與 Online 引擎的索引持久化目錄，跟 custom 引擎的 CHROMA_PERSIST_DIR 分開存放
     LLAMAINDEX_PERSIST_DIR: str = os.getenv("LLAMAINDEX_PERSIST_DIR", "./llamaindex_data")
