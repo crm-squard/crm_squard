@@ -9,6 +9,5 @@ __pycache__
 .gitignore
 .env
 chroma_data/
-chroma_online_data/
 llamaindex_data/
 *.db
