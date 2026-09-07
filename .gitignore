@@ -44,6 +44,7 @@ yarn-error.log*
 .env.*.local
 *.pem
 *.key
+llm_keys.json
 
 # =========================
 # 常見語言建置與套件目錄 (依專案取用)

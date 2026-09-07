@@ -14,7 +14,6 @@ import json
 import threading
 
 from app.config import settings
-from app.llm import generate as generate_local
 
 PROVIDERS = ["local", "anthropic", "openai", "google", "xai"]
 
@@ -137,8 +136,14 @@ def generate_google(messages: list[dict], max_new_tokens: int) -> str:
     return response.text
 
 
+def generate_local_provider(messages: list[dict], max_new_tokens: int) -> str:
+    from app.llm import generate as generate_local
+
+    return generate_local(messages, max_new_tokens=max_new_tokens)
+
+
 _DISPATCH = {
-    "local": lambda messages, max_new_tokens: generate_local(messages, max_new_tokens=max_new_tokens),
+    "local": generate_local_provider,
     "anthropic": generate_anthropic,
     "openai": generate_openai,
     "google": generate_google,

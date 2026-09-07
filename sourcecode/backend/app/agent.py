@@ -9,7 +9,12 @@ ProductQueryAgent：對應「智慧CRM系統功能提案 #1 顧客查詢產品�
 from app.config import settings
 from app.rag.engine import get_retriever
 from app.llm import get_llm
-from app.providers import generate_with_provider, ProviderNotConfigured
+from app.providers import generate_with_provider, ProviderNotConfigured, is_configured
+
+# 判斷「這個環境要不要預熱本地模型」的依據：跟 summary.py 的 fallback 邏輯一致，
+# 只要有任一組線上 provider 金鑰，就代表這個環境本來就打算走線上 API，不需要（也可能沒裝 torch）
+# 預熱本地模型；完全沒有線上金鑰時才預熱，確保本機測試 fallback 到本地模型時不用臨時等模型載入。
+_ONLINE_PROVIDERS = ["google", "anthropic", "openai", "xai"]
 
 SYSTEM_PROMPT = (
     "你是客服機器人，請根據提供的資訊片段回答顧客問題（可能是產品規格，也可能是保固、退換貨、"
@@ -44,7 +49,10 @@ NO_INFO_ANSWER = "目前查無此資訊，建議聯繫真人客服（0800-123-45
 class ProductQueryAgent:
     def __init__(self):
         self.retriever = get_retriever()
-        # get_llm()  # 建構時就把本地 LLM 一併載入，讓 get_agent() 真正做到完整預載
+        if not any(is_configured(p) for p in _ONLINE_PROVIDERS):
+            # 沒有任何線上金鑰才預熱本地模型；線上 API only 的部署（例如 GCP，沒裝 torch）
+            # 一定會有至少一組線上金鑰，完全不會執行到這裡。
+            get_llm()
 
     def receive_query(self, query: str) -> str:
         return query.strip()

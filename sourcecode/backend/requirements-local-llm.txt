@@ -1,0 +1,19 @@
+# 選用依賴：只有需要「本地模型」（provider=local，預設 1.5B）
+# 或「本地 RAG 引擎」（RAG_ENGINE=custom / llamaindex）時才需要安裝。
+# GCP（線上 API only，RAG_ENGINE=gemini）部署不需要這份，裝 requirements.txt 就夠。
+#
+# 安裝：pip install -r requirements.txt -r requirements-local-llm.txt
+#
+# bitsandbytes 不在這裡：只有要測 USE_SMALL_MODEL=false（7B 4-bit 量化）才需要，
+# 用到再另外 pip install bitsandbytes（在 Apple Silicon 上常裝不起來或跑不動，不建議日常開發用）。
+
+torch==2.4.0
+transformers==4.44.2
+accelerate==0.33.0
+
+# RAG_ENGINE=custom 用（app/rag/embedding.py）
+sentence-transformers==3.0.1
+
+# RAG_ENGINE=llamaindex 用（app/rag/llamaindex_engine.py）
+llama-index-core==0.11.17
+llama-index-embeddings-huggingface==0.3.1

@@ -5,11 +5,14 @@ USE_SMALL_MODEL=false（預設）：Qwen2.5-7B-Instruct，4-bit 量化，建議 
 USE_SMALL_MODEL=true：Qwen2.5-1.5B-Instruct，CPU 也可執行（速度較慢），不需要 bitsandbytes。
 
 模型只在第一次呼叫時載入（lazy loading），第一次呼叫 /api/chat 會需要等待下載與載入模型。
+
+torch/transformers 只在這個模組實際被呼叫（get_llm()/generate()）時才 import，
+而不是在模組載入時就 import——這樣線上 API only 的部署（例如沒裝 requirements-local-llm.txt）
+只要不觸發本地模型這條路，就不會因為缺少 torch/transformers 而在啟動時就掛掉，
+只有真的呼叫到本地模型時才會噴 ImportError。
 """
 import threading
 
-import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM
 from app.config import settings
 
 _tokenizer = None
@@ -24,6 +27,9 @@ def get_llm():
     global _tokenizer, _model
     if _model is not None:
         return _tokenizer, _model
+
+    import torch
+    from transformers import AutoTokenizer, AutoModelForCausalLM
 
     if settings.USE_SMALL_MODEL:
         # device_map="auto" 會用 accelerate 猜測可用記憶體來分配裝置，

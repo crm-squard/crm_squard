@@ -51,15 +51,22 @@ Embedding 與本地 LLM 模型（第一次啟動會需要下載，依網路速�
 
 ## RAG 引擎切換
 
-`.env` 的 `RAG_ENGINE` 決定檢索用哪套實作，兩套功能等價、介面相同，可以隨時切換：
+`.env` 的 `RAG_ENGINE` 決定檢索用哪套實作，三套功能等價、介面相同，可以隨時切換：
 
-- `custom`（預設）：這個專案自己寫的 Chroma + e5 embedding 檢索邏輯
-- `llamaindex`：改用 LlamaIndex 的 `VectorStoreIndex` 做索引與檢索
+- `custom`：這個專案自己寫的 Chroma + e5 embedding 檢索邏輯（本地 embedding）
+- `llamaindex`：改用 LlamaIndex 的 `VectorStoreIndex` 做索引與檢索（本地 embedding）
+- `gemini`（或 `online`）：改用線上 Gemini API 做 embedding，不需要 `torch` / `sentence-transformers`
 
-兩套引擎共用同一套語意拆分規則（`app/rag/product_parser.py`），差別只在「怎麼建索引、怎麼查」，
-所以檢索結果品質應該接近，但兩套引擎各自的距離分數尺度不同，`app/config.py` 的
+**不設定 `RAG_ENGINE` 時會自動判斷**（見 `app/config.py` 的 `_has_gemini_key()`）：偵測到
+`GEMINI_API_KEY`（環境變數或 `llm_keys.json` 的 `google.api_key`）就自動用 `gemini`，沒有 key
+就退回 `llamaindex`。本機開發通常不會特別設 `GEMINI_API_KEY`，所以預設會走 `llamaindex`（需要
+額外安裝 `requirements-local-llm.txt`）；GCP 部署會設定 `GEMINI_API_KEY`，所以會自動走 `gemini`，
+不需要另外設定 `RAG_ENGINE`。要強制指定某一套，就在 `.env` 明確寫上 `RAG_ENGINE=custom` 等值覆蓋。
+
+三套引擎共用同一套語意拆分規則（`app/rag/product_parser.py`），差別只在「怎麼建索引、怎麼查」，
+所以檢索結果品質應該接近，但各自的距離分數尺度不同，`app/config.py` 的
 `RAG_NO_INFO_THRESHOLDS` 分開設定「查無資訊」的判斷門檻。索引檔也分開存放
-（`chroma_data/` vs `llamaindex_data/`），互不影響，可以兩套都建好、隨時切換不用重建。
+（`chroma_data/` / `llamaindex_data/` / `chroma_online_data/`），互不影響，可以多套都建好、隨時切換不用重建。
 
 知識庫檔案都在 `app/data/`：`products_20_quirky.md`（20 項產品文案，用 `product_parser.py` 拆分）
 與 `warranty_policy.md` / `return_policy.md` / `shipping_payment.md` / `faq.md`（保固、退換貨、運送
