@@ -38,13 +38,12 @@ DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # 啟動時預載 DB 與模型；若缺少 API Key 或環境變數，以警告日誌紀錄，避免容器啟動失敗
+    # 啟動時預載 DB；避免在啟動階段載入重型模型導致 Cloud Run 健康檢查逾時
     try:
         init_chat_log_db()
         init_orders_db()
-        get_agent()
     except Exception as e:
-        print(f"[Warning] Backend startup warmup failed: {e}")
+        print(f"[Warning] Backend startup db init failed: {e}")
     yield
 
 
