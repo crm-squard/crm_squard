@@ -31,13 +31,27 @@ steps:
       - '--set-secrets=GEMINI_API_KEY=GEMINI_API_KEY:latest'
       - '--port=8000'
 
-  # 4. 建置 Frontend 容器鏡像
-  - name: 'gcr.io/cloud-builders/docker'
+  # 3.5 取得已部署的 Backend Cloud Run 服務網址
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: bash
     args:
-      - 'build'
-      - '-t'
-      - 'europe-west1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/crm-frontend:latest'
-      - './sourcecode/frontend'
+      - '-c'
+      - |
+        BACKEND_URL=$(gcloud run services describe crm-backend --region=europe-west1 --format='value(status.url)')
+        echo "Backend URL is $BACKEND_URL"
+        echo "$BACKEND_URL" > /workspace/backend_url.txt
+
+  # 4. 建置 Frontend 容器鏡像 (並傳入動態抓到的 VITE_API_BASE_URL)
+  - name: 'gcr.io/cloud-builders/docker'
+    entrypoint: bash
+    args:
+      - '-c'
+      - |
+        BACKEND_URL=$(cat /workspace/backend_url.txt)
+        docker build \
+          --build-arg VITE_API_BASE_URL=$$BACKEND_URL \
+          -t europe-west1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/crm-frontend:latest \
+          ./sourcecode/frontend
 
   # 5. 推送 Frontend 鏡像至 Artifact Registry
   - name: 'gcr.io/cloud-builders/docker'
