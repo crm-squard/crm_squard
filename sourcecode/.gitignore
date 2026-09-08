@@ -8,6 +8,10 @@ backend/llamaindex_data/
 backend/chat_log.db
 backend/orders.db
 backend/llm_keys.json
+corp-backend/*.json
+!corp-backend/*.example.json
+*-firebase-adminsdk-*.json
+*.json.key
 *.pyc
 
 # Node

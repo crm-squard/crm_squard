@@ -53,7 +53,7 @@ def embed_passages_online(texts: list[str]) -> list[list[float]]:
     if not texts:
         return []
 
-    batch_size = 5
+    batch_size = 10
     all_embeddings = []
 
     for i in range(0, len(texts), batch_size):
@@ -66,7 +66,7 @@ def embed_passages_online(texts: list[str]) -> list[list[float]]:
                     task_type="retrieval_document",
                 )
                 all_embeddings.extend(result["embedding"])
-                time.sleep(2)  # 控速避免觸發免費版 100 RPM 上限
+                time.sleep(0.2)  # 控速避免觸發免費版 100 RPM 上限；批次變大後請求數變少，可以縮短間隔
                 break
             except Exception as e:
                 if attempt == 9:

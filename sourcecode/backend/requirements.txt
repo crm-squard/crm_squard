@@ -5,23 +5,13 @@ uvicorn[standard]==0.30.6
 python-dotenv==1.0.1
 pydantic==2.9.2
 
-# RAG
-sentence-transformers==3.0.1
+# RAG（RAG_ENGINE=gemini/online，預設，線上 embedding，不需要 torch）
 chromadb==0.5.5
-
-# LLM（本地）
-torch==2.4.0+cu118
-torchvision==0.19.0+cu118
-torchaudio==2.4.0+cu118
-transformers==4.44.2
-accelerate==0.33.0
-bitsandbytes==0.43.3
 
 # LLM（線上付費 API；xAI Grok 相容 OpenAI SDK 格式，不需要另外的套件）
 anthropic==0.34.2
 openai==1.51.0
 google-generativeai==0.8.3
 
-# RAG_ENGINE=llamaindex 模式用（見 app/rag/llamaindex_engine.py）
-llama-index-core==0.11.17
-llama-index-embeddings-huggingface==0.3.1
+# 本地模型（provider=local）與本地 RAG 引擎（RAG_ENGINE=custom / llamaindex）用不到這份基礎依賴，
+# 需要的話另外安裝 requirements-local-llm.txt，見 backend/README.md。

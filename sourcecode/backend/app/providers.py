@@ -14,7 +14,6 @@ import json
 import threading
 
 from app.config import settings
-from app.llm import generate as generate_local
 
 PROVIDERS = ["local", "anthropic", "openai", "google", "xai"]
 
@@ -44,6 +43,19 @@ def is_configured(provider: str) -> bool:
     if provider == "google" and os.getenv("GEMINI_API_KEY"):
         return True
     return bool(_load_keys().get(provider, {}).get("api_key"))
+
+
+def key_prefix(provider: str, length: int = 4) -> str:
+    """只回傳金鑰前幾碼，debug 用（例如 log 裡確認載入的是不是預期那把 key、
+    有沒有多餘空白字元），不要把完整金鑰印出來或回傳給前端。"""
+    key = ""
+    if provider == "google":
+        key = os.getenv("GEMINI_API_KEY") or ""
+    if not key:
+        key = _load_keys().get(provider, {}).get("api_key") or ""
+    if not key:
+        return "(未設定)"
+    return key[:length] + "..."
 
 
 def _get_config(provider: str) -> dict:
@@ -118,7 +130,7 @@ def generate_google(messages: list[dict], max_new_tokens: int) -> str:
     genai.configure(api_key=config["api_key"])
     system_prompt, rest = _split_system(messages)
     model = genai.GenerativeModel(
-        config.get("model", "gemini-2.0-flash"),
+        config.get("model", "gemini-3.1-flash-lite"),
         system_instruction=system_prompt or None,
     )
 
@@ -137,8 +149,14 @@ def generate_google(messages: list[dict], max_new_tokens: int) -> str:
     return response.text
 
 
+def generate_local_provider(messages: list[dict], max_new_tokens: int) -> str:
+    from app.llm import generate as generate_local
+
+    return generate_local(messages, max_new_tokens=max_new_tokens)
+
+
 _DISPATCH = {
-    "local": lambda messages, max_new_tokens: generate_local(messages, max_new_tokens=max_new_tokens),
+    "local": generate_local_provider,
     "anthropic": generate_anthropic,
     "openai": generate_openai,
     "google": generate_google,
