@@ -1,5 +1,5 @@
 """
-線上付費 LLM 供應商分派層：讓 /api/chat 除了本地 1.5B/7B 模型外，
+線上付費 LLM 供應商分派層：讓 /api/chat 除了本地 MiniCPM5-2B 模型外，
 也能選擇呼叫 Anthropic Claude、OpenAI、Google Gemini、xAI Grok 的線上 API。
 
 API key／要用的模型名稱存在 settings.LLM_KEYS_PATH 指到的 JSON 檔（預設 backend/llm_keys.json，

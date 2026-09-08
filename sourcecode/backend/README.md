@@ -6,8 +6,11 @@ FastAPI 服務，提供 `/api/chat`，對應提案 #1（產品問答 RAG）與 #
 ## 環境需求
 
 - Python 3.10+
-- 完整版本地 LLM（`USE_SMALL_MODEL=false`，預設）：建議有 NVIDIA GPU，VRAM 12GB 以上（4-bit 量化跑 Qwen2.5-7B-Instruct）
-- 若沒有 GPU：把 `.env` 的 `USE_SMALL_MODEL` 改成 `true`，改用 CPU/Apple Silicon MPS 也能跑的 Qwen2.5-1.5B-Instruct（速度較慢）
+- 本地 LLM（provider=local）固定使用 openbmb/MiniCPM5-2B，CPU 也可執行（速度較慢），不需要 bitsandbytes/GPU。
+  這顆是「混合推理」模型，`app/llm.py` 預設用 `enable_thinking=False` 關掉內部思考過程直接回答，
+  但輸出仍常是簡體字，`generate()` 會自動做簡轉繁（台灣用語）後處理。
+  **注意：這顆模型在 Apple Silicon 的 MPS 上會直接當機（segfault），`app/llm.py` 已經刻意跳過
+  MPS、強制用 CPU 跑**（在 M3 Pro 上單次回應約 20-30 秒；之後若要用其他本地模型要重新驗證 MPS）
 - 或完全不跑本地模型，改用線上付費 API（見下方「切換回答模型」）
 
 ## 啟動步驟
@@ -39,7 +42,7 @@ Embedding 與本地 LLM 模型（第一次啟動會需要下載，依網路速�
 
 | provider | 說明 | 需要什麼 |
 |---|---|---|
-| `local`（預設） | 本地 Qwen2.5，`USE_SMALL_MODEL` 決定跑 1.5B 或 7B | 不需要 API key，免費但速度較慢 |
+| `local`（預設） | 本地 openbmb/MiniCPM5-2B | 不需要 API key，免費但速度較慢 |
 | `anthropic` | Claude | `llm_keys.json` 填 `anthropic.api_key` |
 | `openai` | GPT | `llm_keys.json` 填 `openai.api_key` |
 | `google` | Gemini | `llm_keys.json` 填 `google.api_key` |
@@ -78,7 +81,6 @@ Embedding 與本地 LLM 模型（第一次啟動會需要下載，依網路速�
 
 - 第一次啟動會需要下載 Embedding 模型與本地 LLM 模型，依網路速度可能需要數分鐘到數十分鐘
 - 向量資料庫（Chroma / LlamaIndex）都已改用持久化模式，服務重啟不需要重新 embed
-- `bitsandbytes` 的 4-bit 量化只支援 NVIDIA GPU（CUDA），沒有 GPU 請用 `USE_SMALL_MODEL=true`
 - `/api/admin/summary` 目前沒有任何身分驗證，正式上線前必須加上管理者登入/權限檢查
 
 ## API

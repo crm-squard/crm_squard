@@ -26,7 +26,7 @@ from app.summary import summarize_day
 from app.providers import is_configured
 
 PROVIDER_LABELS = {
-    "local": "本地 1.5B/7B（免費，速度較慢）",
+    "local": "本地 MiniCPM5-2B（免費，速度較慢）",
     "anthropic": "Claude",
     "openai": "GPT",
     "google": "Gemini",

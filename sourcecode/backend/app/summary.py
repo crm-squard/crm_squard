@@ -4,7 +4,7 @@
 流程：
 1. 從 chat_log 撈出指定日期的所有提問原文
 2. 問題數量較多時先分批（每批 SUMMARY_BATCH_SIZE 則）各自摘要成主題重點，
-   避免一次把所有問題塞進 LLM context（1.5B 模型 context 有限，問題一多會爆或品質變差）
+   避免一次把所有問題塞進 LLM context（本地小模型 context 有限，問題一多會爆或品質變差）
 3. 有多批的話，再把每批摘要匯總、做一次「摘要的摘要」，產生最終報告
 
 這是 map-reduce 的簡化版本，資料量大時可以再拆更細；目前先滿足小型客服場景。
@@ -43,13 +43,19 @@ def _pick_provider() -> str:
     return "local"
 
 
+# 拉高到 1500（原本 400）：fallback 用的本地小模型 openbmb/MiniCPM5-2B 預設用
+# enable_thinking=False 關掉思考過程，正常用不到這麼多，拉高只是留安全餘裕
+# （見 app/agent.py 的 generate_answer() 同樣理由）。
+_SUMMARY_MAX_NEW_TOKENS = 1500
+
+
 def _summarize_batch(questions: list[str], provider: str) -> str:
     question_list = "\n".join(f"- {q}" for q in questions)
     messages = [
         {"role": "system", "content": _BATCH_SYSTEM_PROMPT},
         {"role": "user", "content": f"顧客提問清單：\n{question_list}"},
     ]
-    return generate_with_provider(provider, messages, max_new_tokens=400)
+    return generate_with_provider(provider, messages, max_new_tokens=_SUMMARY_MAX_NEW_TOKENS)
 
 
 def _reduce_summaries(batch_summaries: list[str], provider: str) -> str:
@@ -58,7 +64,7 @@ def _reduce_summaries(batch_summaries: list[str], provider: str) -> str:
         {"role": "system", "content": _REDUCE_SYSTEM_PROMPT},
         {"role": "user", "content": combined},
     ]
-    return generate_with_provider(provider, messages, max_new_tokens=400)
+    return generate_with_provider(provider, messages, max_new_tokens=_SUMMARY_MAX_NEW_TOKENS)
 
 
 def summarize_day(date: str) -> dict:

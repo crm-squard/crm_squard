@@ -1,18 +1,25 @@
-# 選用依賴：只有需要「本地模型」（provider=local，預設 1.5B）
+# 選用依賴：只有需要「本地模型」（provider=local，openbmb/MiniCPM5-2B）
 # 或「本地 RAG 引擎」（RAG_ENGINE=custom / llamaindex）時才需要安裝。
 # GCP（線上 API only，RAG_ENGINE=gemini）部署不需要這份，裝 requirements.txt 就夠。
 #
 # 安裝：pip install -r requirements.txt -r requirements-local-llm.txt
-#
-# bitsandbytes 不在這裡：只有要測 USE_SMALL_MODEL=false（7B 4-bit 量化）才需要，
-# 用到再另外 pip install bitsandbytes（在 Apple Silicon 上常裝不起來或跑不動，不建議日常開發用）。
 
-torch==2.4.0
-transformers==4.44.2
-accelerate==0.33.0
+# torch/transformers/accelerate 版號是配合 openbmb/MiniCPM5-2B
+# （2026 年新模型，官方要求 transformers>=5.6）調高的：
+# - transformers>=5.0 要求 torch>=2.5，所以 torch 也要一起升；accelerate 則是新版
+#   device_map API 需要的最低版本
+# - 目前釘的是實測能跑的版本；之後 MiniCPM5 這系列更新 remote code 的話可能要重新抓相容版本
+torch==2.14.0
+transformers==5.16.1
+accelerate==1.14.0
 
-# RAG_ENGINE=custom 用（app/rag/embedding.py）
-sentence-transformers==3.0.1
+# openbmb/MiniCPM5-2B 不管怎麼提示都常輸出簡體字，app/llm.py 的 generate() 用這個
+# 套件做簡轉繁（台灣用語）後處理
+opencc-python-reimplemented==0.1.7
+
+# RAG_ENGINE=custom 用（app/rag/embedding.py）；原本釘 3.0.1，但它要求 transformers<5.0.0，
+# 跟上面 transformers==5.16.1（配合 MiniCPM5-2B）硬衝突，改成放寬版號讓 pip 解出相容組合
+sentence-transformers>=3.0.1
 
 # RAG_ENGINE=llamaindex 用（app/rag/llamaindex_engine.py）
 llama-index-core==0.11.17

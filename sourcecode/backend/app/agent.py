@@ -24,7 +24,7 @@ SYSTEM_PROMPT = (
 )
 
 # 線上付費模型（Claude/GPT/Gemini/Grok）能力足夠強，可以自己準確判斷「片段裡有沒有答案」，
-# 所以額外把「查無資訊」規則加回 system prompt；本地 1.5B 模型則不用這條規則
+# 所以額外把「查無資訊」規則加回 system prompt；本地小模型則不用這條規則
 # （見下方 NO_INFO_DISTANCE_THRESHOLD 的說明，原因是小模型在這個判斷上會不穩定，改用距離分數處理）。
 ONLINE_SYSTEM_PROMPT = SYSTEM_PROMPT + (
     "如果片段中找不到足以回答問題的資訊，請回答「目前查無此資訊，建議聯繫真人客服（0800-123-456）」，不要臆測。"
@@ -32,9 +32,9 @@ ONLINE_SYSTEM_PROMPT = SYSTEM_PROMPT + (
 
 NO_INFO_ANSWER = "目前查無此資訊，建議聯繫真人客服（0800-123-456）。"
 
-# 檢索距離超過這個門檻就直接回「查無此資訊」，不呼叫 LLM——只套用在本地 1.5B 模型。
+# 檢索距離超過這個門檻就直接回「查無此資訊」，不呼叫 LLM——只套用在本地小模型。
 #
-# 原本是讓 LLM 自己判斷「片段裡有沒有答案」，但實測發現 1.5B 這種小模型在這個判斷上非常不穩定：
+# 原本是讓 LLM 自己判斷「片段裡有沒有答案」，但實測發現（原本用的 Qwen2.5-1.5B-Instruct）小模型在這個判斷上非常不穩定：
 # system prompt 只要多加幾條規則、或換幾個字，同一個問題就會在「查無資訊」跟「正確回答」之間跳來跳去
 # （例如把「如果片段」改成「如果產品資訊片段」這種無關痛癢的用字差異，就能讓模型從答對變成拒答）。
 # 既然檢索距離分數本身很穩定準確，乾脆用距離分數做這個判斷，不要交給小模型猜。線上付費模型能力夠強，
@@ -83,12 +83,17 @@ class ProductQueryAgent:
         )
 
     def generate_answer(
-        self, query: str, history=None, provider: str = "google", top_k: int = 3, max_new_tokens: int = 512
+        self, query: str, history=None, provider: str = "google", top_k: int = 3, max_new_tokens: int = 2048
     ):
         """
         history：之前幾輪對話 [{"role": "user"|"assistant", "content": ...}, ...]，
         用來讓機器人理解「那電池呢？」這種依賴上文的追問。
         provider：要用哪個 LLM 回答，見 app/providers.py 的 PROVIDERS。
+        max_new_tokens 預設拉高到 2048（原本 512）：本地小模型 openbmb/MiniCPM5-2B 是
+        混合推理模型，app/llm.py 預設用 enable_thinking=False 關掉思考過程直接回答，
+        正常情況下用不到這麼多 token；拉高只是留安全餘裕，避免關閉思考失效或換成
+        其他推理模型時，答案在生成完畢前被截斷。線上 provider 只是把上限放寬，
+        通常會自然結束，不受影響。
 
         「那電池呢？」這句話本身沒有主詞，單獨拿去向量化檢索會查到不相關的片段
         （例如查成電視遙控器電池而不是掃地機器人電池）。所以檢索用的查詢字串會把
