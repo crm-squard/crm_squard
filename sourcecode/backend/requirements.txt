@@ -1,3 +1,5 @@
+--extra-index-url https://download.pytorch.org/whl/cu118
+
 fastapi==0.115.0
 uvicorn[standard]==0.30.6
 python-dotenv==1.0.1
@@ -8,7 +10,9 @@ sentence-transformers==3.0.1
 chromadb==0.5.5
 
 # LLM（本地）
-torch==2.4.0
+torch==2.4.0+cu118
+torchvision==0.19.0+cu118
+torchaudio==2.4.0+cu118
 transformers==4.44.2
 accelerate==0.33.0
 bitsandbytes==0.43.3
