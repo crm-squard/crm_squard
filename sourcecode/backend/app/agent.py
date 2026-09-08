@@ -9,7 +9,7 @@ ProductQueryAgent：對應「智慧CRM系統功能提案 #1 顧客查詢產品�
 from app.config import settings
 from app.rag.engine import get_retriever
 from app.llm import get_llm
-from app.providers import generate_with_provider, ProviderNotConfigured, is_configured
+from app.providers import generate_with_provider, ProviderNotConfigured, is_configured, key_prefix
 
 # 判斷「這個環境要不要預熱本地模型」的依據：跟 summary.py 的 fallback 邏輯一致，
 # 只要有任一組線上 provider 金鑰，就代表這個環境本來就打算走線上 API，不需要（也可能沒裝 torch）
@@ -119,8 +119,11 @@ class ProductQueryAgent:
             # 回傳空的 retrieved_chunks（而不是這次真的檢索到的內容）：這則訊息是設定錯誤，
             # 跟檢索結果無關，main.py 依 retrieved 是否為空決定 type，帶著無關的 source 會誤導使用者。
             return str(e), []
-        except Exception:
-            # 線上 API 可能因為網路、額度用盡、key 失效等原因失敗，不該讓整個 /api/chat 500 掉
+        except Exception as e:
+            # 線上 API 可能因為網路、額度用盡、key 失效等原因失敗，不該讓整個 /api/chat 500 掉，
+            # 但真正的例外內容還是要印出來，不然 Cloud Run log 裡完全查不到失敗原因。
+            # 順便印金鑰前 4 碼（不是完整金鑰）方便確認是不是載入到預期的那把 key。
+            print(f"[generate_answer Error] provider={provider} key={key_prefix(provider)}: {e!r}")
             return f"呼叫 {provider} 模型時發生錯誤，請稍後再試或改用其他模型。", []
 
         return answer, retrieved_chunks
