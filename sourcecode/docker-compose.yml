@@ -18,6 +18,20 @@ services:
       - chroma_online_data:/app/chroma_online_data
     restart: always
 
+  corp-backend:
+    build:
+      context: ./corp-backend
+      dockerfile: Dockerfile
+    container_name: corp_backend
+    ports:
+      - "8001:8001"
+    environment:
+      - PORT=8001
+      - GCP_PROJECT_ID=${GCP_PROJECT_ID:-}
+      - FIREBASE_CREDENTIALS_PATH=${FIREBASE_CREDENTIALS_PATH:-}
+      - FIREBASE_CREDENTIALS_JSON=${FIREBASE_CREDENTIALS_JSON:-}
+    restart: always
+
   frontend:
     build:
       context: ./frontend
