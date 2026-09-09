@@ -33,7 +33,7 @@ def create_order(payload: OrderCreate):
         # 生成 10 位數 Unix 時間戳記與 3 位數隨機號碼 (例如: 1757409477832)
         timestamp_part = int(time.time())
         random_part = random.randint(100, 999)
-        doc_id = f"{timestamp_part}{random_part}"
+        doc_id = f"ORD-{timestamp_part}{random_part}"
 
         order_dict = payload.model_dump()
         if not order_dict.get("NewOrderID"):
