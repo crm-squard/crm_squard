@@ -66,7 +66,7 @@ steps:
       - '--region=europe-west1'
       - '--platform=managed'
       - '--allow-unauthenticated'
-      - '--set-env-vars=PORT=8001,GCP_PROJECT_ID=$PROJECT_ID'
+      - '--set-env-vars=GCP_PROJECT_ID=$PROJECT_ID'
       - '--port=8001'
 
   # 6.5 取得已部署的 Corp Backend Cloud Run 服務網址
