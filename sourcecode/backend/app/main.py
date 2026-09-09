@@ -57,8 +57,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 訂單編號格式範例：A12345（1個英文字母 + 5位數字），依實際系統規則調整
-ORDER_CODE_PATTERN = re.compile(r"[A-Za-z]\d{5}")
+# 同時支援兩種訂單編號格式：
+# - ORD-500001（corp-backend/Firestore 的真實訂單 ID，ORD- + 6位數字）
+# - A12345（1個英文字母 + 5位數字，舊版 SQLite fallback mock 資料用）
+# \b 邊界避免誤吃：例如沒有它，A123456 會被截斷誤判成 A12345。
+ORDER_CODE_PATTERN = re.compile(r"\bORD-\d{6}\b|\b[A-Za-z]\d{5}\b")
 
 # 簡易 rate limit：同一 IP 每 60 秒最多 RATE_LIMIT_MAX_REQUESTS 次 /api/chat 請求。
 # 記憶體版實作，僅適合單一服務程序；多台伺服器水平擴充時需改用 Redis 等共用儲存。
@@ -122,7 +125,7 @@ def admin_summary(date: str | None = None):
 
 
 @app.post("/api/chat", response_model=ChatResponse)
-def chat(req: ChatRequest, request: Request):
+async def chat(req: ChatRequest, request: Request):
     client_ip = request.client.host if request.client else "unknown"
     _check_rate_limit(client_ip)
 
@@ -130,7 +133,7 @@ def chat(req: ChatRequest, request: Request):
     history = [{"role": h.role, "content": h.content} for h in req.history]
     history = history[-(settings.MAX_HISTORY_TURNS * 2):]
     try:
-        response = _handle_chat(text, history, req.provider)
+        response = await _handle_chat(text, history, req.provider)
     except Exception as e:
         # 任何未預期的例外（金鑰失效、首次建索引逾時等）都要回傳正常的 200 回應，
         # 讓 FastAPI/CORSMiddleware 有機會處理，避免請求整個掛掉變成 Cloud Run
@@ -148,7 +151,7 @@ def chat(req: ChatRequest, request: Request):
     return response
 
 
-def _handle_chat(text: str, history: list, provider: str) -> ChatResponse:
+async def _handle_chat(text: str, history: list, provider: str) -> ChatResponse:
     if not text:
         return ChatResponse(type="text", text="請輸入您的問題。")
 
@@ -157,10 +160,10 @@ def _handle_chat(text: str, history: list, provider: str) -> ChatResponse:
         if match is None:
             return ChatResponse(
                 type="text",
-                text="請提供訂單編號（例如 A12345）以便查詢，格式為 1 個英文字母加 5 位數字。",
+                text="請提供訂單編號（例如 A12345 或 ORD-500001）以便查詢。",
             )
         code = match.group(0)
-        order = get_order(code)
+        order = await get_order(code)
         if order is None:
             return ChatResponse(
                 type="text",

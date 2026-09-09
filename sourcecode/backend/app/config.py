@@ -36,8 +36,11 @@ class Settings:
     # 對話紀錄 SQLite 檔案路徑，供未來「管理者摘要當日提問」功能使用
     CHAT_LOG_DB_PATH: str = os.getenv("CHAT_LOG_DB_PATH", "./chat_log.db")
 
-    # 訂單資料 SQLite 檔案路徑；之後要接真實 ERP/訂單系統，把 orders.py 的查詢函式改成呼叫外部 API 即可
+    # 訂單資料 SQLite 檔案路徑；MCP 查不到 corp-backend 時的 fallback 資料來源
     ORDERS_DB_PATH: str = os.getenv("ORDERS_DB_PATH", "./orders.db")
+
+    # corp-backend 的 MCP Streamable HTTP endpoint，訂單查詢的真正資料來源（見 app/orders.py）
+    CORP_BACKEND_MCP_URL: str = os.getenv("CORP_BACKEND_MCP_URL", "http://localhost:8001/mcp")
 
     # 多輪對話最多保留幾輪（一輪 = 一則使用者訊息 + 一則機器人回覆），避免 context 太長讓本地小模型變慢
     MAX_HISTORY_TURNS: int = 4
