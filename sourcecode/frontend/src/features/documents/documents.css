@@ -1,0 +1,171 @@
+.adp-root {
+  --navy: #1E3A5F;
+  --navy-dark: #16293F;
+  --amber: #E8963C;
+  --amber-dark: #C97A2B;
+  --bg: #EEF1F4;
+  --surface: #FFFFFF;
+  --text: #1B1F24;
+  --text-muted: #6B7280;
+  --danger: #C0392B;
+  --border: #E1E5EA;
+  font-family: system-ui, -apple-system, "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+  padding: 32px 24px;
+  box-sizing: border-box;
+}
+
+.adp-container {
+  max-width: 860px;
+  margin: 0 auto;
+}
+
+.adp-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--navy);
+  margin: 0 0 4px;
+}
+
+.adp-subtitle {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin: 0 0 24px;
+}
+
+.adp-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 20px;
+  margin-bottom: 24px;
+}
+
+.adp-card-title {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0 0 14px;
+  color: var(--navy);
+}
+
+.adp-form-row {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.adp-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+
+.adp-field label {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.adp-field input,
+.adp-field select,
+.adp-field textarea {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--text);
+  background: var(--surface);
+}
+
+.adp-field textarea {
+  min-height: 140px;
+  resize: vertical;
+}
+
+.adp-field input:focus-visible,
+.adp-field select:focus-visible,
+.adp-field textarea:focus-visible {
+  outline: 2px solid var(--amber);
+  outline-offset: 1px;
+}
+
+.adp-btn {
+  border: none;
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  color: #fff;
+  background: var(--navy);
+}
+.adp-btn:hover { background: var(--navy-dark); }
+.adp-btn:disabled { background: #D8DEE4; cursor: not-allowed; }
+.adp-btn:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+
+.adp-btn-secondary {
+  background: var(--surface);
+  color: var(--navy);
+  border: 1px solid var(--border);
+}
+.adp-btn-secondary:hover { border-color: var(--amber); }
+
+.adp-btn-danger {
+  background: var(--surface);
+  color: var(--danger);
+  border: 1px solid var(--border);
+}
+.adp-btn-danger:hover { border-color: var(--danger); }
+
+.adp-error {
+  background: #FCEBEA;
+  color: var(--danger);
+  border: 1px solid #F1C4C0;
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 13px;
+  margin-bottom: 16px;
+}
+
+.adp-empty,
+.adp-loading {
+  color: var(--text-muted);
+  font-size: 13px;
+  padding: 16px 0;
+}
+
+.adp-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.adp-table th,
+.adp-table td {
+  text-align: left;
+  padding: 10px 8px;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+
+.adp-table th {
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.adp-row-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.adp-edit-panel {
+  margin-top: 10px;
+  padding: 12px;
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}

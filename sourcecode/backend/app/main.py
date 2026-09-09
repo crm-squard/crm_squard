@@ -18,7 +18,16 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.schemas import ChatRequest, ChatResponse, DailySummaryResponse, ProviderInfo
+from app.schemas import (
+    ChatRequest,
+    ChatResponse,
+    DailySummaryResponse,
+    DocumentCreate,
+    DocumentInfo,
+    DocumentListResponse,
+    DocumentUpdate,
+    ProviderInfo,
+)
 from app.agent import get_agent
 from app.orders import get_order, init_db as init_orders_db
 from app.chat_log import init_db as init_chat_log_db, log_chat
@@ -122,6 +131,94 @@ def admin_summary(date: str | None = None):
         print(f"[Summary Error] {e}")
         raise HTTPException(status_code=502, detail="產生摘要時發生錯誤，請稍後再試。")
     return DailySummaryResponse(**result)
+
+
+def _get_llamaindex_index():
+    """
+    文檔管理 API 專用：目前的知識庫文件新增/刪除/更新只對 pgvector（RAG_ENGINE=llamaindex）
+    的索引生效，其他引擎（online/gemini）沒有這套增量更新機制，呼叫時回傳明確的錯誤訊息，
+    而不是讓後面的 SQL 對不存在的設定連線失敗。
+    """
+    from app.rag.engine import get_retriever
+    from app.rag.llamaindex_engine import LlamaIndexRetriever
+
+    retriever = get_retriever()
+    if not isinstance(retriever, LlamaIndexRetriever):
+        raise HTTPException(
+            status_code=400,
+            detail=f"目前 RAG_ENGINE={settings.RAG_ENGINE}，文檔管理 API 只支援 RAG_ENGINE=llamaindex。",
+        )
+    return retriever.index
+
+
+@app.get("/api/admin/documents", response_model=DocumentListResponse)
+def list_documents():
+    """
+    列出知識庫目前所有文件（doc_id/category/chunk_count），供管理頁面畫列表。
+
+    注意：目前沒有任何身分驗證，正式上線前必須加上管理者登入/權限檢查（同 /api/admin/summary）。
+    """
+    from app.rag.documents_store import list_documents as _list_documents
+
+    _get_llamaindex_index()  # 確認目前引擎支援文檔管理，不支援就提早回錯誤
+    try:
+        docs = _list_documents()
+    except Exception as e:
+        print(f"[Documents Error] list failed: {e}")
+        raise HTTPException(status_code=502, detail="讀取知識庫文件列表時發生錯誤，請稍後再試。")
+    return DocumentListResponse(documents=[DocumentInfo(**d) for d in docs])
+
+
+@app.post("/api/admin/documents", response_model=DocumentInfo)
+def create_document(doc: DocumentCreate):
+    """新增一份知識庫文件，內容依 category 用對應的 parser 拆成 chunk 後灌進 pgvector。"""
+    from app.rag.documents_store import add_document, get_document_category
+
+    index = _get_llamaindex_index()
+    if get_document_category(doc.source) is not None:
+        raise HTTPException(status_code=409, detail=f"文件 {doc.source} 已存在，請改用更新 API。")
+    try:
+        chunk_count = add_document(doc.source, doc.category, doc.content, index)
+    except Exception as e:
+        print(f"[Documents Error] create {doc.source} failed: {e}")
+        raise HTTPException(status_code=502, detail="新增知識庫文件時發生錯誤，請稍後再試。")
+    return DocumentInfo(doc_id=doc.source, category=doc.category, chunk_count=chunk_count)
+
+
+@app.put("/api/admin/documents/{doc_id}", response_model=DocumentInfo)
+def update_document(doc_id: str, doc: DocumentUpdate):
+    """
+    更新既有文件內容：刪除該文件舊 chunk 後重新解析、插入新 chunk（不做差異比對）。
+    分類沿用文件既有的分類，不接受呼叫端改變（避免混用 parser 拆出格式不一致的 chunk）。
+    """
+    from app.rag.documents_store import get_document_category, update_document as _update_document
+
+    index = _get_llamaindex_index()
+    category = get_document_category(doc_id)
+    if category is None:
+        raise HTTPException(status_code=404, detail=f"查無文件 {doc_id}，請確認 doc_id 是否正確。")
+    try:
+        chunk_count = _update_document(doc_id, category, doc.content, index)
+    except Exception as e:
+        print(f"[Documents Error] update {doc_id} failed: {e}")
+        raise HTTPException(status_code=502, detail="更新知識庫文件時發生錯誤，請稍後再試。")
+    return DocumentInfo(doc_id=doc_id, category=category, chunk_count=chunk_count)
+
+
+@app.delete("/api/admin/documents/{doc_id}")
+def delete_document(doc_id: str):
+    """刪除文件（該 doc_id 底下的所有 chunk）。"""
+    from app.rag.documents_store import delete_document as _delete_document, get_document_category
+
+    index = _get_llamaindex_index()
+    if get_document_category(doc_id) is None:
+        raise HTTPException(status_code=404, detail=f"查無文件 {doc_id}，請確認 doc_id 是否正確。")
+    try:
+        _delete_document(doc_id, index)
+    except Exception as e:
+        print(f"[Documents Error] delete {doc_id} failed: {e}")
+        raise HTTPException(status_code=502, detail="刪除知識庫文件時發生錯誤，請稍後再試。")
+    return {"status": "deleted", "doc_id": doc_id}
 
 
 @app.post("/api/chat", response_model=ChatResponse)

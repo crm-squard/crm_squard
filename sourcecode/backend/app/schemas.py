@@ -52,3 +52,25 @@ class ProviderInfo(BaseModel):
     id: str
     label: str
     configured: bool
+
+
+class DocumentCreate(BaseModel):
+    # 文件的唯一識別碼，也是 pgvector 裡的 ref_doc_id；沿用既有檔名慣例（例如 "faq.md"）
+    source: str = Field(min_length=1, max_length=200)
+    category: Literal["product", "policy"]
+    content: str = Field(min_length=1)
+
+
+class DocumentUpdate(BaseModel):
+    # 更新只換內容，不能改分類（分類決定用哪個 parser 拆 chunk，混用會讓既有 chunk 格式不一致）
+    content: str = Field(min_length=1)
+
+
+class DocumentInfo(BaseModel):
+    doc_id: str
+    category: str
+    chunk_count: int
+
+
+class DocumentListResponse(BaseModel):
+    documents: List[DocumentInfo]

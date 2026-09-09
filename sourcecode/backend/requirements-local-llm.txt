@@ -24,3 +24,13 @@ sentence-transformers>=3.0.1
 # RAG_ENGINE=llamaindex 用（app/rag/llamaindex_engine.py）
 llama-index-core==0.11.17
 llama-index-embeddings-huggingface==0.3.1
+
+# llamaindex 引擎的儲存後端改用 pgvector（PostgreSQL），取代本地磁碟 persist，
+# 換取 LlamaIndex 原生的 insert/delete_ref_doc 增量更新能力（見 app/rag/documents_store.py）。
+# 版本相容區間：llama-index-vector-stores-postgres==0.2.6 要求 llama-index-core>=0.11.0,<0.12.0
+# （跟上面已釘的 0.11.17 相容）；asyncpg 交給 pip 在區間內解析最新 patch 版。
+llama-index-vector-stores-postgres==0.2.6
+pgvector==0.2.5
+psycopg2-binary==2.9.12
+asyncpg>=0.29.0,<0.30.0
+sqlalchemy[asyncio]>=1.4.49,<2.1
