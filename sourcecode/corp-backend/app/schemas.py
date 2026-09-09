@@ -66,7 +66,7 @@ class OrderCreate(BaseModel):
     UnitPrice: float = Field(..., description="單價")
     Sales: float = Field(..., description="銷售金額")
     OrderValue: float = Field(..., description="訂單總價值")
-    NewOrderID: str = Field(..., description="新訂單識別碼 (可用作 Firestore Doc ID)")
+    NewOrderID: Optional[str] = Field(None, description="新訂單識別碼 (選填，若未填寫則自動帶入生成的 doc_id)")
     PhoneNumber: str = Field(..., description="電話號碼")
 
 

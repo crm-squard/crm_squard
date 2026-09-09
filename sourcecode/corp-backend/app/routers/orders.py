@@ -1,3 +1,5 @@
+import random
+import time
 from typing import Optional
 from fastapi import APIRouter, HTTPException, Query, status
 
@@ -25,12 +27,17 @@ COLLECTION_ORDERS = "Order"
 def create_order(payload: OrderCreate):
     """
     寫入一筆新的訂單至 Firebase Firestore `Order` 集合中。
-    - **NewOrderID** 或 **OrderID** 會作為 Firestore 文件 ID。
+    - **doc_id** 生成規則：10 位 Unix Timestamp 秒數 + 3 位隨機數字 (共 13 位數字)。
     """
     try:
-        # 優先使用 NewOrderID 或 OrderID 作為 Doc ID
-        doc_id = payload.NewOrderID or str(payload.OrderID)
+        # 生成 10 位數 Unix 時間戳記與 3 位數隨機號碼 (例如: 1757409477832)
+        timestamp_part = int(time.time())
+        random_part = random.randint(100, 999)
+        doc_id = f"{timestamp_part}{random_part}"
+
         order_dict = payload.model_dump()
+        if not order_dict.get("NewOrderID"):
+            order_dict["NewOrderID"] = doc_id
 
         res = crud.create_document(
             collection_name=COLLECTION_ORDERS,

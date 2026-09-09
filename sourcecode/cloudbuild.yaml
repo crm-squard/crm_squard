@@ -41,25 +41,65 @@ steps:
         echo "Backend URL is $$URL"
         echo "$$URL" > /workspace/backend_url.txt
 
-  # 4. 建置 Frontend 容器鏡像 (並傳入動態抓到的 VITE_API_BASE_URL)
+  # 4. 建置 Corp Backend 容器鏡像
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - 'europe-west1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/corp-backend:latest'
+      - './sourcecode/corp-backend'
+
+  # 5. 推送 Corp Backend 鏡像至 Artifact Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'europe-west1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/corp-backend:latest'
+
+  # 6. 部署 Corp Backend 至 Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'corp-backend'
+      - '--image=europe-west1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/corp-backend:latest'
+      - '--region=europe-west1'
+      - '--platform=managed'
+      - '--allow-unauthenticated'
+      - '--set-env-vars=PORT=8001,GCP_PROJECT_ID=$PROJECT_ID'
+      - '--port=8001'
+
+  # 6.5 取得已部署的 Corp Backend Cloud Run 服務網址
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: bash
+    args:
+      - '-c'
+      - |
+        CORP_URL=$$(gcloud run services describe corp-backend --region=europe-west1 --format='value(status.url)')
+        echo "Corp Backend URL is $$CORP_URL"
+        echo "$$CORP_URL" > /workspace/corp_backend_url.txt
+
+  # 7. 建置 Frontend 容器鏡像 (傳入動態抓到的 VITE_API_BASE_URL 與 VITE_API_CORP_URL)
   - name: 'gcr.io/cloud-builders/docker'
     entrypoint: bash
     args:
       - '-c'
       - |
         URL=$$(cat /workspace/backend_url.txt)
+        CORP_URL=$$(cat /workspace/corp_backend_url.txt)
         docker build \
           --build-arg VITE_API_BASE_URL=$$URL \
+          --build-arg VITE_API_CORP_URL=$$CORP_URL \
           -t europe-west1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/crm-frontend:latest \
           ./sourcecode/frontend
 
-  # 5. 推送 Frontend 鏡像至 Artifact Registry
+  # 8. 推送 Frontend 鏡像至 Artifact Registry
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - 'push'
       - 'europe-west1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/crm-frontend:latest'
 
-  # 6. 部署 Frontend 至 Cloud Run
+  # 9. 部署 Frontend 至 Cloud Run
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: gcloud
     args:
@@ -78,4 +118,5 @@ options:
 
 images:
   - 'europe-west1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/crm-backend:latest'
+  - 'europe-west1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/corp-backend:latest'
   - 'europe-west1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/crm-frontend:latest'
