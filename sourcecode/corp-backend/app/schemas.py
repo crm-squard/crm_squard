@@ -111,6 +111,51 @@ class OrderListResponse(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# 專屬 Firebase 產品 (Product) Schemas
+# ---------------------------------------------------------------------------
+
+class ProductCreate(BaseModel):
+    """
+    新增 Firebase 產品資料結構 (所有欄位皆為字串)。
+    """
+    ProductID: str = Field(..., description="產品 ID")
+    ProductNameZH: str = Field(..., description="中文品名")
+    ProductNameEN: str = Field(..., description="英文品名")
+    Category: str = Field(..., description="分類")
+    Description: str = Field(..., description="產品詳細說明")
+    DescriptionShort: str = Field(..., description="產品簡短說明 (25字內)")
+
+
+class ProductUpdate(BaseModel):
+    """
+    更新 Firebase 產品資料結構 (所有欄位皆可選)。
+    """
+    ProductID: Optional[str] = None
+    ProductNameZH: Optional[str] = None
+    ProductNameEN: Optional[str] = None
+    Category: Optional[str] = None
+    Description: Optional[str] = None
+    DescriptionShort: Optional[str] = None
+
+
+class ProductResponse(ProductCreate):
+    """
+    產品單筆回應結構。
+    """
+    id: str = Field(..., description="Firestore 文件 ID")
+
+
+class ProductListResponse(BaseModel):
+    """
+    產品列表回應結構 (支援分頁)。
+    """
+    pidx: int = Field(..., description="當前頁碼 (1-based)")
+    pno: int = Field(..., description="每頁筆數")
+    count: int = Field(..., description="本頁回傳筆數")
+    products: List[ProductResponse] = Field(default_factory=list, description="產品列表")
+
+
+# ---------------------------------------------------------------------------
 # 系統與健康檢查 Schemas
 # ---------------------------------------------------------------------------
 
