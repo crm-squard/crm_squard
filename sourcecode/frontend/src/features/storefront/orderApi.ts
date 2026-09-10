@@ -17,11 +17,11 @@ export function buildCheckoutOrders(
   orderDate = formatLocalDate(new Date()),
 ): CheckoutOrder[] {
   return cartItems.map(({ product, quantity }) => {
-    const orderValue = Number((product.UnitPrice * quantity).toFixed(2));
+    const orderValue = Number((product.unitPrice * quantity).toFixed(2));
     return {
       CustomerID: customer.CustomerID,
       OrderDate: orderDate,
-      ProductID: product.ProductID,
+      ProductID: product.productID,
       Quantity: quantity,
       Discount: 0,
       PaymentMethod: customer.PaymentMethod,
@@ -30,9 +30,9 @@ export function buildCheckoutOrders(
       City: customer.City.trim(),
       SignupDate: customer.SignupDate,
       CustomerSegment: customer.CustomerSegment,
-      ProductName: product.ProductName,
-      Category: product.Category,
-      UnitPrice: product.UnitPrice,
+      ProductName: product.productNameEN,
+      Category: product.category,
+      UnitPrice: product.unitPrice,
       Sales: orderValue,
       OrderValue: orderValue,
       PhoneNumber: customer.PhoneNumber.trim(),

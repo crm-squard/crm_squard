@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { submitCheckout } from "./orderApi";
 import { MOCK_CUSTOMERS } from "./mockCustomers";
-import { CATEGORIES, PRODUCTS } from "./products";
+import { fetchProductPage } from "./productApi";
 import type { CheckoutCustomer, Product } from "./types";
 import { useCart } from "./useCart";
 import "./storefront.css";
@@ -36,15 +36,10 @@ const PAYMENT_LABELS = {
   Cash: "現金付款",
 } as const;
 const PAYMENT_METHODS = Object.keys(PAYMENT_LABELS) as CheckoutCustomer["PaymentMethod"][];
+const PRODUCT_COUNT = 20;
 
-function getSpriteStyle(productId: number): CSSProperties {
-  const spriteIndex = productId - 2001;
-  const column = spriteIndex % 5;
-  const row = Math.floor(spriteIndex / 5);
-  return {
-    "--sprite-x": `${column * 25}%`,
-    "--sprite-y": `${row * (100 / 3)}%`,
-  } as CSSProperties;
+function getProductImageStyle(imagePath: string): CSSProperties {
+  return imagePath ? { backgroundImage: `url("${imagePath}")` } : {};
 }
 
 function ProductCard({ product, onAdd }: { product: Product; onAdd: (product: Product) => void }) {
@@ -52,19 +47,19 @@ function ProductCard({ product, onAdd }: { product: Product; onAdd: (product: Pr
     <article className="store-product-card">
       <div
         className="store-product-image"
-        style={getSpriteStyle(product.ProductID)}
+        style={getProductImageStyle(product.imagePath)}
         role="img"
-        aria-label={`${product.displayName}商品圖片`}
+        aria-label={`${product.productNameZH}商品圖片`}
       >
-        <span className="store-product-id">#{product.ProductID}</span>
+        {/* <span className="store-product-id">#{product.productID}</span> */}
       </div>
       <div className="store-product-body">
-        <span className="store-product-category">{CATEGORY_LABELS[product.Category]}</span>
-        <h3>{product.displayName}</h3>
-        <p className="store-product-en">{product.ProductName}</p>
-        <p className="store-product-copy">{product.tagline}</p>
+        <span className="store-product-category">{CATEGORY_LABELS[product.category]}</span>
+        <h3>{product.productNameZH}</h3>
+        <p className="store-product-en">{product.productNameEN}</p>
+        <p className="store-product-copy">{product.descriptionShort}</p>
         <div className="store-product-footer">
-          <strong>${product.UnitPrice.toLocaleString("en-US")}</strong>
+          <strong>${product.unitPrice.toLocaleString("en-US")}</strong>
           <button type="button" onClick={() => onAdd(product)}>
             <Plus size={18} aria-hidden="true" />
             加入購物車
@@ -84,12 +79,17 @@ export default function Storefront() {
   const [errorMessage, setErrorMessage] = useState("");
   const [selectedCustomerId, setSelectedCustomerId] = useState(() => String(MOCK_CUSTOMERS[0].CustomerID));
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<CheckoutCustomer["PaymentMethod"]>("Gateway");
+  const [products, setProducts] = useState<Product[]>([]);
+  const [isProductsLoading, setIsProductsLoading] = useState(true);
+  const [productsError, setProductsError] = useState("");
+  const [productRequestVersion, setProductRequestVersion] = useState(0);
   const statusMessageTimerRef = useRef<number | null>(null);
   const { items, addItem, updateQuantity, clearCart, itemCount, total } = useCart();
 
+  const categories = useMemo(() => ["全部", ...new Set(products.map((product) => product.category))], [products]);
   const visibleProducts = useMemo(() => activeCategory === "全部"
-    ? PRODUCTS
-    : PRODUCTS.filter((product) => product.Category === activeCategory), [activeCategory]);
+    ? products
+    : products.filter((product) => product.category === activeCategory), [activeCategory, products]);
   const selectedCustomer = useMemo(
     () => MOCK_CUSTOMERS.find((customer) => String(customer.CustomerID) === selectedCustomerId) ?? MOCK_CUSTOMERS[0],
     [selectedCustomerId],
@@ -98,6 +98,26 @@ export default function Storefront() {
   useEffect(() => {
     if (!isCartOpen) setIsCheckoutOpen(false);
   }, [isCartOpen]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setIsProductsLoading(true);
+    setProductsError("");
+
+    fetchProductPage(1, PRODUCT_COUNT, controller.signal)
+      .then((response) => {
+        setProducts(response.products);
+      })
+      .catch((error: unknown) => {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        setProductsError(error instanceof Error ? error.message : "商品列表載入失敗。");
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setIsProductsLoading(false);
+      });
+
+    return () => controller.abort();
+  }, [productRequestVersion]);
 
   useEffect(() => () => {
     if (statusMessageTimerRef.current !== null) window.clearTimeout(statusMessageTimerRef.current);
@@ -127,7 +147,7 @@ export default function Storefront() {
 
   function handleAdd(product: Product) {
     addItem(product);
-    showStatusMessage(`已將${product.displayName}加入購物車`);
+    showStatusMessage(`已將${product.productNameZH}加入購物車`);
   }
 
   function openCheckout() {
@@ -190,7 +210,7 @@ export default function Storefront() {
         <section className="store-hero" aria-labelledby="store-title">
           <div className="store-hero-copy">
             <p className="store-trust-badge"><CheckCircle2 size={18} aria-hidden="true" /> 商品選購</p>
-            <h1 id="store-title">日常用品，<br /><em>一次選齊。</em></h1>
+            <h1 id="store-title">日常用品<br /><em>一次選齊</em></h1>
             <p>瀏覽各類商品，加入購物車後即可結帳。</p>
             <div className="store-hero-actions">
               <a className="store-primary-link" href="#products">
@@ -203,7 +223,7 @@ export default function Storefront() {
             <span className="store-shape store-shape-one" />
             <span className="store-shape store-shape-two" />
             <div className="store-hero-stat">
-              <b>20</b>
+              <b>{PRODUCT_COUNT}</b>
               <span>件生活選物</span>
             </div>
             <div className="store-hero-badge">GOOD CHOICE<br />GOOD DAY</div>
@@ -219,7 +239,7 @@ export default function Storefront() {
             <p>查看商品價格並加入購物車。</p>
           </div>
           <div className="store-filters" aria-label="商品分類">
-            {CATEGORIES.map((category) => (
+            {categories.map((category) => (
               <button
                 key={category}
                 type="button"
@@ -227,15 +247,27 @@ export default function Storefront() {
                 aria-pressed={activeCategory === category}
                 onClick={() => setActiveCategory(category)}
               >
-                {CATEGORY_LABELS[category]}
+                {CATEGORY_LABELS[category] ?? category}
               </button>
             ))}
           </div>
-          <div className="store-product-grid">
-            {visibleProducts.map((product) => (
-              <ProductCard key={product.ProductID} product={product} onAdd={handleAdd} />
-            ))}
-          </div>
+          {isProductsLoading ? (
+            <div className="store-products-feedback" role="status">正在載入商品…</div>
+          ) : productsError ? (
+            <div className="store-products-feedback is-error" role="alert">
+              <p>{productsError}</p>
+              <button type="button" onClick={() => setProductRequestVersion((version) => version + 1)}>重新載入</button>
+            </div>
+          ) : (
+            <>
+              <div className="store-product-grid">
+                {visibleProducts.map((product) => (
+                  <ProductCard key={product.productID} product={product} onAdd={handleAdd} />
+                ))}
+              </div>
+              {!visibleProducts.length && <div className="store-products-feedback">此分類目前沒有商品。</div>}
+            </>
+          )}
         </section>
       </main>
 
@@ -268,18 +300,18 @@ export default function Storefront() {
                     </div>
                   )}
                   {items.map(({ product, quantity }) => (
-                    <article className="store-cart-item" key={product.ProductID}>
-                      <div className="store-cart-thumb" style={getSpriteStyle(product.ProductID)} role="img" aria-label={product.displayName} />
+                    <article className="store-cart-item" key={product.productID}>
+                      <div className="store-cart-thumb" style={getProductImageStyle(product.imagePath)} role="img" aria-label={product.productNameZH} />
                       <div className="store-cart-item-info">
-                        <h3>{product.displayName}</h3>
-                        <span>${product.UnitPrice.toLocaleString("en-US")}</span>
+                        <h3>{product.productNameZH}</h3>
+                        <span>${product.unitPrice.toLocaleString("en-US")}</span>
                         <div className="store-quantity">
-                          <button type="button" onClick={() => updateQuantity(product.ProductID, quantity - 1)} aria-label={`減少${product.displayName}數量`}><Minus size={16} /></button>
-                          <output aria-label={`${product.displayName}數量`}>{quantity}</output>
-                          <button type="button" onClick={() => updateQuantity(product.ProductID, quantity + 1)} aria-label={`增加${product.displayName}數量`}><Plus size={16} /></button>
+                          <button type="button" onClick={() => updateQuantity(product.productID, quantity - 1)} aria-label={`減少${product.productNameZH}數量`}><Minus size={16} /></button>
+                          <output aria-label={`${product.productNameZH}數量`}>{quantity}</output>
+                          <button type="button" onClick={() => updateQuantity(product.productID, quantity + 1)} aria-label={`增加${product.productNameZH}數量`}><Plus size={16} /></button>
                         </div>
                       </div>
-                      <button className="store-remove" type="button" onClick={() => updateQuantity(product.ProductID, 0)} aria-label={`移除${product.displayName}`}><Trash2 size={18} /></button>
+                      <button className="store-remove" type="button" onClick={() => updateQuantity(product.productID, 0)} aria-label={`移除${product.productNameZH}`}><Trash2 size={18} /></button>
                     </article>
                   ))}
                 </div>

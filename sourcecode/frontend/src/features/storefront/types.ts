@@ -2,12 +2,20 @@ export type CustomerSegment = "New" | "Regular" | "VIP";
 export type PaymentMethod = "CardToCard" | "Cash" | "Gateway" | "Wallet";
 
 export interface Product {
-  ProductID: number;
-  ProductName: string;
-  displayName: string;
-  Category: string;
-  UnitPrice: number;
-  tagline: string;
+  productID: number;
+  productNameZH: string;
+  productNameEN: string;
+  category: string;
+  unitPrice: number;
+  descriptionShort: string;
+  imagePath: string;
+}
+
+export interface ProductListResponse {
+  pidx: number;
+  pno: number;
+  count: number;
+  products: Product[];
 }
 
 export interface CartItem {
