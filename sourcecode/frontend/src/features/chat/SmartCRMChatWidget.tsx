@@ -7,11 +7,12 @@ import ChatComposer from "./components/ChatComposer";
 import { useChat } from "./hooks/useChat";
 import { useProviders } from "./hooks/useProviders";
 import "./chat.css";
+import "./SmartCRMChatWidget.css";
 
 const QUICK_REPLIES = ["無線滑鼠支援多少 DPI？", "查詢訂單 A12345", "退貨要幾天內申請？"];
 
 export default function SmartCRMChatWidget() {
-  const [isOpen, setIsOpen] = useState(true);
+  const [isOpen, setIsOpen] = useState(false);
   const [input, setInput] = useState("");
   const { messages, isSending, sendMessage } = useChat();
   const { providers, provider, setProvider } = useProviders();
