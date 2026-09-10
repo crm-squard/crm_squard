@@ -72,10 +72,14 @@
 .store-filters button:hover { border-color: var(--store-primary); }
 .store-filters button.is-active { border-color: var(--store-primary); background: var(--store-primary); color: var(--store-on-primary); }
 .store-product-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); max-width: 1280px; margin: 0 auto; gap: 24px; }
+.store-products-feedback { display: grid; min-height: 180px; max-width: 1280px; margin: 0 auto; place-items: center; align-content: center; gap: 14px; color: var(--store-muted); text-align: center; }
+.store-products-feedback p { margin: 0; }
+.store-products-feedback.is-error { color: var(--store-danger); }
+.store-products-feedback button { min-height: 44px; padding: 0 16px; border: 1px solid currentColor; border-radius: 10px; background: transparent; color: inherit; cursor: pointer; font: inherit; font-weight: 800; }
 .store-product-card { min-width: 0; overflow: hidden; border: 1px solid var(--store-border); border-radius: var(--store-radius); background: var(--store-card); box-shadow: 0 4px 14px rgba(30, 58, 95, .06); transition: box-shadow 220ms ease, transform 220ms ease; }
 .store-product-card:hover { box-shadow: var(--store-shadow); transform: translateY(-3px); }
-.store-product-image, .store-cart-thumb { background-image: url("/images/all_product.jpg"); background-repeat: no-repeat; background-position: var(--sprite-x) var(--sprite-y); background-size: 500% 400%; }
-.store-product-image { position: relative; aspect-ratio: 1.43; border-bottom: 1px solid var(--store-border); background-color: var(--color-bg-alt); }
+.store-product-image, .store-cart-thumb { background-repeat: no-repeat; background-position: center; background-size: cover; }
+.store-product-image { position: relative; aspect-ratio: 256 / 190; border-bottom: 1px solid var(--store-border); background-color: var(--color-bg-alt); }
 .store-product-id { position: absolute; top: 12px; right: 12px; padding: 5px 9px; border-radius: 999px; background: rgba(30, 58, 95, .88); color: var(--store-card); font-size: 11px; font-weight: 800; letter-spacing: .05em; backdrop-filter: blur(6px); }
 .store-product-body { display: flex; min-height: 255px; flex-direction: column; padding: 20px; }
 .store-product-category { align-self: flex-start; padding: 4px 9px; border-radius: 7px; background: rgba(0, 166, 126, .1); color: var(--store-secondary); font-size: 11px; font-weight: 800; }
@@ -114,7 +118,7 @@
 .store-empty-cart p { margin: 0 0 20px; }
 .store-empty-cart button, .store-back-button { min-height: 44px; border: 0; background: transparent; color: var(--store-primary); cursor: pointer; font-weight: 800; text-decoration: underline; text-underline-offset: 4px; }
 .store-cart-item { position: relative; display: grid; grid-template-columns: 112px 1fr 44px; align-items: center; gap: 16px; padding: 18px 0; border-bottom: 1px solid var(--store-border); }
-.store-cart-thumb { width: 112px; aspect-ratio: 1.43; border-radius: 15px; background-color: var(--color-bg-alt); }
+.store-cart-thumb { width: 112px; aspect-ratio: 256 / 190; border-radius: 15px; background-color: var(--color-bg-alt); }
 .store-cart-item-info h3 { margin: 0 0 4px; font-family: "Plus Jakarta Sans", sans-serif; font-size: 16px; }
 .store-cart-item-info > span { color: var(--store-primary); font-weight: 800; font-variant-numeric: tabular-nums; }
 .store-quantity { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
@@ -178,7 +182,7 @@
   .store-products-section { padding: 62px 16px; border-radius: 28px 28px 0 0; }
   .store-product-grid { grid-template-columns: 1fr; gap: 18px; }
   .store-product-card { display: block; }
-  .store-product-image { height: auto; aspect-ratio: 1.43; border-right: 0; border-bottom: 1px solid var(--store-border); }
+  .store-product-image { height: auto; aspect-ratio: 256 / 190; border-right: 0; border-bottom: 1px solid var(--store-border); }
   .store-product-body { min-height: 235px; padding: 18px; }
   .store-product-copy { font-size: 13px; }
   .store-product-footer { align-items: center; flex-direction: row; }

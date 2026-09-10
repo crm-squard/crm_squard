@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { PRODUCTS } from "./products";
 import type { CartItem, Product } from "./types";
 
 const STORAGE_KEY = "crm-squad-store-cart";
 
 interface StoredCartItem {
-  productId: number;
+  product: Product;
   quantity: number;
 }
 
@@ -16,9 +15,9 @@ function loadCart(): CartItem[] {
     const storedItems = JSON.parse(rawValue) as StoredCartItem[];
     if (!Array.isArray(storedItems)) return [];
     return storedItems.flatMap((storedItem) => {
-      const product = PRODUCTS.find((candidate) => candidate.ProductID === storedItem.productId);
-      if (!product || !Number.isInteger(storedItem.quantity) || storedItem.quantity < 1) return [];
-      return [{ product, quantity: Math.min(storedItem.quantity, 99) }];
+      if (!storedItem.product || !Number.isInteger(storedItem.product.productID)
+        || !Number.isInteger(storedItem.quantity) || storedItem.quantity < 1) return [];
+      return [{ product: storedItem.product, quantity: Math.min(storedItem.quantity, 99) }];
     });
   } catch {
     return [];
@@ -30,7 +29,7 @@ export function useCart() {
 
   useEffect(() => {
     const storedItems: StoredCartItem[] = items.map(({ product, quantity }) => ({
-      productId: product.ProductID,
+      product,
       quantity,
     }));
     localStorage.setItem(STORAGE_KEY, JSON.stringify(storedItems));
@@ -38,9 +37,9 @@ export function useCart() {
 
   const addItem = useCallback((product: Product) => {
     setItems((currentItems) => {
-      const existingItem = currentItems.find((item) => item.product.ProductID === product.ProductID);
+      const existingItem = currentItems.find((item) => item.product.productID === product.productID);
       if (!existingItem) return [...currentItems, { product, quantity: 1 }];
-      return currentItems.map((item) => item.product.ProductID === product.ProductID
+      return currentItems.map((item) => item.product.productID === product.productID
         ? { ...item, quantity: Math.min(item.quantity + 1, 99) }
         : item);
     });
@@ -48,8 +47,8 @@ export function useCart() {
 
   const updateQuantity = useCallback((productId: number, quantity: number) => {
     setItems((currentItems) => quantity < 1
-      ? currentItems.filter((item) => item.product.ProductID !== productId)
-      : currentItems.map((item) => item.product.ProductID === productId
+      ? currentItems.filter((item) => item.product.productID !== productId)
+      : currentItems.map((item) => item.product.productID === productId
         ? { ...item, quantity: Math.min(quantity, 99) }
         : item));
   }, []);
@@ -57,7 +56,7 @@ export function useCart() {
   const clearCart = useCallback(() => setItems([]), []);
   const itemCount = useMemo(() => items.reduce((total, item) => total + item.quantity, 0), [items]);
   const total = useMemo(() => items.reduce(
-    (sum, item) => sum + item.product.UnitPrice * item.quantity,
+    (sum, item) => sum + item.product.unitPrice * item.quantity,
     0,
   ), [items]);
 
