@@ -24,6 +24,7 @@ from app.orders import get_order, init_db as init_orders_db
 from app.chat_log import init_db as init_chat_log_db, log_chat
 from app.summary import summarize_day
 from app.providers import is_configured
+from app.line_webhook import create_line_router
 
 PROVIDER_LABELS = {
     "local": "本地 1.5B/7B（免費，速度較慢）",
@@ -182,3 +183,7 @@ def _handle_chat(text: str, history: list, provider: str) -> ChatResponse:
         return ChatResponse(type="text", text=answer)
     top_source = retrieved[0]["topic"]
     return ChatResponse(type="product", text=answer, source=top_source, sources=retrieved)
+
+
+# LINE Messaging API
+app.include_router(create_line_router(_handle_chat))
