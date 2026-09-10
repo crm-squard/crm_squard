@@ -2,11 +2,34 @@
   box-sizing: border-box;
 }
 
+:root {
+  --color-primary: #003285;
+  --color-secondary: #00a67e;
+  --color-accent: #FF7F3E;
+  --color-info: #3b82f6;
+  --color-success: #10b981;
+  --color-warning: #FF7F3E;
+  --color-error: #ef4444;
+  --color-bg: #fafbfc;
+  --color-bg-alt: #f0f4f8;
+  --color-bg-card: #fff;
+  --color-bg-dark: #1e3a5f;
+  --color-text: #1a202c;
+  --color-text-muted: #4a5568;
+  --color-text-subtle: #718096;
+  --color-border: #e2e8f0;
+}
+
 html, body, #root {
-  height: 100%;
+  min-height: 100%;
   margin: 0;
 }
 
 body {
-  font-family: system-ui, -apple-system, "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+  min-width: 320px;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: "DM Sans", "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif;
 }
+
+html { scroll-behavior: smooth; }
