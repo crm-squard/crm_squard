@@ -54,22 +54,19 @@ class ProviderInfo(BaseModel):
     configured: bool
 
 
-class DocumentCreate(BaseModel):
-    # 文件的唯一識別碼，也是 pgvector 裡的 ref_doc_id；沿用既有檔名慣例（例如 "faq.md"）
-    source: str = Field(min_length=1, max_length=200)
-    category: Literal["product", "policy"]
-    content: str = Field(min_length=1)
-
-
-class DocumentUpdate(BaseModel):
-    # 更新只換內容，不能改分類（分類決定用哪個 parser 拆 chunk，混用會讓既有 chunk 格式不一致）
-    content: str = Field(min_length=1)
-
-
 class DocumentInfo(BaseModel):
     doc_id: str
     category: str
     chunk_count: int
+    # 建立/更新時是否真的重新 embed 過：建立一定是 True；更新時若 SHA256 跟既有內容一樣則
+    # 跳過重新 embed，回傳 False。列表查詢（GET）不適用，固定給 None。
+    content_changed: Optional[bool] = None
+    # 上傳時間（UTC ISO 格式）與檔案大小（bytes），見 app/rag/documents_store.py 的
+    # add_document()；列表查詢（GET）會回傳，建立/更新回應目前不特別附加（用不到）。
+    uploaded_at: Optional[str] = None
+    file_size_bytes: Optional[int] = None
+    # 有沒有其他 doc_id 存了完全一樣的內容（SHA256 相同）；只是提示，不會擋下新增/更新。
+    duplicate_of: Optional[str] = None
 
 
 class DocumentListResponse(BaseModel):

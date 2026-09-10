@@ -14,7 +14,9 @@ from collections import defaultdict, deque
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
-from fastapi import FastAPI, HTTPException, Request
+from typing import Literal
+
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
@@ -22,10 +24,8 @@ from app.schemas import (
     ChatRequest,
     ChatResponse,
     DailySummaryResponse,
-    DocumentCreate,
     DocumentInfo,
     DocumentListResponse,
-    DocumentUpdate,
     ProviderInfo,
 )
 from app.agent import get_agent
@@ -169,49 +169,76 @@ def list_documents():
     return DocumentListResponse(documents=[DocumentInfo(**d) for d in docs])
 
 
-@app.post("/api/admin/documents", response_model=DocumentInfo)
-def create_document(doc: DocumentCreate):
-    """新增一份知識庫文件，內容依 category 用對應的 parser 拆成 chunk 後灌進 pgvector。"""
-    from app.rag.documents_store import add_document, get_document_category
-
-    index = _get_llamaindex_index()
-    if get_document_category(doc.source) is not None:
-        raise HTTPException(status_code=409, detail=f"文件 {doc.source} 已存在，請改用更新 API。")
+def _read_md_upload(file: UploadFile) -> str:
+    """驗證上傳檔案是 .md，讀成文字。目前只支援純文字 markdown，其他格式一律拒絕。"""
+    if not file.filename or not file.filename.lower().endswith(".md"):
+        raise HTTPException(status_code=400, detail="目前只支援 .md 檔案。")
+    raw_bytes = file.file.read()
     try:
-        chunk_count = add_document(doc.source, doc.category, doc.content, index)
+        return raw_bytes.decode("utf-8")
+    except UnicodeDecodeError:
+        raise HTTPException(status_code=400, detail="檔案編碼須為 UTF-8。")
+
+
+@app.post("/api/admin/documents", response_model=DocumentInfo)
+def create_document(category: Literal["product", "policy"] = Form(...), file: UploadFile = File(...)):
+    """
+    上傳一份 .md 檔新增知識庫文件，doc_id 直接沿用檔名（例如上傳 faq.md，doc_id 就是 "faq.md"）。
+    內容依 category 用對應的 parser 拆成 chunk 後灌進 pgvector。
+    """
+    from app.rag.documents_store import add_document, find_duplicate_by_hash, get_document_meta, hash_content
+
+    raw_text = _read_md_upload(file)
+    source = file.filename
+    index = _get_llamaindex_index()
+    if get_document_meta(source) is not None:
+        raise HTTPException(status_code=409, detail=f"文件 {source} 已存在，請改用更新 API。")
+    duplicate_of = find_duplicate_by_hash(hash_content(raw_text), exclude_source=source)
+    try:
+        chunk_count = add_document(source, category, raw_text, index)
     except Exception as e:
-        print(f"[Documents Error] create {doc.source} failed: {e}")
+        print(f"[Documents Error] create {source} failed: {e}")
         raise HTTPException(status_code=502, detail="新增知識庫文件時發生錯誤，請稍後再試。")
-    return DocumentInfo(doc_id=doc.source, category=doc.category, chunk_count=chunk_count)
+    return DocumentInfo(
+        doc_id=source, category=category, chunk_count=chunk_count,
+        content_changed=True, duplicate_of=duplicate_of,
+    )
 
 
 @app.put("/api/admin/documents/{doc_id}", response_model=DocumentInfo)
-def update_document(doc_id: str, doc: DocumentUpdate):
+def update_document(doc_id: str, file: UploadFile = File(...)):
     """
-    更新既有文件內容：刪除該文件舊 chunk 後重新解析、插入新 chunk（不做差異比對）。
-    分類沿用文件既有的分類，不接受呼叫端改變（避免混用 parser 拆出格式不一致的 chunk）。
+    上傳新版 .md 檔更新既有文件：先比對 SHA256，內容跟既有版本一樣就跳過刪除+重新 embed；
+    有變才刪除該文件舊 chunk、重新解析插入新 chunk。分類沿用文件既有的分類，不接受透過
+    上傳改變（避免混用 parser 拆出格式不一致的 chunk），上傳檔案的檔名本身不需要跟 doc_id 一樣。
     """
-    from app.rag.documents_store import get_document_category, update_document as _update_document
+    from app.rag.documents_store import find_duplicate_by_hash, get_document_meta
+    from app.rag.documents_store import hash_content, update_document as _update_document
 
+    raw_text = _read_md_upload(file)
     index = _get_llamaindex_index()
-    category = get_document_category(doc_id)
-    if category is None:
+    existing = get_document_meta(doc_id)
+    if existing is None:
         raise HTTPException(status_code=404, detail=f"查無文件 {doc_id}，請確認 doc_id 是否正確。")
+    duplicate_of = find_duplicate_by_hash(hash_content(raw_text), exclude_source=doc_id)
     try:
-        chunk_count = _update_document(doc_id, category, doc.content, index)
+        chunk_count, changed = _update_document(doc_id, existing["category"], raw_text, index)
     except Exception as e:
         print(f"[Documents Error] update {doc_id} failed: {e}")
         raise HTTPException(status_code=502, detail="更新知識庫文件時發生錯誤，請稍後再試。")
-    return DocumentInfo(doc_id=doc_id, category=category, chunk_count=chunk_count)
+    return DocumentInfo(
+        doc_id=doc_id, category=existing["category"], chunk_count=chunk_count,
+        content_changed=changed, duplicate_of=duplicate_of,
+    )
 
 
 @app.delete("/api/admin/documents/{doc_id}")
 def delete_document(doc_id: str):
     """刪除文件（該 doc_id 底下的所有 chunk）。"""
-    from app.rag.documents_store import delete_document as _delete_document, get_document_category
+    from app.rag.documents_store import delete_document as _delete_document, get_document_meta
 
     index = _get_llamaindex_index()
-    if get_document_category(doc_id) is None:
+    if get_document_meta(doc_id) is None:
         raise HTTPException(status_code=404, detail=f"查無文件 {doc_id}，請確認 doc_id 是否正確。")
     try:
         _delete_document(doc_id, index)

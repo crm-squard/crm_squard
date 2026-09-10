@@ -130,6 +130,16 @@
   margin-bottom: 16px;
 }
 
+.adp-notice {
+  background: #FFF6E9;
+  color: var(--amber-dark);
+  border: 1px solid #F3D9AE;
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 13px;
+  margin-bottom: 16px;
+}
+
 .adp-empty,
 .adp-loading {
   color: var(--text-muted);

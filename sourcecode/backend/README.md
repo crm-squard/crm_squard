@@ -106,17 +106,24 @@ RAG_PG_TABLE=kb_chunks
 
 ## 知識庫文件管理
 
-只有 `RAG_ENGINE=llamaindex` 支援下列 API（其他引擎目前沒有增量更新機制，呼叫會回 400）：
+只有 `RAG_ENGINE=llamaindex` 支援下列 API（其他引擎目前沒有增量更新機制，呼叫會回 400）。
+新增/更新是上傳 `.md` 檔（`multipart/form-data`），不是 JSON body；**目前只支援 `.md`**，
+其他副檔名或非 UTF-8 編碼一律回 400：
 
 | Method | Path | 說明 |
 |---|---|---|
-| `GET` | `/api/admin/documents` | 列出所有文件（`doc_id`/`category`/`chunk_count`） |
-| `POST` | `/api/admin/documents` | 新增文件（body: `source`/`category`/`content`），`doc_id` 已存在回 409 |
-| `PUT` | `/api/admin/documents/{doc_id}` | 更新內容（body 只需 `content`，分類沿用既有值），查無文件回 404 |
+| `GET` | `/api/admin/documents` | 列出所有文件（`doc_id`/`category`/`chunk_count`/`uploaded_at`/`file_size_bytes`） |
+| `POST` | `/api/admin/documents` | 上傳新文件（multipart：`file` + `category` 欄位），`doc_id` 直接沿用檔名，已存在回 409 |
+| `PUT` | `/api/admin/documents/{doc_id}` | 上傳新版檔案覆蓋內容（multipart：`file` 欄位，分類沿用既有值），查無文件回 404 |
 | `DELETE` | `/api/admin/documents/{doc_id}` | 刪除文件（該 `doc_id` 底下所有 chunk），查無文件回 404 |
 
-「更新」= 刪除該文件舊 chunk + 依 `category` 對應的 parser 重新解析、插入新 chunk，不做差異比對，
-不另外保存文件原文（pgvector 的 chunk 表就是唯一資料來源）。
+「更新」會先比對 SHA256（`content_hash`）：內容跟既有版本一樣就跳過刪除+重新 embed，回應
+`content_changed: false`；有變才刪除該文件舊 chunk、依 `category` 對應的 parser 重新解析插入
+新 chunk（`content_changed: true`）。不另外保存文件原文，pgvector 的 chunk 表（文字 + 向量 +
+metadata，含 `content_hash`/`uploaded_at`/`file_size_bytes`）就是唯一資料來源。
+
+新增或更新時若偵測到**其他** `doc_id` 存了完全一樣的內容（`content_hash` 相同），回應會帶
+`duplicate_of: "<那個 doc_id>"` 提示管理者，但不會擋下這次上傳/更新。
 
 ## 注意事項
 
