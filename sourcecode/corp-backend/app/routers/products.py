@@ -1,7 +1,8 @@
-from typing import Optional
+from typing import Any, Dict, Optional
 from fastapi import APIRouter, HTTPException, Query, status
 
 from app import crud
+from app.config import settings
 from app.firebase_client import get_db
 from app.schemas import (
     ProductCreate,
@@ -14,6 +15,17 @@ from app.schemas import (
 router = APIRouter(prefix="/Product", tags=["Firebase Product Operations"])
 
 COLLECTION_PRODUCTS = "Product"
+
+
+def _enrich_product_data(doc_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    補全 ImageUrl 欄位：若無指定 ImageUrl，自動依據 {PRODUCT_IMAGE_BASE_URL}/{ProductID}_M.jpg 組合網址。
+    """
+    enriched = dict(data)
+    if not enriched.get("ImageUrl"):
+        product_id = enriched.get("ProductID") or doc_id
+        enriched["ImageUrl"] = f"{settings.PRODUCT_IMAGE_BASE_URL}/{product_id}_M.jpg"
+    return enriched
 
 
 @router.get(
@@ -31,7 +43,8 @@ def get_product(product_id: str):
         # 1. 優先嘗試依據 Document ID 取得
         doc = crud.get_document(collection_name=COLLECTION_PRODUCTS, doc_id=product_id)
         if doc:
-            return ProductResponse(id=doc.id, **doc.data)
+            enriched_data = _enrich_product_data(doc.id, doc.data)
+            return ProductResponse(id=doc.id, **enriched_data)
 
         # 2. 若未依 Document ID 找到，嘗試依據 ProductID 欄位查詢
         db = get_db()
@@ -45,7 +58,8 @@ def get_product(product_id: str):
         for d in docs:
             raw_data = d.to_dict() or {}
             sanitized_data = crud._sanitize_firestore_data(raw_data)
-            return ProductResponse(id=d.id, **sanitized_data)
+            enriched_data = _enrich_product_data(d.id, sanitized_data)
+            return ProductResponse(id=d.id, **enriched_data)
 
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -84,7 +98,7 @@ def list_products(
         )
 
         products_list = [
-            ProductResponse(id=doc.id, **doc.data)
+            ProductResponse(id=doc.id, **_enrich_product_data(doc.id, doc.data))
             for doc in raw_res.documents
         ]
 
@@ -111,7 +125,6 @@ def list_products(
 def create_product(payload: ProductCreate):
     """
     新增一筆產品資料至 Firebase Firestore `Product` 集合中。
-    - 所有欄位均為字串 (`ProductID`, `ProductNameZH`, `ProductNameEN`, `Category`, `Description`, `DescriptionShort`)。
     """
     try:
         doc_id = payload.ProductID
@@ -123,7 +136,8 @@ def create_product(payload: ProductCreate):
             doc_id=doc_id
         )
 
-        return ProductResponse(id=res.id, **res.data)
+        enriched_data = _enrich_product_data(res.id, res.data)
+        return ProductResponse(id=res.id, **enriched_data)
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -162,7 +176,8 @@ def update_product(product_id: str, payload: ProductUpdate):
                 detail=f"找不到 ID 為 '{product_id}' 的產品"
             )
 
-        return ProductResponse(id=res.id, **res.data)
+        enriched_data = _enrich_product_data(res.id, res.data)
+        return ProductResponse(id=res.id, **enriched_data)
     except HTTPException:
         raise
     except Exception as e:
