@@ -122,8 +122,14 @@ class ProductCreate(BaseModel):
     ProductNameZH: str = Field(..., description="中文品名")
     ProductNameEN: str = Field(..., description="英文品名")
     Category: str = Field(..., description="分類")
+    CategoryGeneral: str = Field(..., description="分類")
     Description: str = Field(..., description="產品詳細說明")
     DescriptionShort: str = Field(..., description="產品簡短說明 (25字內)")
+    CreateDate: str = Field(..., description="建立日期")
+    InStock: str = Field(..., description="庫存狀況")
+    OriginalPrice: float = Field(..., description="原價")
+    RealPrice: float = Field(..., description="實際售價")
+    ImageUrl: Optional[str] = Field(None, description="產品圖片網址")
 
 
 class ProductUpdate(BaseModel):
@@ -134,8 +140,14 @@ class ProductUpdate(BaseModel):
     ProductNameZH: Optional[str] = None
     ProductNameEN: Optional[str] = None
     Category: Optional[str] = None
+    CategoryGeneral: Optional[str] = None
     Description: Optional[str] = None
     DescriptionShort: Optional[str] = None
+    CreateDate: Optional[str] = None
+    InStock: Optional[str] = None
+    OriginalPrice: Optional[float] = None
+    RealPrice: Optional[float] = None
+    ImageUrl: Optional[str] = None
 
 
 class ProductResponse(ProductCreate):

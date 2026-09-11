@@ -17,6 +17,9 @@ class Settings(BaseSettings):
     FIREBASE_CREDENTIALS_PATH: Optional[str] = None
     FIREBASE_CREDENTIALS_JSON: Optional[str] = None
 
+    # 產品圖片 Storage URL
+    PRODUCT_IMAGE_BASE_URL: str = "https://storage.googleapis.com/crm_squard_product_image"
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
