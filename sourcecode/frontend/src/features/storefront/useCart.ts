@@ -8,6 +8,15 @@ interface StoredCartItem {
   quantity: number;
 }
 
+function isCompleteProduct(product: unknown): product is Product {
+  if (!product || typeof product !== "object") return false;
+  const candidate = product as Partial<Product>;
+  return Number.isSafeInteger(candidate.productID)
+    && typeof candidate.imageUrl === "string" && candidate.imageUrl.length > 0
+    && typeof candidate.originalPrice === "number" && Number.isFinite(candidate.originalPrice)
+    && typeof candidate.realPrice === "number" && Number.isFinite(candidate.realPrice);
+}
+
 function loadCart(): CartItem[] {
   try {
     const rawValue = localStorage.getItem(STORAGE_KEY);
@@ -15,7 +24,8 @@ function loadCart(): CartItem[] {
     const storedItems = JSON.parse(rawValue) as StoredCartItem[];
     if (!Array.isArray(storedItems)) return [];
     return storedItems.flatMap((storedItem) => {
-      if (!storedItem.product || !Number.isInteger(storedItem.product.productID)
+      if (!storedItem || typeof storedItem !== "object"
+        || !isCompleteProduct(storedItem.product)
         || !Number.isInteger(storedItem.quantity) || storedItem.quantity < 1) return [];
       return [{ product: storedItem.product, quantity: Math.min(storedItem.quantity, 99) }];
     });
@@ -56,7 +66,7 @@ export function useCart() {
   const clearCart = useCallback(() => setItems([]), []);
   const itemCount = useMemo(() => items.reduce((total, item) => total + item.quantity, 0), [items]);
   const total = useMemo(() => items.reduce(
-    (sum, item) => sum + item.product.unitPrice * item.quantity,
+    (sum, item) => sum + (item.product.realPrice ?? 0) * item.quantity,
     0,
   ), [items]);
 
