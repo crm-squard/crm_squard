@@ -20,13 +20,7 @@ import { useCart } from "./useCart";
 import "./storefront.css";
 
 const CATEGORY_LABELS: Record<string, string> = {
-  全部: "全部商品",
-  Electronics: "3C 電子",
-  Accessories: "配件",
-  Wearables: "穿戴裝置",
-  "Home Office": "居家辦公",
-  Stationery: "文具",
-  Gaming: "電競",
+  all: "全部商品",
 };
 
 const PAYMENT_LABELS = {
@@ -38,29 +32,40 @@ const PAYMENT_LABELS = {
 const PAYMENT_METHODS = Object.keys(PAYMENT_LABELS) as CheckoutCustomer["PaymentMethod"][];
 const PRODUCT_COUNT = 20;
 
-function getProductImageStyle(imagePath: string): CSSProperties {
-  return imagePath ? { backgroundImage: `url("${imagePath}")` } : {};
+function getProductImageStyle(imageUrl: string): CSSProperties {
+  return imageUrl ? { backgroundImage: `url("${imageUrl}")` } : {};
+}
+
+function isPurchasableProduct(product: Product): boolean {
+  return Boolean(product.imageUrl)
+    && product.originalPrice !== null
+    && product.realPrice !== null;
 }
 
 function ProductCard({ product, onAdd }: { product: Product; onAdd: (product: Product) => void }) {
+  const isPurchasable = isPurchasableProduct(product);
   return (
     <article className="store-product-card">
       <div
-        className="store-product-image"
-        style={getProductImageStyle(product.imagePath)}
+        className={`store-product-image${product.imageUrl ? "" : " is-unavailable"}`}
+        style={getProductImageStyle(product.imageUrl)}
         role="img"
         aria-label={`${product.productNameZH}商品圖片`}
       >
-        {/* <span className="store-product-id">#{product.productID}</span> */}
+        {!product.imageUrl && <span className="store-product-image-notice">圖片未提供</span>}
       </div>
       <div className="store-product-body">
-        <span className="store-product-category">{CATEGORY_LABELS[product.category]}</span>
+        <span className="store-product-category">{CATEGORY_LABELS[product.category] ?? product.category}</span>
         <h3>{product.productNameZH}</h3>
         <p className="store-product-en">{product.productNameEN}</p>
         <p className="store-product-copy">{product.descriptionShort}</p>
         <div className="store-product-footer">
-          <strong>${product.unitPrice.toLocaleString("en-US")}</strong>
-          <button type="button" onClick={() => onAdd(product)}>
+          {product.originalPrice !== null && product.realPrice !== null && (
+            <div className="store-product-prices" aria-label={`${product.productNameZH}價格`}>
+              <strong>${product.realPrice.toLocaleString("en-US")}</strong>
+            </div>
+          )}
+          <button type="button" onClick={() => onAdd(product)} disabled={!isPurchasable}>
             <Plus size={18} aria-hidden="true" />
             加入購物車
           </button>
@@ -71,7 +76,7 @@ function ProductCard({ product, onAdd }: { product: Product; onAdd: (product: Pr
 }
 
 export default function Storefront() {
-  const [activeCategory, setActiveCategory] = useState("全部");
+  const [activeCategory, setActiveCategory] = useState("all");
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -86,8 +91,8 @@ export default function Storefront() {
   const statusMessageTimerRef = useRef<number | null>(null);
   const { items, addItem, updateQuantity, clearCart, itemCount, total } = useCart();
 
-  const categories = useMemo(() => ["全部", ...new Set(products.map((product) => product.category))], [products]);
-  const visibleProducts = useMemo(() => activeCategory === "全部"
+  const categories = useMemo(() => ["all", ...new Set(products.map((product) => product.category))], [products]);
+  const visibleProducts = useMemo(() => activeCategory === "all"
     ? products
     : products.filter((product) => product.category === activeCategory), [activeCategory, products]);
   const selectedCustomer = useMemo(
@@ -146,6 +151,7 @@ export default function Storefront() {
   }
 
   function handleAdd(product: Product) {
+    if (!isPurchasableProduct(product)) return;
     addItem(product);
     showStatusMessage(`已將${product.productNameZH}加入購物車`);
   }
@@ -301,10 +307,10 @@ export default function Storefront() {
                   )}
                   {items.map(({ product, quantity }) => (
                     <article className="store-cart-item" key={product.productID}>
-                      <div className="store-cart-thumb" style={getProductImageStyle(product.imagePath)} role="img" aria-label={product.productNameZH} />
+                      <div className="store-cart-thumb" style={getProductImageStyle(product.imageUrl)} role="img" aria-label={product.productNameZH} />
                       <div className="store-cart-item-info">
                         <h3>{product.productNameZH}</h3>
-                        <span>${product.unitPrice.toLocaleString("en-US")}</span>
+                        <span>${(product.realPrice ?? 0).toLocaleString("en-US")}</span>
                         <div className="store-quantity">
                           <button type="button" onClick={() => updateQuantity(product.productID, quantity - 1)} aria-label={`減少${product.productNameZH}數量`}><Minus size={16} /></button>
                           <output aria-label={`${product.productNameZH}數量`}>{quantity}</output>

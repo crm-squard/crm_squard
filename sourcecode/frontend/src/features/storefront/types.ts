@@ -6,9 +6,10 @@ export interface Product {
   productNameZH: string;
   productNameEN: string;
   category: string;
-  unitPrice: number;
+  originalPrice: number | null;
+  realPrice: number | null;
   descriptionShort: string;
-  imagePath: string;
+  imageUrl: string;
 }
 
 export interface ProductListResponse {

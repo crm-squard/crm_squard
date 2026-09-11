@@ -1,4 +1,3 @@
-import { PRODUCTS } from "./products";
 import type { Product, ProductListResponse } from "./types";
 
 const PRODUCT_API_BASE_URL = import.meta.env.VITE_ORDER_API_BASE_URL || "http://localhost:8001";
@@ -10,6 +9,9 @@ interface ProductApiItem {
   Category: string;
   Description: string;
   DescriptionShort: string;
+  ImageUrl?: string;
+  OriginalPrice?: string | number | null;
+  RealPrice?: string | number | null;
   id: string;
 }
 
@@ -22,22 +24,29 @@ interface ProductApiResponse {
 
 export class ProductCatalogError extends Error {}
 
+function toPrice(value: string | number | null | undefined): number | null {
+  if (value === null || value === undefined) return null;
+  const normalizedValue = typeof value === "string" ? value.trim() : value;
+  if (normalizedValue === "") return null;
+  const price = typeof normalizedValue === "number" ? normalizedValue : Number(normalizedValue);
+  return Number.isFinite(price) && price >= 0 ? price : null;
+}
+
 function toStorefrontProduct(product: ProductApiItem): Product {
   const productId = Number(product.ProductID);
   if (!Number.isSafeInteger(productId)) {
     throw new ProductCatalogError("商品資料缺少有效的 ProductID。");
   }
 
-  // 目前商品清單 API 未提供單價；結帳流程仍使用既有商品編號對照的資料價格。
-  const fallbackProduct = PRODUCTS.find((candidate) => candidate.productID === productId);
   return {
     productID: productId,
     productNameEN: product.ProductNameEN,
     productNameZH: product.ProductNameZH,
     category: product.Category,
-    unitPrice: fallbackProduct?.unitPrice ?? 0,
+    originalPrice: toPrice(product.OriginalPrice),
+    realPrice: toPrice(product.RealPrice),
     descriptionShort: product.DescriptionShort || product.Description,
-    imagePath: fallbackProduct?.imagePath ?? "",
+    imageUrl: product.ImageUrl?.trim() ?? "",
   };
 }
 
