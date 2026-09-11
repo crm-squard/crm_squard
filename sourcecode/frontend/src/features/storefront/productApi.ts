@@ -1,6 +1,6 @@
 import type { Product, ProductListResponse } from "./types";
 
-const PRODUCT_API_BASE_URL = import.meta.env.VITE_ORDER_API_BASE_URL || "http://localhost:8001";
+const PRODUCT_API_BASE_URL = import.meta.env.VITE_API_CORP_URL || "http://localhost:8001";
 
 interface ProductApiItem {
   ProductID: string;
