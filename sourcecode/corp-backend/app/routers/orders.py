@@ -17,12 +17,23 @@ router = APIRouter(prefix="/Order", tags=["Firebase Orders Operations"])
 COLLECTION_ORDERS = "Order"
 
 
+import logging
+
+logger = logging.getLogger("corp-backend.orders")
+
+
 @router.post(
     "",
     response_model=OrderResponse,
     status_code=status.HTTP_201_CREATED,
     summary="新增 Firebase 訂單資料",
     responses={500: {"model": ErrorDetail}}
+)
+@router.post(
+    "/",
+    response_model=OrderResponse,
+    status_code=status.HTTP_201_CREATED,
+    include_in_schema=False
 )
 def create_order(payload: OrderCreate):
     """
@@ -59,6 +70,11 @@ def create_order(payload: OrderCreate):
     summary="取得 Firebase 訂單列表",
     responses={500: {"model": ErrorDetail}}
 )
+@router.get(
+    "/",
+    response_model=OrderListResponse,
+    include_in_schema=False
+)
 def list_orders(
     limit: int = Query(100, ge=1, le=1000, description="查詢筆數限制 (1-1000)"),
     order_by: Optional[str] = Query(None, description="排序欄位 (例如: OrderDate 或 OrderID)")
@@ -73,10 +89,15 @@ def list_orders(
             order_by=order_by
         )
 
-        orders_list = [
-            OrderResponse(id=doc.id, **doc.data)
-            for doc in raw_res.documents
-        ]
+        orders_list = []
+        for doc in raw_res.documents:
+            try:
+                data = dict(doc.data)
+                if not data.get("NewOrderID"):
+                    data["NewOrderID"] = doc.id
+                orders_list.append(OrderResponse(id=doc.id, **data))
+            except Exception as parse_err:
+                logger.warning(f"解析 Order Document ID '{doc.id}' 時發生警告: {parse_err}")
 
         return OrderListResponse(
             count=len(orders_list),
