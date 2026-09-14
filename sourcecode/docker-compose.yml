@@ -32,9 +32,9 @@ services:
       - FIREBASE_CREDENTIALS_JSON=${FIREBASE_CREDENTIALS_JSON:-}
     restart: always
 
-  frontend:
+  corp-frontend:
     build:
-      context: ./frontend
+      context: ./corp-frontend
       dockerfile: Dockerfile
       args:
         VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000}
@@ -44,6 +44,20 @@ services:
       - "80:80"
     depends_on:
       - backend
+      - corp-backend
+    restart: always
+
+  admin-frontend:
+    build:
+      context: ./admin-frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_ADMIN_API_URL: ${VITE_ADMIN_API_URL:-http://localhost:8001}
+        VITE_TENANT_NAME: ${VITE_TENANT_NAME:-CRM Select Demo}
+    container_name: crm_admin_frontend
+    ports:
+      - "8080:80"
+    depends_on:
       - corp-backend
     restart: always
 

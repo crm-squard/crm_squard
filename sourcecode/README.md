@@ -23,8 +23,8 @@ crm-rag-project/
 │   │   └── rag/              # chunking / embedding / Chroma 向量資料庫
 │   └── requirements.txt
 │
-└── frontend/                 # React + Vite 顧客端聊天視窗
-    └── src/components/SmartCRMChatWidget.jsx
+├── corp-frontend/            # React + Vite 顧客端購物與聊天介面
+└── admin-frontend/           # React + Vite 後台管理介面
 ```
 
 ## 需求環境
@@ -36,9 +36,9 @@ crm-rag-project/
 
 ## 用 VSCode 開啟
 
-1. `File → Open Folder` 開啟 `crm-rag-project` 資料夾（根目錄，而非 backend 或 frontend 單獨開）
+1. `File → Open Folder` 開啟 `crm-rag-project` 資料夾（根目錄，而非任一前後端目錄單獨開）
 2. VSCode 會提示安裝建議套件（Python、ESLint、Prettier），可以直接安裝
-3. 用內建終端機（`Ctrl+`` / `Cmd+``）開兩個終端機分頁，分別啟動 backend 與 frontend（見下方步驟）
+3. 用內建終端機（`Ctrl+`` / `Cmd+``）分別啟動所需的前後端服務（見下方步驟）
 
 ## 啟動步驟
 
@@ -58,10 +58,10 @@ uvicorn app.main:app --reload --port 8000
 > 第一次呼叫聊天 API 時會即時下載 Embedding 模型與 LLM 模型，依網路速度可能需要數分鐘到數十分鐘，屬正常現象。
 > 詳細說明請看 `backend/README.md`。
 
-### 2) 啟動前端（終端機分頁 2）
+### 2) 啟動 Corp Frontend（終端機分頁 2）
 
 ```bash
-cd frontend
+cd corp-frontend
 npm install
 cp .env.example .env
 npm run dev
@@ -69,7 +69,18 @@ npm run dev
 
 終端機會顯示網址（預設 http://localhost:5173），用瀏覽器打開即可看到聊天客服視窗。
 
-### 3) 測試
+### 3) 啟動 Admin Frontend（終端機分頁 3）
+
+```bash
+cd admin-frontend
+npm install
+cp .env.example .env
+npm run dev
+```
+
+終端機會顯示網址（預設 http://localhost:5174），用瀏覽器打開即可進入後台管理介面。
+
+### 4) 測試
 
 在聊天視窗輸入：
 - 「無線滑鼠支援多少 DPI？」→ 觸發 #1 產品問答（RAG + LLM）

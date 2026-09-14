@@ -87,7 +87,7 @@ steps:
         echo "Corp Backend URL is $$CORP_URL"
         echo "$$CORP_URL" > /workspace/corp_backend_url.txt
 
-  # 7. 建置 Frontend 容器鏡像 (傳入動態抓到的 VITE_API_BASE_URL 與 VITE_API_CORP_URL)
+  # 7. 建置 Corp Frontend 容器鏡像 (傳入動態抓到的 VITE_API_BASE_URL 與 VITE_API_CORP_URL)
   - name: 'gcr.io/cloud-builders/docker'
     entrypoint: bash
     args:
@@ -99,15 +99,15 @@ steps:
           --build-arg VITE_API_BASE_URL=$$URL \
           --build-arg VITE_API_CORP_URL=$$CORP_URL \
           -t europe-west1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/crm-frontend:latest \
-          ./sourcecode/frontend
+          ./sourcecode/corp-frontend
 
-  # 8. 推送 Frontend 鏡像至 Artifact Registry
+  # 8. 推送 Corp Frontend 鏡像至 Artifact Registry
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - 'push'
       - 'europe-west1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/crm-frontend:latest'
 
-  # 9. 部署 Frontend 至 Cloud Run
+  # 9. 部署 Corp Frontend 至 Cloud Run
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: gcloud
     args:
@@ -130,7 +130,7 @@ steps:
         docker build \
           --build-arg VITE_ADMIN_API_URL=$$CORP_URL \
           -t europe-west1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/crm-admin-frontend:latest \
-          ./sourcecode/frontend/admin
+          ./sourcecode/admin-frontend
 
   # 11. 推送 Admin Frontend 鏡像至 Artifact Registry
   - name: 'gcr.io/cloud-builders/docker'

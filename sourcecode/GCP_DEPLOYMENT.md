@@ -47,11 +47,11 @@
 
 ---
 
-### 步驟 2：部署 Frontend 至 Cloud Run
+### 步驟 2：部署 Corp Frontend 至 Cloud Run
 
 1. 將前端 `API_BASE_URL` 指定為步驟 1 取得的 Backend URL 並進行建置：
    ```bash
-   cd sourcecode/frontend
+   cd sourcecode/corp-frontend
    
    # 建置前端 Docker 鏡像（帶入 Backend URL）
    gcloud builds submit \
@@ -66,7 +66,7 @@
      --allow-unauthenticated \
      --port 80
    ```
-2. 完成後打開產生的 **Frontend Service URL** 即可看到客服對話視窗。
+2. 完成後打開產生的 **Corp Frontend Service URL** 即可看到客服對話視窗。
 
 ---
 
@@ -106,9 +106,11 @@ gcloud builds submit --config=cloudbuild.yaml .
 
 | 檔案路徑 | 說明 |
 | :--- | :--- |
-| [`backend/Dockerfile`](file:///c:/Source%20Code/crm_squard/sourcecode/backend/Dockerfile) | Backend Python 3.10 FastAPI 容器設定 |
-| [`corp-backend/Dockerfile`](file:///c:/Source%20Code/crm_squard/sourcecode/corp-backend/Dockerfile) | Corp Backend Python 3.10 FastAPI (Firebase Firestore) 容器設定 |
-| [`frontend/Dockerfile`](file:///c:/Source%20Code/crm_squard/sourcecode/frontend/Dockerfile) | Frontend Vite Node + Nginx 雙階段建置容器設定 |
-| [`frontend/nginx.conf`](file:///c:/Source%20Code/crm_squard/sourcecode/frontend/nginx.conf) | Nginx 前端靜態資源與路由設定 |
-| [`docker-compose.yml`](file:///c:/Source%20Code/crm_squard/sourcecode/docker-compose.yml) | Docker Compose 本地與 VM 一鍵啟動檔 |
-| [`cloudbuild.yaml`](file:///c:/Source%20Code/crm_squard/sourcecode/cloudbuild.yaml) | Google Cloud Build CI/CD 自動建置指令檔 |
+| [`backend/Dockerfile`](backend/Dockerfile) | Backend Python 3.10 FastAPI 容器設定 |
+| [`corp-backend/Dockerfile`](corp-backend/Dockerfile) | Corp Backend Python 3.10 FastAPI (Firebase Firestore) 容器設定 |
+| [`corp-frontend/Dockerfile`](corp-frontend/Dockerfile) | Corp Frontend Vite Node + Nginx 雙階段建置容器設定 |
+| [`corp-frontend/nginx.conf`](corp-frontend/nginx.conf) | Corp Frontend Nginx 靜態資源與路由設定 |
+| [`admin-frontend/Dockerfile`](admin-frontend/Dockerfile) | Admin Frontend Vite Node + Nginx 雙階段建置容器設定 |
+| [`admin-frontend/nginx.conf`](admin-frontend/nginx.conf) | Admin Frontend Nginx 靜態資源與路由設定 |
+| [`docker-compose.yml`](docker-compose.yml) | Docker Compose 本地與 VM 一鍵啟動檔 |
+| [`cloudbuild.yaml`](cloudbuild.yaml) | Google Cloud Build CI/CD 自動建置指令檔 |

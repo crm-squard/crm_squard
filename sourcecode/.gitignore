@@ -15,9 +15,12 @@ corp-backend/*.json
 *.pyc
 
 # Node
-frontend/node_modules/
-frontend/dist/
-frontend/.env
+corp-frontend/node_modules/
+corp-frontend/dist/
+corp-frontend/.env
+admin-frontend/node_modules/
+admin-frontend/dist/
+admin-frontend/.env
 
 # OS
 .DS_Store
