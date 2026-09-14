@@ -40,7 +40,8 @@
      --region asia-east1 \
      --platform managed \
      --allow-unauthenticated \
-     --set-env-vars RAG_ENGINE=gemini,GEMINI_API_KEY=<YOUR_GEMINI_API_KEY>
+     --set-env-vars GEMINI_API_KEY=<YOUR_GEMINI_API_KEY>,RAG_PG_HOST=aws-0-ap-northeast-2.pooler.supabase.com,RAG_PG_PORT=6543,RAG_PG_DATABASE=postgres,RAG_PG_USER=postgres.<YOUR_SUPABASE_PROJECT_REF> \
+     --set-secrets RAG_PG_PASSWORD=RAG_PG_PASSWORD:latest
    ```
 2. 部署完成後，CLI 會輸出 **Backend Service URL**（例如：`https://crm-backend-xyz-de.a.run.app`）。
 

@@ -137,21 +137,10 @@ def admin_summary(date: str | None = None):
 
 
 def _get_llamaindex_index():
-    """
-    文檔管理 API 專用：目前的知識庫文件新增/刪除/更新只對 pgvector（RAG_ENGINE=llamaindex）
-    的索引生效，其他引擎（online/gemini）沒有這套增量更新機制，呼叫時回傳明確的錯誤訊息，
-    而不是讓後面的 SQL 對不存在的設定連線失敗。
-    """
+    """文檔管理 API 專用：取得 llamaindex 引擎的 pgvector 索引。"""
     from app.rag.engine import get_retriever
-    from app.rag.llamaindex_engine import LlamaIndexRetriever
 
-    retriever = get_retriever()
-    if not isinstance(retriever, LlamaIndexRetriever):
-        raise HTTPException(
-            status_code=400,
-            detail=f"目前 RAG_ENGINE={settings.RAG_ENGINE}，文檔管理 API 只支援 RAG_ENGINE=llamaindex。",
-        )
-    return retriever.index
+    return get_retriever().index
 
 
 @app.get("/api/admin/documents", response_model=DocumentListResponse)
@@ -163,7 +152,7 @@ def list_documents():
     """
     from app.rag.documents_store import list_documents as _list_documents
 
-    _get_llamaindex_index()  # 確認目前引擎支援文檔管理，不支援就提早回錯誤
+    _get_llamaindex_index()  # 確認 pgvector 連線正常，不通就提早回錯誤
     try:
         docs = _list_documents()
     except Exception as e:
@@ -199,7 +188,7 @@ def precheck_documents(req: PrecheckRequest):
     批次上傳前的預檢：對每個 (path, client_sha256, tags) 交叉查「這個路徑目前指向什麼」跟
     「這個雜湊是不是已經存在別的地方」，讓前端知道每份文件是 new/unchanged/content_changed/
     tags_only_changed/linked，不用實際寫入/重新 embed。純讀取（不動向量索引），但比照其他
-    admin 文件端點一併檢查目前引擎是否支援文檔管理，行為與其餘端點保持一致。
+    admin 文件端點一併確認 pgvector 連線正常，行為與其餘端點保持一致。
 
     完全不需要 doc_id：身分判斷全部靠路徑查 kb_document_labels、內容雜湊查 kb_documents，
     這兩張表的細節見 app/rag/documents_store.py。

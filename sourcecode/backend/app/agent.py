@@ -41,9 +41,9 @@ NO_INFO_ANSWER = "目前查無此資訊，建議聯繫真人客服（0800-123-45
 # 不需要這道保險，讓它們自己判斷反而能處理更多邊緣案例（距離分數判斷是「有沒有相關主題」，
 # 不是「有沒有精確答案」）。
 #
-# 門檻值依 RAG_ENGINE 分開設定（app/config.py 的 RAG_NO_INFO_THRESHOLDS），因為 custom 引擎用原始
-# L2 距離、llamaindex 引擎用 1 - 相似度分數，兩者尺度不同；都是用目前 20 項產品的測試資料手動抓出來的
-# 經驗值，不是嚴謹算出來的，之後資料量變大或換 embedding 模型，應該要重新用實際問題校準。
+# 門檻值見 app/config.py 的 RAG_NO_INFO_THRESHOLD（llamaindex 引擎用 1 - 相似度分數）；
+# 是用目前 20 項產品的測試資料手動抓出來的經驗值，不是嚴謹算出來的，之後資料量變大或換
+# embedding 模型，應該要重新用實際問題校準。
 
 
 class ProductQueryAgent:
@@ -107,7 +107,7 @@ class ProductQueryAgent:
         if not retrieved_chunks:
             return NO_INFO_ANSWER, []
         if provider == "local":
-            threshold = settings.RAG_NO_INFO_THRESHOLDS.get(settings.RAG_ENGINE, 0.30)
+            threshold = settings.RAG_NO_INFO_THRESHOLD
             if retrieved_chunks[0]["distance"] > threshold:
                 return NO_INFO_ANSWER, []
 

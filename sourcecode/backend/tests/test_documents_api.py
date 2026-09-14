@@ -1,7 +1,7 @@
 """
 測試 /api/admin/documents 系列端點（新增/查詢/更新/刪除/標籤/預檢知識庫文件）。
 
-這幾支 API 目前只支援 RAG_ENGINE=llamaindex（pgvector 儲存），需要本機真的起一個
+這幾支 API 依賴 llamaindex 引擎（pgvector 儲存），需要本機真的起一個
 pgvector 服務（見 backend/README.md 的 docker run 指令）並在 .env 設定對應的
 RAG_PG_* 連線資訊，跑這份測試前請確認 pgvector 已啟動、能連得上，否則會直接失敗
 （不像訂單查詢有 fallback 機制可以在沒有外部服務時仍然通過）。

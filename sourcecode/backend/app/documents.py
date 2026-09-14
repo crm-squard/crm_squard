@@ -7,15 +7,13 @@
 - warranty_policy.md / return_policy.md / shipping_payment.md / faq.md：保固、退換貨、
   運送付款、常見問題等政策類文件，用 policy_parser.py 的通用 markdown 標題拆分規則
 
-get_all_chunks() 把兩類文件的 chunk 合併成一份清單，是 online_engine.py 建索引時的資料來源
-（custom 引擎已退休；llamaindex 引擎改用 pgvector 後改讀 app/rag/documents_store.py 的
-seed_if_empty()，不再整批呼叫這個函式，見下方 get_seed_sources()）。
+llamaindex 引擎改用 pgvector 後，索引灌入改讀下方 get_seed_sources()，供
+app/rag/documents_store.py 的 seed_if_empty() 逐一讀檔解析（原本整批呼叫的
+get_all_chunks() 是給已移除的線上 online_engine.py 建索引用，custom 引擎也已退休，
+兩者都不再需要，一併移除）。
 之後要再加知識庫文件，只要照現有格式新增檔案、在 _POLICY_FILES 加一行即可。
 """
 from pathlib import Path
-
-from app.rag.product_parser import parse_products
-from app.rag.policy_parser import parse_policy_doc
 
 _DATA_DIR = Path(__file__).parent / "data"
 
@@ -27,13 +25,6 @@ _POLICY_FILES = [
     _DATA_DIR / "shipping_payment.md",
     _DATA_DIR / "faq.md",
 ]
-
-
-def get_all_chunks() -> list[dict]:
-    chunks = parse_products(_PRODUCT_FILE.read_text(encoding="utf-8"), source=_PRODUCT_FILE.name)
-    for path in _POLICY_FILES:
-        chunks.extend(parse_policy_doc(path.read_text(encoding="utf-8"), source=path.name))
-    return chunks
 
 
 def get_seed_sources() -> list[dict]:
