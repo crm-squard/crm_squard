@@ -33,6 +33,10 @@ steps:
       # 建立同名 secret，不要用 --set-env-vars 明碼帶密碼
       - '--set-env-vars=USE_SMALL_MODEL=true,CORS_ORIGINS=*,RAG_PG_HOST=aws-0-ap-northeast-2.pooler.supabase.com,RAG_PG_PORT=6543,RAG_PG_DATABASE=postgres,RAG_PG_USER=postgres.zsshivonwqppffcanujj'
       - '--set-secrets=GEMINI_API_KEY=GEMINI_API_KEY:latest,RAG_PG_PASSWORD=RAG_PG_PASSWORD:latest'
+      # llamaindex 引擎第一次被呼叫時會 import torch/transformers（llama_index.embeddings
+      # .huggingface，即使 EMBEDDING_BACKEND=onnx_int8 也一樣），實測光 import 就吃掉
+      # ~500MB，Cloud Run 預設 512Mi 記憶體會不夠用，明確調高避免第一個產品問答請求就爆記憶體
+      - '--memory=2Gi'
       - '--port=8000'
 
   # 3.5 取得已部署的 Backend Cloud Run 服務網址

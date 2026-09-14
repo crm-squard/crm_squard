@@ -27,6 +27,11 @@ llama-index-embeddings-huggingface==0.3.1
 # 說明），這裡明確宣告是因為核心功能直接依賴它，不該只靠隱性的間接依賴。
 onnxruntime==1.29.0
 
+# onnx_embedding.py 的 tokenizer 故意用這個而不是 transformers.AutoTokenizer：
+# AutoTokenizer 會連帶載入 torch（多吃 ~380MB 記憶體），tokenizers 是獨立套件不依賴 torch，
+# 見該檔案開頭說明。這裡本來就是 transformers 的間接依賴，明確宣告版本避免被上游調整。
+tokenizers==0.23.2
+
 # llamaindex 引擎的儲存後端改用 pgvector（PostgreSQL），取代本地磁碟 persist，
 # 換取 LlamaIndex 原生的 insert/delete_ref_doc 增量更新能力（見 app/rag/documents_store.py）。
 # 版本相容區間：llama-index-vector-stores-postgres==0.2.6 要求 llama-index-core>=0.11.0,<0.12.0

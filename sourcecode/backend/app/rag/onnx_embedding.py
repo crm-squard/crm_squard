@@ -5,8 +5,15 @@ multilingual-e5-base，接上 LlamaIndex 的 BaseEmbedding 介面。
 為什麼不用官方的 llama-index-embeddings-huggingface-optimum：那個套件依賴的
 optimum-onnx 明確要求 transformers<4.58.0，但這個專案其他想用新版 transformers 的套件
 （mlx-lm 要求 >=5.0.0）版本完全沒有交集，同一個環境裝不出兩邊都滿足的組合，是硬性衝突、
-無解（實測驗證過）。onnxruntime 本身不依賴 transformers 版本，只有 tokenizer 需要
-transformers，且 tokenizer 對版本要求很寬鬆，所以繞過 optimum 自己寫這個類別可以避開衝突。
+無解（實測驗證過）。onnxruntime 本身不依賴 transformers 版本，所以繞過 optimum 自己寫這個
+類別可以避開衝突。
+
+tokenizer 故意用 `tokenizers`（HuggingFace 斷詞引擎本尊，Rust 實作）直接載入
+tokenizer.json，不用 `transformers.AutoTokenizer`：實測光 `from transformers import
+AutoTokenizer` 這行就會連帶把 torch 載入進來（不管有沒有用到 GPU），多吃 ~380MB 記憶體，
+Cloud Run 預設 512Mi 記憶體會不夠用；`tokenizers` 是獨立的底層套件，不依賴 torch。兩者
+對同樣輸入的 tokenize 結果（input_ids／attention_mask）逐位元組驗證過完全一致，不影響
+既有 pgvector 索引資料的向量結果。
 
 模型來源：Teradata/multilingual-e5-base 這個 repo 有官方 fp32 模型轉換好的多種精度 ONNX
 檔案（https://huggingface.co/Teradata/multilingual-e5-base），這裡用 onnx/model_int8.onnx。
@@ -51,11 +58,16 @@ class OnnxInt8Embedding(BaseEmbedding):
     ) -> None:
         import onnxruntime as ort
         from huggingface_hub import hf_hub_download
-        from transformers import AutoTokenizer
+        from tokenizers import Tokenizer
 
         onnx_path = hf_hub_download(repo_id=repo_id, filename=onnx_filename)
         session = ort.InferenceSession(onnx_path, providers=["CPUExecutionProvider"])
-        tokenizer = AutoTokenizer.from_pretrained(repo_id)
+        tokenizer = Tokenizer.from_pretrained(repo_id)
+        # e5 系列模型沿用 XLM-RoBERTa 斷詞器，"<pad>" 固定是 pad token；
+        # enable_padding/enable_truncation 是 tokenizers 套件的設定方式，
+        # 對應 AutoTokenizer 呼叫時帶的 padding=True/truncation=True/max_length 參數。
+        tokenizer.enable_padding(pad_id=tokenizer.token_to_id("<pad>"), pad_token="<pad>")
+        tokenizer.enable_truncation(max_length=max_length)
 
         super().__init__(
             embed_batch_size=embed_batch_size,
@@ -75,12 +87,10 @@ class OnnxInt8Embedding(BaseEmbedding):
         return "OnnxInt8Embedding"
 
     def _embed(self, texts: List[str]) -> List[List[float]]:
-        encoded = self._tokenizer(
-            texts, padding=True, truncation=True, max_length=self.max_length, return_tensors="np"
-        )
+        encoded = self._tokenizer.encode_batch(texts)
         onnx_inputs = {
-            "input_ids": encoded["input_ids"].astype(np.int64),
-            "attention_mask": encoded["attention_mask"].astype(np.int64),
+            "input_ids": np.array([e.ids for e in encoded], dtype=np.int64),
+            "attention_mask": np.array([e.attention_mask for e in encoded], dtype=np.int64),
         }
         outputs = self._session.run(None, onnx_inputs)
         embeddings = outputs[1]
