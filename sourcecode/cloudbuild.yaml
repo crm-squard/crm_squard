@@ -120,6 +120,37 @@ steps:
       - '--allow-unauthenticated'
       - '--port=80'
 
+  # 10. 建置 Admin Frontend 容器鏡像（使用已部署的 Corp Backend 網址）
+  - name: 'gcr.io/cloud-builders/docker'
+    entrypoint: bash
+    args:
+      - '-c'
+      - |
+        CORP_URL=$$(cat /workspace/corp_backend_url.txt)
+        docker build \
+          --build-arg VITE_ADMIN_API_URL=$$CORP_URL \
+          -t europe-west1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/crm-admin-frontend:latest \
+          ./sourcecode/frontend/admin
+
+  # 11. 推送 Admin Frontend 鏡像至 Artifact Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'europe-west1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/crm-admin-frontend:latest'
+
+  # 12. 部署 Admin Frontend 至 Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'crm-admin-frontend'
+      - '--image=europe-west1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/crm-admin-frontend:latest'
+      - '--region=europe-west1'
+      - '--platform=managed'
+      - '--allow-unauthenticated'
+      - '--port=80'
+
 options:
   logging: CLOUD_LOGGING_ONLY
   substitutionOption: 'ALLOW_LOOSE'
@@ -128,3 +159,4 @@ images:
   - 'europe-west1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/crm-backend:latest'
   - 'europe-west1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/corp-backend:latest'
   - 'europe-west1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/crm-frontend:latest'
+  - 'europe-west1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/crm-admin-frontend:latest'
