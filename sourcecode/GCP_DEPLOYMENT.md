@@ -78,6 +78,9 @@ cd sourcecode
 gcloud builds submit --config=cloudbuild.yaml .
 ```
 
+正式部署時應以 Cloud Build substitution `_CHAT_WIDGET_CLIENT_ID` 覆寫預設測試值，Widget 服務會以
+`crm-chat-widget` 部署，Corp Frontend 則載入該服務的 `/chat-widget.js`。
+
 ---
 
 ## 方式 B：部署至 Compute Engine (GCP VM + Docker Compose)
@@ -112,5 +115,7 @@ gcloud builds submit --config=cloudbuild.yaml .
 | [`corp-frontend/nginx.conf`](corp-frontend/nginx.conf) | Corp Frontend Nginx 靜態資源與路由設定 |
 | [`admin-frontend/Dockerfile`](admin-frontend/Dockerfile) | Admin Frontend Vite Node + Nginx 雙階段建置容器設定 |
 | [`admin-frontend/nginx.conf`](admin-frontend/nginx.conf) | Admin Frontend Nginx 靜態資源與路由設定 |
+| [`chat-widget/Dockerfile`](chat-widget/Dockerfile) | 獨立 Chat Widget 建置與 Nginx 容器設定 |
+| [`chat-widget/nginx.conf`](chat-widget/nginx.conf) | 單一 `chat-widget.js` 靜態資源服務設定 |
 | [`docker-compose.yml`](docker-compose.yml) | Docker Compose 本地與 VM 一鍵啟動檔 |
 | [`cloudbuild.yaml`](cloudbuild.yaml) | Google Cloud Build CI/CD 自動建置指令檔 |

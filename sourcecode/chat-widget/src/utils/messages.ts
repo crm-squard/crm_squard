@@ -1,4 +1,4 @@
-import type { ChatResponse, HistoryTurn } from "../../../types/api";
+import type { ChatResponse, HistoryTurn } from "../api-types";
 import type { BotMessage, ChatMessage } from "../types";
 
 export function assertNever(value: never): never {

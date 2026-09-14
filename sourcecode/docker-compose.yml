@@ -32,6 +32,19 @@ services:
       - FIREBASE_CREDENTIALS_JSON=${FIREBASE_CREDENTIALS_JSON:-}
     restart: always
 
+  chat-widget:
+    build:
+      context: ./chat-widget
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000}
+    container_name: crm_chat_widget
+    ports:
+      - "5175:80"
+    depends_on:
+      - backend
+    restart: always
+
   corp-frontend:
     build:
       context: ./corp-frontend
@@ -39,12 +52,15 @@ services:
       args:
         VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000}
         VITE_API_CORP_URL: ${VITE_API_CORP_URL:-http://localhost:8001}
+        VITE_CHAT_WIDGET_URL: ${VITE_CHAT_WIDGET_URL:-http://localhost:5175/chat-widget.js}
+        VITE_CHAT_WIDGET_CLIENT_ID: ${VITE_CHAT_WIDGET_CLIENT_ID:-client_demo}
     container_name: crm_frontend
     ports:
       - "80:80"
     depends_on:
       - backend
       - corp-backend
+      - chat-widget
     restart: always
 
   admin-frontend:

@@ -1,4 +1,4 @@
-import type { SourceRef } from "../../types/api";
+import type { SourceRef } from "./api-types";
 
 export type BotMessage =
   | { role: "bot"; type: "text"; text: string }

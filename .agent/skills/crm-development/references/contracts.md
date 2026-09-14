@@ -4,6 +4,9 @@
 
 ## `POST /api/chat`
 
+Widget 呼叫時必須帶入企業客戶識別 Header：`X-Client-ID: <assigned-client-id>`。此值是公開識別碼，
+目前只驗證必填及最長 128 字元，不代表登入或授權憑證。
+
 請求：
 
 ```json
@@ -28,7 +31,8 @@
 
 - `GET /health`：回傳 `{ "status": "ok" }`。
 - `POST /api/warmup`：載入模型後回傳狀態。
-- `GET /api/providers`：回傳 provider 的 `id`、`label` 與 `configured`。
+- `GET /api/providers`：需帶 `X-Client-ID`，回傳 provider 的 `id`、`label` 與 `configured`。
+- `GET /api/widget/config`：需帶 `X-Client-ID`，回傳 Widget 品牌名稱、歡迎訊息、Logo 與樣式 token；MVP 先回傳共用預設值。
 - `GET /api/admin/summary?date=YYYY-MM-DD`：回傳 `date`、`question_count` 與 `summary`；此端點目前沒有身分驗證。
 
 ## `/api/admin/documents*`（知識庫文件管理，只支援 `RAG_ENGINE=llamaindex`）

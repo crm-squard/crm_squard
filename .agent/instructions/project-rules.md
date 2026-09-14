@@ -2,7 +2,7 @@
 
 ## 專案邊界
 
-- 可執行專案位於 `sourcecode/`；後端位於 `sourcecode/backend/` 與 `sourcecode/corp-backend/`，前端分別位於 `sourcecode/corp-frontend/` 與 `sourcecode/admin-frontend/`。
+- 可執行專案位於 `sourcecode/`；後端位於 `sourcecode/backend/` 與 `sourcecode/corp-backend/`，前端分別位於 `sourcecode/corp-frontend/`、`sourcecode/admin-frontend/` 與 `sourcecode/chat-widget/`。
 - 修改前先讀取相關入口、型別、設定與呼叫端，維持既有資料流與專案慣例。
 - 採最小可行修改，處理根因；不要順帶重構、重新命名或調整無關檔案。
 - 保留團隊現有變更。發現不相關的未提交內容時，不覆蓋、不還原。

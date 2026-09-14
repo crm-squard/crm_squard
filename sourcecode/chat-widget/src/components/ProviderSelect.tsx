@@ -1,4 +1,4 @@
-import type { ProviderId, ProviderInfo } from "../../../types/api";
+import type { ProviderId, ProviderInfo } from "../api-types";
 interface Props { providers: ProviderInfo[]; value: ProviderId; onChange: (value: ProviderId) => void; }
 export default function ProviderSelect({ providers, value, onChange }: Props) {
   return <div className="ccw-model-bar">

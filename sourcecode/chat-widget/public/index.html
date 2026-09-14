@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="CRM Chat Widget 獨立預覽頁面。" />
+    <title>CRM Chat Widget Preview</title>
+    <style>
+      :root {
+        color: #17212b;
+        background: #f4f7f9;
+        font-family: Inter, "Noto Sans TC", system-ui, sans-serif;
+      }
+
+      body {
+        min-height: 100vh;
+        margin: 0;
+      }
+
+      main {
+        box-sizing: border-box;
+        max-width: 720px;
+        padding: 64px 32px;
+      }
+
+      h1 {
+        margin: 0 0 12px;
+        color: #1f3d57;
+        font-size: clamp(1.75rem, 4vw, 2.5rem);
+      }
+
+      p {
+        max-width: 560px;
+        margin: 0;
+        color: #5d6b78;
+        line-height: 1.7;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>CRM Chat Widget</h1>
+      <p>此頁面用於本機及部署後的獨立介面驗證，聊天元件會自動顯示於右下角。</p>
+    </main>
+    <script src="/chat-widget.js" data-client-id="client_demo" defer></script>
+  </body>
+</html>

@@ -55,6 +55,20 @@ class ProviderInfo(BaseModel):
     configured: bool
 
 
+class WidgetTheme(BaseModel):
+    primary_color: str = Field(serialization_alias="primaryColor", pattern=r"^#[0-9a-fA-F]{6}$")
+    surface_color: str = Field(serialization_alias="surfaceColor", pattern=r"^#[0-9a-fA-F]{6}$")
+    text_color: str = Field(serialization_alias="textColor", pattern=r"^#[0-9a-fA-F]{6}$")
+    border_radius: int = Field(serialization_alias="borderRadius", ge=0, le=32)
+
+
+class WidgetConfig(BaseModel):
+    brand_name: str = Field(serialization_alias="brandName", min_length=1, max_length=80)
+    welcome_message: str = Field(serialization_alias="welcomeMessage", min_length=1, max_length=500)
+    logo_url: Optional[str] = Field(default=None, serialization_alias="logoUrl")
+    theme: WidgetTheme
+
+
 class DocumentInfo(BaseModel):
     # 路徑是純粹給人看/篩選用的顯示欄位，不是身分依據——身分是後端 kb_documents.doc_id
     # （內容的 SHA256 唯一對應），對外 API 完全不會出現這個內部流水號，一律用 path 溝通。

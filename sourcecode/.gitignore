@@ -21,6 +21,9 @@ corp-frontend/.env
 admin-frontend/node_modules/
 admin-frontend/dist/
 admin-frontend/.env
+chat-widget/node_modules/
+chat-widget/dist/
+chat-widget/.env
 
 # OS
 .DS_Store

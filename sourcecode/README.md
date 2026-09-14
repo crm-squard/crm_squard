@@ -23,8 +23,9 @@ crm-rag-project/
 │   │   └── rag/              # chunking / embedding / Chroma 向量資料庫
 │   └── requirements.txt
 │
-├── corp-frontend/            # React + Vite 顧客端購物與聊天介面
-└── admin-frontend/           # React + Vite 後台管理介面
+├── corp-frontend/            # React + Vite 顧客端購物介面
+├── admin-frontend/           # React + Vite 後台管理介面
+└── chat-widget/              # 可獨立部署與嵌入的 React 聊天元件
 ```
 
 ## 需求環境
@@ -38,7 +39,7 @@ crm-rag-project/
 
 1. `File → Open Folder` 開啟 `crm-rag-project` 資料夾（根目錄，而非任一前後端目錄單獨開）
 2. VSCode 會提示安裝建議套件（Python、ESLint、Prettier），可以直接安裝
-3. 用內建終端機（`Ctrl+`` / `Cmd+``）分別啟動所需的前後端服務（見下方步驟）
+3. 用內建終端機（`Ctrl+`` / `Cmd+``）分別啟動所需的前後端與 Widget 服務（見下方步驟）
 
 ## 啟動步驟
 
@@ -69,7 +70,19 @@ npm run dev
 
 終端機會顯示網址（預設 http://localhost:5173），用瀏覽器打開即可看到聊天客服視窗。
 
-### 3) 啟動 Admin Frontend（終端機分頁 3）
+### 3) 啟動 Chat Widget（終端機分頁 3）
+
+```bash
+cd chat-widget
+npm install
+cp .env.example .env
+npm run build
+npm run preview
+```
+
+Widget 預設由 http://localhost:5175/chat-widget.js 提供，嵌入標籤必須包含 `data-client-id`。
+
+### 4) 啟動 Admin Frontend（終端機分頁 4）
 
 ```bash
 cd admin-frontend
@@ -80,7 +93,7 @@ npm run dev
 
 終端機會顯示網址（預設 http://localhost:5174），用瀏覽器打開即可進入後台管理介面。
 
-### 4) 測試
+### 5) 測試
 
 在聊天視窗輸入：
 - 「無線滑鼠支援多少 DPI？」→ 觸發 #1 產品問答（RAG + LLM）

@@ -1,16 +1,22 @@
-import { useRef, useState } from "react";
-import type { ProviderId } from "../../../types/api";
+import { useEffect, useRef, useState } from "react";
+import type { ProviderId } from "../api-types";
 import { askBackend } from "../api/chat";
 import type { ChatMessage } from "../types";
 import { buildHistory, toChatMessage } from "../utils/messages";
 
-export function useChat() {
+export function useChat(clientId: string, welcomeMessage: string) {
   const [messages, setMessages] = useState<ChatMessage[]>([{
     role: "bot", type: "text",
-    text: "您好，我是線上客服，可以問我任何產品的規格、特色，或是輸入訂單編號查詢配送狀態喔。",
+    text: welcomeMessage,
   }]);
   const [isSending, setIsSending] = useState(false);
   const sendingRef = useRef(false);
+
+  useEffect(() => {
+    setMessages((previous) => previous.length === 1 && previous[0].role === "bot"
+      ? [{ role: "bot", type: "text", text: welcomeMessage }]
+      : previous);
+  }, [welcomeMessage]);
 
   function sendMessage(text: string, provider: ProviderId): boolean {
     const trimmed = text.trim();
@@ -20,7 +26,7 @@ export function useChat() {
     sendingRef.current = true;
     setIsSending(true);
     setMessages((previous) => [...previous, { role: "user", type: "text", text: trimmed }]);
-    void askBackend({ message: trimmed, history, provider })
+    void askBackend({ message: trimmed, history, provider }, clientId)
       .then((response) => {
         const message = toChatMessage(response);
         setMessages((previous) => [...previous, message]);

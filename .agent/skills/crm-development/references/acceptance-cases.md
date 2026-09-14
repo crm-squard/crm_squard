@@ -13,6 +13,7 @@
 
 ## 請求驗證
 
+- `/api/chat`、`/api/providers` 與 `/api/widget/config` 缺少或傳入超過 128 字元的 `X-Client-ID` 時應回傳 HTTP 422。
 - 空白或超過 500 字元的 `message` 應受到 API schema 或既有空白處理限制。
 - 無效的 `provider`、`history.role` 或超過上限的歷史紀錄應回傳驗證錯誤。
 - 同一來源超過既有速率限制時應回傳 HTTP 429。

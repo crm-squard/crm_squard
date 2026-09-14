@@ -1,15 +1,15 @@
 import { useEffect, useState } from "react";
-import type { ProviderId, ProviderInfo } from "../../../types/api";
+import type { ProviderId, ProviderInfo } from "../api-types";
 import { fetchProviders } from "../api/chat";
 
-export function useProviders() {
+export function useProviders(clientId: string) {
   const [providers, setProviders] = useState<ProviderInfo[]>([
     { id: "google", label: "Google Gemini", configured: true },
   ]);
   const [provider, setProvider] = useState<ProviderId>("google");
   useEffect(() => {
     let active = true;
-    void fetchProviders().then((list) => {
+    void fetchProviders(clientId).then((list) => {
       if (!active) return;
       setProviders(list);
       const configured = list.find((entry) => entry.id === "google" && entry.configured) ??
@@ -19,6 +19,6 @@ export function useProviders() {
       // 載入失敗時維持既有預設，避免套用不完整的模型清單。
     });
     return () => { active = false; };
-  }, []);
+  }, [clientId]);
   return { providers, provider, setProvider };
 }
