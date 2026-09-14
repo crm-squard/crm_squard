@@ -16,7 +16,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # 複製依賴檔案並安裝 Python 套件；RAG 只剩 llamaindex 引擎（需要 pgvector），
 # requirements-local-llm.txt 不再是選用依賴，正式環境也要裝
-COPY requirements.txt requirements-local-llm.txt .
+COPY requirements.txt requirements-local-llm.txt ./
 RUN pip install --no-cache-dir -r requirements.txt -r requirements-local-llm.txt
 
 # 複製後端程式碼
