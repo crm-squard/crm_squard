@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 from pydantic import BaseModel, Field
 
 
@@ -49,48 +49,48 @@ class OrderCreate(BaseModel):
     """
     新增 Firebase 訂單資料結構。
     """
-    OrderID: int = Field(..., description="訂單編號")
-    CustomerID: int = Field(..., description="顧客編號")
-    OrderDate: str = Field(..., description="訂單日期")
-    ProductID: int = Field(..., description="產品編號")
-    Quantity: int = Field(..., description="購買數量")
-    Discount: float = Field(..., description="折扣金額/比例")
-    PaymentMethod: str = Field(..., description="付款方式")
-    Status: str = Field(..., description="訂單狀態")
-    Age: int = Field(..., description="顧客年齡")
-    City: str = Field(..., description="居住城市")
-    SignupDate: str = Field(..., description="註冊日期")
-    CustomerSegment: str = Field(..., description="顧客分群")
-    ProductName: str = Field(..., description="產品名稱")
-    Category: str = Field(..., description="產品分類")
-    UnitPrice: float = Field(..., description="單價")
-    Sales: float = Field(..., description="銷售金額")
-    OrderValue: float = Field(..., description="訂單總價值")
+    OrderID: Optional[Union[int, str]] = Field(None, description="訂單編號")
+    CustomerID: Optional[Union[int, str]] = Field(0, description="顧客編號")
+    OrderDate: Optional[str] = Field("", description="訂單日期")
+    ProductID: Optional[Union[int, str]] = Field(0, description="產品編號")
+    Quantity: Optional[Union[int, float]] = Field(1, description="購買數量")
+    Discount: Optional[Union[int, float]] = Field(0.0, description="折扣金額/比例")
+    PaymentMethod: Optional[str] = Field("", description="付款方式")
+    Status: Optional[str] = Field("Completed", description="訂單狀態")
+    Age: Optional[Union[int, str]] = Field(None, description="顧客年齡")
+    City: Optional[str] = Field("", description="居住城市")
+    SignupDate: Optional[str] = Field("", description="註冊日期")
+    CustomerSegment: Optional[str] = Field("", description="顧客分群")
+    ProductName: Optional[str] = Field("", description="產品名稱")
+    Category: Optional[str] = Field("", description="產品分類")
+    UnitPrice: Optional[Union[int, float]] = Field(0.0, description="單價")
+    Sales: Optional[Union[int, float]] = Field(0.0, description="銷售金額")
+    OrderValue: Optional[Union[int, float]] = Field(0.0, description="訂單總價值")
     NewOrderID: Optional[str] = Field(None, description="新訂單識別碼 (選填，若未填寫則自動帶入生成的 doc_id)")
-    PhoneNumber: str = Field(..., description="電話號碼")
+    PhoneNumber: Optional[str] = Field("", description="電話號碼")
 
 
 class OrderUpdate(BaseModel):
     """
     更新 Firebase 訂單資料結構 (所有欄位皆可選)。
     """
-    OrderID: Optional[int] = None
-    CustomerID: Optional[int] = None
+    OrderID: Optional[Union[int, str]] = None
+    CustomerID: Optional[Union[int, str]] = None
     OrderDate: Optional[str] = None
-    ProductID: Optional[int] = None
-    Quantity: Optional[int] = None
-    Discount: Optional[float] = None
+    ProductID: Optional[Union[int, str]] = None
+    Quantity: Optional[Union[int, float]] = None
+    Discount: Optional[Union[int, float]] = None
     PaymentMethod: Optional[str] = None
     Status: Optional[str] = None
-    Age: Optional[str] = None
+    Age: Optional[Union[int, str]] = None
     City: Optional[str] = None
     SignupDate: Optional[str] = None
     CustomerSegment: Optional[str] = None
     ProductName: Optional[str] = None
     Category: Optional[str] = None
-    UnitPrice: Optional[float] = None
-    Sales: Optional[float] = None
-    OrderValue: Optional[float] = None
+    UnitPrice: Optional[Union[int, float]] = None
+    Sales: Optional[Union[int, float]] = None
+    OrderValue: Optional[Union[int, float]] = None
     NewOrderID: Optional[str] = None
     PhoneNumber: Optional[str] = None
 
@@ -116,19 +116,19 @@ class OrderListResponse(BaseModel):
 
 class ProductCreate(BaseModel):
     """
-    新增 Firebase 產品資料結構 (所有欄位皆為字串)。
+    新增 Firebase 產品資料結構 (支援字串與數字型別轉換)。
     """
-    ProductID: str = Field(..., description="產品 ID")
-    ProductNameZH: str = Field(..., description="中文品名")
-    ProductNameEN: str = Field(..., description="英文品名")
-    Category: str = Field(..., description="分類")
-    CategoryGeneral: str = Field(..., description="分類")
-    Description: str = Field(..., description="產品詳細說明")
-    DescriptionShort: str = Field(..., description="產品簡短說明 (25字內)")
-    CreateDate: str = Field(..., description="建立日期")
-    InStock: str = Field(..., description="庫存狀況")
-    OriginalPrice: float = Field(..., description="原價")
-    RealPrice: float = Field(..., description="實際售價")
+    ProductID: Union[str, int] = Field(..., description="產品 ID")
+    ProductNameZH: Optional[str] = Field("", description="中文品名")
+    ProductNameEN: Optional[str] = Field("", description="英文品名")
+    Category: Optional[str] = Field("", description="分類")
+    CategoryGeneral: Optional[str] = Field("", description="分類")
+    Description: Optional[str] = Field("", description="產品詳細說明")
+    DescriptionShort: Optional[str] = Field("", description="產品簡短說明 (25字內)")
+    CreateDate: Optional[str] = Field("", description="建立日期")
+    InStock: Optional[Union[str, int, bool]] = Field("1", description="庫存狀況")
+    OriginalPrice: Optional[Union[int, float]] = Field(0.0, description="原價")
+    RealPrice: Optional[Union[int, float]] = Field(0.0, description="實際售價")
     ImageUrl: Optional[str] = Field(None, description="產品圖片網址")
 
 
@@ -136,7 +136,7 @@ class ProductUpdate(BaseModel):
     """
     更新 Firebase 產品資料結構 (所有欄位皆可選)。
     """
-    ProductID: Optional[str] = None
+    ProductID: Optional[Union[str, int]] = None
     ProductNameZH: Optional[str] = None
     ProductNameEN: Optional[str] = None
     Category: Optional[str] = None
@@ -144,9 +144,9 @@ class ProductUpdate(BaseModel):
     Description: Optional[str] = None
     DescriptionShort: Optional[str] = None
     CreateDate: Optional[str] = None
-    InStock: Optional[str] = None
-    OriginalPrice: Optional[float] = None
-    RealPrice: Optional[float] = None
+    InStock: Optional[Union[str, int, bool]] = None
+    OriginalPrice: Optional[Union[int, float]] = None
+    RealPrice: Optional[Union[int, float]] = None
     ImageUrl: Optional[str] = None
 
 

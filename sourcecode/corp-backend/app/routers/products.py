@@ -17,17 +17,43 @@ router = APIRouter(prefix="/Product", tags=["Firebase Product Operations"])
 COLLECTION_PRODUCTS = "Product"
 
 
+import logging
+
+logger = logging.getLogger("corp-backend.products")
+
 def _enrich_product_data(doc_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
     """
     補全 ImageUrl 欄位：若無指定 ImageUrl，自動依據 {PRODUCT_IMAGE_BASE_URL}/{ProductID}_M.jpg 組合網址。
     """
     enriched = dict(data)
+    if "ProductID" in enriched and enriched["ProductID"] is not None:
+        enriched["ProductID"] = str(enriched["ProductID"])
+    else:
+        enriched["ProductID"] = doc_id
+
     if not enriched.get("ImageUrl"):
         product_id = enriched.get("ProductID") or doc_id
         enriched["ImageUrl"] = f"{settings.PRODUCT_IMAGE_BASE_URL}/{product_id}_M.jpg"
     return enriched
 
-
+@router.get(
+    "/count",
+    response_model=Dict[str, int],
+    summary="取得產品總數",
+    responses={500: {"model": ErrorDetail}}
+)
+def get_product_count():
+    try:
+        db = get_db()
+        results = db.collection(COLLECTION_PRODUCTS).count().get()
+        total_count = results[0][0].value
+        return {"count": total_count}
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"取得產品總數失敗: {str(e)}"
+        )
+    
 @router.get(
     "/{product_id}",
     response_model=ProductResponse,
@@ -46,7 +72,7 @@ def get_product(product_id: str):
             enriched_data = _enrich_product_data(doc.id, doc.data)
             return ProductResponse(id=doc.id, **enriched_data)
 
-        # 2. 若未依 Document ID 找到，嘗試依據 ProductID 欄位查詢
+        # 2. 若未依 Document ID 找到，嘗試依據 ProductID 欄位查詢 (支援字串與數字比較)
         db = get_db()
         docs = (
             db.collection(COLLECTION_PRODUCTS)
@@ -60,6 +86,20 @@ def get_product(product_id: str):
             sanitized_data = crud._sanitize_firestore_data(raw_data)
             enriched_data = _enrich_product_data(d.id, sanitized_data)
             return ProductResponse(id=d.id, **enriched_data)
+
+        # 3. 嘗試以數字型別查詢 ProductID
+        if product_id.isdigit():
+            docs_num = (
+                db.collection(COLLECTION_PRODUCTS)
+                .where("ProductID", "==", int(product_id))
+                .limit(1)
+                .stream()
+            )
+            for d in docs_num:
+                raw_data = d.to_dict() or {}
+                sanitized_data = crud._sanitize_firestore_data(raw_data)
+                enriched_data = _enrich_product_data(d.id, sanitized_data)
+                return ProductResponse(id=d.id, **enriched_data)
 
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -80,6 +120,11 @@ def get_product(product_id: str):
     summary="分頁查詢產品列表",
     responses={500: {"model": ErrorDetail}}
 )
+@router.get(
+    "/",
+    response_model=ProductListResponse,
+    include_in_schema=False
+)
 def list_products(
     pidx: int = Query(1, ge=1, description="頁碼 (從 1 開始)"),
     pno: int = Query(10, ge=1, le=500, description="每頁筆數 (1-500)")
@@ -97,10 +142,13 @@ def list_products(
             offset=offset
         )
 
-        products_list = [
-            ProductResponse(id=doc.id, **_enrich_product_data(doc.id, doc.data))
-            for doc in raw_res.documents
-        ]
+        products_list = []
+        for doc in raw_res.documents:
+            try:
+                enriched = _enrich_product_data(doc.id, doc.data)
+                products_list.append(ProductResponse(id=doc.id, **enriched))
+            except Exception as parse_err:
+                logger.warning(f"解析 Product Document ID '{doc.id}' 時發生警告: {parse_err}")
 
         return ProductListResponse(
             pidx=pidx,
@@ -121,6 +169,12 @@ def list_products(
     status_code=status.HTTP_201_CREATED,
     summary="新增產品資料",
     responses={500: {"model": ErrorDetail}}
+)
+@router.post(
+    "/",
+    response_model=ProductResponse,
+    status_code=status.HTTP_201_CREATED,
+    include_in_schema=False
 )
 def create_product(payload: ProductCreate):
     """
