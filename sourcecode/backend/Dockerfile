@@ -1,4 +1,6 @@
-FROM python:3.10-slim
+# onnxruntime==1.29.0（requirements-local-llm.txt，llamaindex 引擎的 embedding 依賴）
+# 沒有出 Python 3.10 的安裝包，只支援 3.11 以上，基底映像檔版本要跟著調整
+FROM python:3.11-slim
 
 # 設定工作目錄
 WORKDIR /app
