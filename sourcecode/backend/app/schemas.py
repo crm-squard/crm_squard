@@ -16,7 +16,8 @@ class ChatRequest(BaseModel):
     # 前端傳回目前對話中「之前幾輪」的訊息，用來讓機器人記得上下文（例如「那電池呢？」）。
     # 只有產品問答（type == "product"）這條路徑會用到；訂單查詢是規則比對，不需要歷史。
     history: List[HistoryTurn] = Field(default_factory=list, max_length=20)
-    # 要用哪個 LLM 回答；local 是本地 MiniCPM5-2B 模型，其餘是線上付費 API（見 app/providers.py）
+    # 要用哪個 LLM 回答；local 是本地 Qwen3.5-2B（僅限 Apple Silicon 開發機），
+    # 其餘是線上付費 API（見 app/providers.py）
     provider: Literal["local", "anthropic", "openai", "google", "xai"] = "google"
 
 
@@ -55,19 +56,45 @@ class ProviderInfo(BaseModel):
 
 
 class DocumentInfo(BaseModel):
-    doc_id: str
-    category: str
+    # 路徑是純粹給人看/篩選用的顯示欄位，不是身分依據——身分是後端 kb_documents.doc_id
+    # （內容的 SHA256 唯一對應），對外 API 完全不會出現這個內部流水號，一律用 path 溝通。
+    path: str
+    tags: List[str] = Field(default_factory=list)
     chunk_count: int
-    # 建立/更新時是否真的重新 embed 過：建立一定是 True；更新時若 SHA256 跟既有內容一樣則
-    # 跳過重新 embed，回傳 False。列表查詢（GET）不適用，固定給 None。
+    # 這次呼叫是否真的重新 embed 過：新增/內容更新固定 True；標籤更新/掛到既有內容
+    # （linked）/完全沒變都固定 False。列表查詢（GET）不適用，固定給 None。
     content_changed: Optional[bool] = None
-    # 上傳時間（UTC ISO 格式）與檔案大小（bytes），見 app/rag/documents_store.py 的
-    # add_document()；列表查詢（GET）會回傳，建立/更新回應目前不特別附加（用不到）。
     uploaded_at: Optional[str] = None
     file_size_bytes: Optional[int] = None
-    # 有沒有其他 doc_id 存了完全一樣的內容（SHA256 相同）；只是提示，不會擋下新增/更新。
-    duplicate_of: Optional[str] = None
+    # 伺服器端算出的 SHA256，給前端跟自己算的 client 端雜湊核對用。
+    content_hash: Optional[str] = None
 
 
 class DocumentListResponse(BaseModel):
     documents: List[DocumentInfo]
+
+
+class PrecheckItem(BaseModel):
+    path: str
+    client_sha256: str
+    tags: List[str] = Field(default_factory=list)
+
+
+class PrecheckRequest(BaseModel):
+    # 資料夾全量覆蓋模式用：算「這次上傳沒包含到的既有路徑」（見 PrecheckResponse.stale_paths）。
+    scope_prefix: Optional[str] = None
+    # 上限 200：避免單次預檢請求塞爆，多檔案上傳的前端應自行分批。
+    items: List[PrecheckItem] = Field(min_length=1, max_length=200)
+
+
+class PrecheckResultItem(BaseModel):
+    path: str
+    # linked：這個內容雜湊命中「別的」既有內容（不管這個路徑本來有沒有紀錄），只需要更新
+    # 標籤紀錄指向該內容，不需要重新上傳/重新 embed——取代原本的 duplicate_of／renamed 概念。
+    status: Literal["new", "unchanged", "content_changed", "tags_only_changed", "linked"]
+
+
+class PrecheckResponse(BaseModel):
+    items: List[PrecheckResultItem]
+    # scope_prefix 底下、這次上傳沒包含到的既有路徑；沒帶 scope_prefix 就固定是空陣列。
+    stale_paths: List[str] = Field(default_factory=list)

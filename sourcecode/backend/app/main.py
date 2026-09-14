@@ -26,6 +26,9 @@ from app.schemas import (
     DailySummaryResponse,
     DocumentInfo,
     DocumentListResponse,
+    PrecheckRequest,
+    PrecheckResponse,
+    PrecheckResultItem,
     ProviderInfo,
 )
 from app.agent import get_agent
@@ -35,7 +38,7 @@ from app.summary import summarize_day
 from app.providers import is_configured
 
 PROVIDER_LABELS = {
-    "local": "本地 MiniCPM5-2B（免費，速度較慢）",
+    "local": "本地 Qwen3.5-2B（免費，僅限 Apple Silicon 開發機）",
     "anthropic": "Claude",
     "openai": "GPT",
     "google": "Gemini",
@@ -154,7 +157,7 @@ def _get_llamaindex_index():
 @app.get("/api/admin/documents", response_model=DocumentListResponse)
 def list_documents():
     """
-    列出知識庫目前所有文件（doc_id/category/chunk_count），供管理頁面畫列表。
+    列出知識庫目前所有路徑（一份內容掛兩個路徑就是兩列，各自標籤），供管理頁面畫列表。
 
     注意：目前沒有任何身分驗證，正式上線前必須加上管理者登入/權限檢查（同 /api/admin/summary）。
     """
@@ -180,72 +183,110 @@ def _read_md_upload(file: UploadFile) -> str:
         raise HTTPException(status_code=400, detail="檔案編碼須為 UTF-8。")
 
 
-@app.post("/api/admin/documents", response_model=DocumentInfo)
-def create_document(category: Literal["product", "policy"] = Form(...), file: UploadFile = File(...)):
+def _check_client_hash(server_hash: str, client_sha256: str):
     """
-    上傳一份 .md 檔新增知識庫文件，doc_id 直接沿用檔名（例如上傳 faq.md，doc_id 就是 "faq.md"）。
-    內容依 category 用對應的 parser 拆成 chunk 後灌進 pgvector。
+    硬性檢查：上傳前端算的雜湊要跟伺服器重算的一致，才允許寫入。避免瀏覽器讀檔/傳輸過程
+    內容跟預檢（precheck）階段比對的內容不一致（例如使用者在預檢後又動了檔案），
+    這個檢查故意設計成擋下請求，不只是回傳給前端自行比對。
     """
-    from app.rag.documents_store import add_document, find_duplicate_by_hash, get_document_meta, hash_content
+    if server_hash != client_sha256:
+        raise HTTPException(status_code=400, detail="檔案內容與上傳前計算的雜湊不符，請重新選檔上傳。")
 
-    raw_text = _read_md_upload(file)
-    source = file.filename
-    index = _get_llamaindex_index()
-    if get_document_meta(source) is not None:
-        raise HTTPException(status_code=409, detail=f"文件 {source} 已存在，請改用更新 API。")
-    duplicate_of = find_duplicate_by_hash(hash_content(raw_text), exclude_source=source)
+
+@app.post("/api/admin/documents/precheck", response_model=PrecheckResponse)
+def precheck_documents(req: PrecheckRequest):
+    """
+    批次上傳前的預檢：對每個 (path, client_sha256, tags) 交叉查「這個路徑目前指向什麼」跟
+    「這個雜湊是不是已經存在別的地方」，讓前端知道每份文件是 new/unchanged/content_changed/
+    tags_only_changed/linked，不用實際寫入/重新 embed。純讀取（不動向量索引），但比照其他
+    admin 文件端點一併檢查目前引擎是否支援文檔管理，行為與其餘端點保持一致。
+
+    完全不需要 doc_id：身分判斷全部靠路徑查 kb_document_labels、內容雜湊查 kb_documents，
+    這兩張表的細節見 app/rag/documents_store.py。
+    """
+    from app.rag.documents_store import find_document_by_hash, get_label, list_paths_by_prefix
+
+    _get_llamaindex_index()
     try:
-        chunk_count = add_document(source, category, raw_text, index)
+        results = []
+        seen_paths = set()
+        for item in req.items:
+            seen_paths.add(item.path)
+            label = get_label(item.path)
+            if label is not None and label["content_hash"] == item.client_sha256:
+                status: Literal[
+                    "new", "unchanged", "content_changed", "tags_only_changed", "linked"
+                ] = "unchanged" if set(label["tags"]) == set(item.tags) else "tags_only_changed"
+            elif find_document_by_hash(item.client_sha256) is not None:
+                status = "linked"
+            elif label is not None:
+                status = "content_changed"
+            else:
+                status = "new"
+            results.append(PrecheckResultItem(path=item.path, status=status))
+
+        stale_paths: list[str] = []
+        if req.scope_prefix:
+            stale_paths = [p for p in list_paths_by_prefix(req.scope_prefix) if p not in seen_paths]
     except Exception as e:
-        print(f"[Documents Error] create {source} failed: {e}")
-        raise HTTPException(status_code=502, detail="新增知識庫文件時發生錯誤，請稍後再試。")
+        print(f"[Documents Error] precheck failed: {e}")
+        raise HTTPException(status_code=502, detail="預檢知識庫文件時發生錯誤，請稍後再試。")
+    return PrecheckResponse(items=results, stale_paths=stale_paths)
+
+
+@app.put("/api/admin/documents/{path:path}", response_model=DocumentInfo)
+def upsert_document(
+    path: str,
+    tags: list[str] = Form(default=[]),
+    client_sha256: str = Form(...),
+    file: UploadFile | None = File(default=None),
+):
+    """
+    新增/更新內容/改標籤/掛到既有內容（linked）統一走這支端點，不需要呼叫端提供 doc_id。
+    後端依「這個路徑目前指向什麼」跟「這個雜湊是不是已經存在別的地方」決定實際動作，
+    見 app/rag/documents_store.py 的 upsert_document()。
+
+    `file` 只有在真的需要新內容（新文件／內容變更）時才要帶；純改標籤或掛到既有內容
+    （雜湊已經存在別處）不需要上傳檔案。帶了 file 的情況一律先驗證雜湊，跟 client_sha256
+    不符直接回 400（避免預檢後檔案內容又被改動）。
+    """
+    from app.rag.documents_store import hash_content, upsert_document as _upsert_document
+
+    index = _get_llamaindex_index()
+    raw_text = None
+    if file is not None:
+        raw_text = _read_md_upload(file)
+        _check_client_hash(hash_content(raw_text), client_sha256)
+    try:
+        result = _upsert_document(path, tags, client_sha256, raw_text, index)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        print(f"[Documents Error] upsert {path} failed: {e}")
+        raise HTTPException(status_code=502, detail="新增或更新知識庫文件時發生錯誤，請稍後再試。")
     return DocumentInfo(
-        doc_id=source, category=category, chunk_count=chunk_count,
-        content_changed=True, duplicate_of=duplicate_of,
+        path=path, tags=tags, chunk_count=result["chunk_count"],
+        content_changed=result["content_changed"], content_hash=client_sha256,
     )
 
 
-@app.put("/api/admin/documents/{doc_id}", response_model=DocumentInfo)
-def update_document(doc_id: str, file: UploadFile = File(...)):
+@app.delete("/api/admin/documents/{path:path}")
+def delete_document(path: str):
     """
-    上傳新版 .md 檔更新既有文件：先比對 SHA256，內容跟既有版本一樣就跳過刪除+重新 embed；
-    有變才刪除該文件舊 chunk、重新解析插入新 chunk。分類沿用文件既有的分類，不接受透過
-    上傳改變（避免混用 parser 拆出格式不一致的 chunk），上傳檔案的檔名本身不需要跟 doc_id 一樣。
+    刪除這個路徑的標籤紀錄；該內容如果沒有其他路徑指著了，才真的刪掉向量與內容紀錄
+    （見 documents_store.delete_document_by_path()）。
     """
-    from app.rag.documents_store import find_duplicate_by_hash, get_document_meta
-    from app.rag.documents_store import hash_content, update_document as _update_document
-
-    raw_text = _read_md_upload(file)
-    index = _get_llamaindex_index()
-    existing = get_document_meta(doc_id)
-    if existing is None:
-        raise HTTPException(status_code=404, detail=f"查無文件 {doc_id}，請確認 doc_id 是否正確。")
-    duplicate_of = find_duplicate_by_hash(hash_content(raw_text), exclude_source=doc_id)
-    try:
-        chunk_count, changed = _update_document(doc_id, existing["category"], raw_text, index)
-    except Exception as e:
-        print(f"[Documents Error] update {doc_id} failed: {e}")
-        raise HTTPException(status_code=502, detail="更新知識庫文件時發生錯誤，請稍後再試。")
-    return DocumentInfo(
-        doc_id=doc_id, category=existing["category"], chunk_count=chunk_count,
-        content_changed=changed, duplicate_of=duplicate_of,
-    )
-
-
-@app.delete("/api/admin/documents/{doc_id}")
-def delete_document(doc_id: str):
-    """刪除文件（該 doc_id 底下的所有 chunk）。"""
-    from app.rag.documents_store import delete_document as _delete_document, get_document_meta
+    from app.rag.documents_store import delete_document_by_path
 
     index = _get_llamaindex_index()
-    if get_document_meta(doc_id) is None:
-        raise HTTPException(status_code=404, detail=f"查無文件 {doc_id}，請確認 doc_id 是否正確。")
     try:
-        _delete_document(doc_id, index)
+        deleted = delete_document_by_path(path, index)
     except Exception as e:
-        print(f"[Documents Error] delete {doc_id} failed: {e}")
+        print(f"[Documents Error] delete {path} failed: {e}")
         raise HTTPException(status_code=502, detail="刪除知識庫文件時發生錯誤，請稍後再試。")
-    return {"status": "deleted", "doc_id": doc_id}
+    if not deleted:
+        raise HTTPException(status_code=404, detail=f"查無路徑 {path}，請確認路徑是否正確。")
+    return {"status": "deleted", "path": path}
 
 
 @app.post("/api/chat", response_model=ChatResponse)

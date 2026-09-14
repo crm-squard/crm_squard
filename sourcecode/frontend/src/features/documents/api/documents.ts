@@ -1,4 +1,4 @@
-import type { DocumentCategory, DocumentInfo } from "../types";
+import type { DocumentInfo, PrecheckRequestItem, PrecheckResponse } from "../types";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
 
@@ -9,6 +9,23 @@ async function throwIfNotOk(response: Response): Promise<void> {
   }
 }
 
+// path 可能含斜線（例如 "policy/faq/faq1.md"），需逐段 encode 再接回，
+// 避免整段 encodeURIComponent 把斜線也編碼成 %2F 導致後端 :path 路由解析錯誤。
+function encodePathForUrl(path: string): string {
+  return path
+    .split("/")
+    .map((segment) => encodeURIComponent(segment))
+    .join("/");
+}
+
+export async function sha256Hex(file: File): Promise<string> {
+  const buffer = await file.arrayBuffer();
+  const digest = await crypto.subtle.digest("SHA-256", buffer);
+  return Array.from(new Uint8Array(digest))
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
+
 export async function fetchDocuments(): Promise<DocumentInfo[]> {
   const response = await fetch(`${API_BASE_URL}/api/admin/documents`);
   await throwIfNotOk(response);
@@ -16,22 +33,35 @@ export async function fetchDocuments(): Promise<DocumentInfo[]> {
   return data.documents;
 }
 
-export async function createDocument(file: File, category: DocumentCategory): Promise<DocumentInfo> {
-  const formData = new FormData();
-  formData.append("file", file);
-  formData.append("category", category);
-  const response = await fetch(`${API_BASE_URL}/api/admin/documents`, {
+export async function precheckDocuments(
+  items: PrecheckRequestItem[],
+  scopePrefix: string | null
+): Promise<PrecheckResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/admin/documents/precheck`, {
     method: "POST",
-    body: formData,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ scope_prefix: scopePrefix, items }),
   });
   await throwIfNotOk(response);
-  return (await response.json()) as DocumentInfo;
+  return (await response.json()) as PrecheckResponse;
 }
 
-export async function updateDocument(docId: string, file: File): Promise<DocumentInfo> {
+interface UpsertDocumentParams {
+  path: string;
+  tags: string[];
+  clientSha256: string;
+  // 只有真的需要新內容（新增/內容變更）時才要帶；純改標籤或掛到既有內容不需要上傳檔案。
+  file?: File;
+}
+
+// 新增/更新內容/改標籤/掛到既有內容統一走這支：doc_id 完全不需要呼叫端提供，
+// 後端依路徑跟雜湊自己判斷要做什麼事（見 contracts.md）。
+export async function upsertDocument(params: UpsertDocumentParams): Promise<DocumentInfo> {
   const formData = new FormData();
-  formData.append("file", file);
-  const response = await fetch(`${API_BASE_URL}/api/admin/documents/${encodeURIComponent(docId)}`, {
+  params.tags.forEach((tag) => formData.append("tags", tag));
+  formData.append("client_sha256", params.clientSha256);
+  if (params.file) formData.append("file", params.file);
+  const response = await fetch(`${API_BASE_URL}/api/admin/documents/${encodePathForUrl(params.path)}`, {
     method: "PUT",
     body: formData,
   });
@@ -39,8 +69,8 @@ export async function updateDocument(docId: string, file: File): Promise<Documen
   return (await response.json()) as DocumentInfo;
 }
 
-export async function deleteDocument(docId: string): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/api/admin/documents/${encodeURIComponent(docId)}`, {
+export async function deleteDocument(path: string): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/api/admin/documents/${encodePathForUrl(path)}`, {
     method: "DELETE",
   });
   await throwIfNotOk(response);
