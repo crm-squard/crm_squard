@@ -36,7 +36,24 @@ def _enrich_product_data(doc_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
         enriched["ImageUrl"] = f"{settings.PRODUCT_IMAGE_BASE_URL}/{product_id}_M.jpg"
     return enriched
 
-
+@router.get(
+    "/count",
+    response_model=Dict[str, int],
+    summary="取得產品總數",
+    responses={500: {"model": ErrorDetail}}
+)
+def get_product_count():
+    try:
+        db = get_db()
+        results = db.collection(COLLECTION_PRODUCTS).count().get()
+        total_count = results[0][0].value
+        return {"count": total_count}
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"取得產品總數失敗: {str(e)}"
+        )
+    
 @router.get(
     "/{product_id}",
     response_model=ProductResponse,
