@@ -6,11 +6,16 @@ FastAPI 服務，提供 `/api/chat`，對應提案 #1（產品問答 RAG）與 #
 ## 環境需求
 
 - Python 3.10+
-- 本地 LLM（provider=local）固定使用 openbmb/MiniCPM5-2B，CPU 也可執行（速度較慢），不需要 bitsandbytes/GPU。
-  這顆是「混合推理」模型，`app/llm.py` 預設用 `enable_thinking=False` 關掉內部思考過程直接回答，
-  但輸出仍常是簡體字，`generate()` 會自動做簡轉繁（台灣用語）後處理。
-  **注意：這顆模型在 Apple Silicon 的 MPS 上會直接當機（segfault），`app/llm.py` 已經刻意跳過
-  MPS、強制用 CPU 跑**（在 M3 Pro 上單次回應約 20-30 秒；之後若要用其他本地模型要重新驗證 MPS）
+- 本地 LLM（provider=local）固定用 **MLX + `mlx-community/Qwen3.5-2B-4bit`**（模型名稱可用
+  `.env` 的 `MLX_LLM_MODEL_NAME` 覆蓋），**只支援 Apple Silicon（M 系列晶片）Mac**，吃 Mac 的
+  Metal GPU 加速；需要額外安裝 `requirements-mlx.txt`（`pip install -r requirements-mlx.txt`）。
+  `app/llm.py` 預設用 `enable_thinking=False` 關掉內部思考過程直接回答，輸出偶爾還是簡體字，
+  `generate()` 會自動做簡轉繁（台灣用語）後處理。
+  **在非 Apple Silicon 機器上（包含正式環境 Cloud Run）呼叫 provider=local 會直接回錯誤**——
+  正式環境固定用線上 provider，不提供本地 LLM 這個選項；本機開發如果不是 Apple Silicon，也只能
+  選線上 provider。
+  （原本用的 openbmb/MiniCPM5-2B 已經拿掉：一來它在 Apple Silicon 的 MPS 上會直接當機
+  segfault，二來它要求的 `transformers>=5.6` 會跟其他想接的套件版本衝突。）
 - 或完全不跑本地模型，改用線上付費 API（見下方「切換回答模型」）
 
 ## 啟動步驟
@@ -42,7 +47,7 @@ Embedding 與本地 LLM 模型（第一次啟動會需要下載，依網路速�
 
 | provider | 說明 | 需要什麼 |
 |---|---|---|
-| `local`（預設） | 本地 openbmb/MiniCPM5-2B | 不需要 API key，免費但速度較慢 |
+| `local`（預設） | 本地 Qwen3.5-2B（MLX） | 不需要 API key、免費，但僅限 Apple Silicon 開發機 |
 | `anthropic` | Claude | `llm_keys.json` 填 `anthropic.api_key` |
 | `openai` | GPT | `llm_keys.json` 填 `openai.api_key` |
 | `google` | Gemini | `llm_keys.json` 填 `google.api_key` |

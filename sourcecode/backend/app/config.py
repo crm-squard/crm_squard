@@ -1,6 +1,6 @@
 """
 專案設定值。讀取 .env（沒有的話用預設值），對應：
-- EMBEDDING_MODEL_NAME / LLM_MODEL_NAME: 對應提案中「Embedding 模型」與「生成模型」的技術選型
+- EMBEDDING_MODEL_NAME / MLX_LLM_MODEL_NAME: 對應提案中「Embedding 模型」與「生成模型」的技術選型
 """
 import os
 import json
@@ -26,7 +26,9 @@ def _has_gemini_key() -> bool:
 
 class Settings:
     EMBEDDING_MODEL_NAME: str = "intfloat/multilingual-e5-base"
-    LLM_MODEL_NAME: str = "openbmb/MiniCPM5-2B"
+    # provider=local 固定用這顆，只能在 Apple Silicon（MLX）上跑，見 app/llm.py 的說明；
+    # 正式環境（Cloud Run）固定用線上 provider，不會用到這個設定值。
+    MLX_LLM_MODEL_NAME: str = os.getenv("MLX_LLM_MODEL_NAME", "mlx-community/Qwen3.5-2B-4bit")
 
     TOP_K: int = 3
 
