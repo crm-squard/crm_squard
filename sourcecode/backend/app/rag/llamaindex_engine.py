@@ -16,7 +16,6 @@ table 是空的，會由 documents_store.seed_if_empty() 自動把 app/data/ 下
 """
 from llama_index.core import Settings as LlamaSettings
 from llama_index.core import VectorStoreIndex
-from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 from llama_index.vector_stores.postgres import PGVectorStore
 
 from app.config import settings
@@ -44,6 +43,12 @@ def _get_embed_model():
     # 兩個請求同時呼叫 embedding 會讓 MPS 內部共用的 MetalShaderLibrary 雜湊表在多執行緒下
     # 被同時寫入而損毀，導致整個 process SIGSEGV 直接崩潰（曾在批次上傳測試中重現）。
     # 這個模型不大，CPU 推論速度可接受，用 CPU 換取穩定性。
+    #
+    # import 留在這裡（不搬到檔案最上面）：HuggingFaceEmbedding 會連帶載入 torch/transformers，
+    # 實測光 import 就吃掉數百 MB 記憶體，onnx_int8（預設）完全用不到，搬到頂層會讓每次
+    # get_retriever() 第一次被呼叫（不管哪個 EMBEDDING_BACKEND）都白白背這個記憶體開銷。
+    from llama_index.embeddings.huggingface import HuggingFaceEmbedding
+
     return HuggingFaceEmbedding(
         model_name=settings.EMBEDDING_MODEL_NAME,
         query_instruction="query: ",
