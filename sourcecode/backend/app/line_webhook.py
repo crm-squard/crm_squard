@@ -13,18 +13,20 @@ import json
 import os
 import urllib.error
 import urllib.request
-from typing import Callable
+from typing import Awaitable, Callable
 
 from fastapi import APIRouter, HTTPException, Request
 
 from app.schemas import ChatResponse
+
+from app.chat_log import log_chat
 
 
 LINE_REPLY_API = "https://api.line.me/v2/bot/message/reply"
 
 
 def create_line_router(
-    chat_handler: Callable[[str, list, str], ChatResponse],
+    chat_handler: Callable[[str, list, str], Awaitable[ChatResponse]],
 ) -> APIRouter:
     router = APIRouter()
 
@@ -108,11 +110,8 @@ def create_line_router(
 
         try:
             with urllib.request.urlopen(req, timeout=15) as response:
-                result = response.read()
-                print(
-                    f"[LINE Reply Success] "
-                    f"HTTP {response.status}, message={message}"
-                )
+                print(f"[LINE Reply Success] HTTP {response.status}")
+                
 
         except urllib.error.HTTPError as e:
             detail = e.read().decode("utf-8", errors="replace")
@@ -181,15 +180,33 @@ def create_line_router(
                 continue
 
             try:
-                # 第一版 LINE 暫時不保存 conversation history。
+                # 第一版 LINE 暫時不帶入歷史對話作為上下文，
+                # 但每次問答仍會寫入既有 chat_log。
                 # provider 使用目前 CRM 預設的 Gemini。
-                crm_response = chat_handler(
+                crm_response = await chat_handler(
                     user_text,
                     [],
                     "google",
                 )
 
                 reply_text = format_chat_response(crm_response)
+
+                try:
+                    log_text = (
+                        crm_response.text
+                        if crm_response.text is not None
+                        else f"[訂單 {crm_response.code}]"
+                    )
+
+                    log_chat(
+                        message=user_text,
+                        response_type=crm_response.type,
+                        response_text=log_text,
+                        client_ip="LINE",
+                    )
+                except Exception as e:
+                    # 對話紀錄失敗不能影響 LINE 回覆
+                    print(f"[LINE Chat Log Error] {e}")
 
             except Exception as e:
                 print(f"[LINE Chat Error] {e}")
