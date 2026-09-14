@@ -7,8 +7,9 @@
 - warranty_policy.md / return_policy.md / shipping_payment.md / faq.md：保固、退換貨、
   運送付款、常見問題等政策類文件，用 policy_parser.py 的通用 markdown 標題拆分規則
 
-get_all_chunks() 把兩類文件的 chunk 合併成一份清單，是 custom_engine.py 跟 llamaindex_engine.py
-建索引時共用的唯一資料來源——兩套引擎都呼叫同一個函式，不會有邏輯不一致的風險。
+get_all_chunks() 把兩類文件的 chunk 合併成一份清單，是 online_engine.py 建索引時的資料來源
+（custom 引擎已退休；llamaindex 引擎改用 pgvector 後改讀 app/rag/documents_store.py 的
+seed_if_empty()，不再整批呼叫這個函式，見下方 get_seed_sources()）。
 之後要再加知識庫文件，只要照現有格式新增檔案、在 _POLICY_FILES 加一行即可。
 """
 from pathlib import Path
@@ -33,3 +34,18 @@ def get_all_chunks() -> list[dict]:
     for path in _POLICY_FILES:
         chunks.extend(parse_policy_doc(path.read_text(encoding="utf-8"), source=path.name))
     return chunks
+
+
+def get_seed_sources() -> list[dict]:
+    """
+    回傳知識庫種子文件的來源清單，供 app/rag/documents_store.py 的 seed_if_empty()
+    在 pgvector table 是空的時候（例如第一次接上新資料庫）逐一讀檔灌入索引。
+
+    category 這裡指的是「該用哪個 parser 解析」（product/policy），
+    跟 chunk 內容的 category 欄位（例如產品分類、"政策文件"）是不同語意，不要混用。
+    """
+    sources = [{"source": _PRODUCT_FILE.name, "category": "product", "path": _PRODUCT_FILE}]
+    sources.extend(
+        {"source": path.name, "category": "policy", "path": path} for path in _POLICY_FILES
+    )
+    return sources

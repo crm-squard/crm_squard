@@ -6,11 +6,16 @@ FastAPI 服務，提供 `/api/chat`，對應提案 #1（產品問答 RAG）與 #
 ## 環境需求
 
 - Python 3.10+
-- 本地 LLM（provider=local）固定使用 openbmb/MiniCPM5-2B，CPU 也可執行（速度較慢），不需要 bitsandbytes/GPU。
-  這顆是「混合推理」模型，`app/llm.py` 預設用 `enable_thinking=False` 關掉內部思考過程直接回答，
-  但輸出仍常是簡體字，`generate()` 會自動做簡轉繁（台灣用語）後處理。
-  **注意：這顆模型在 Apple Silicon 的 MPS 上會直接當機（segfault），`app/llm.py` 已經刻意跳過
-  MPS、強制用 CPU 跑**（在 M3 Pro 上單次回應約 20-30 秒；之後若要用其他本地模型要重新驗證 MPS）
+- 本地 LLM（provider=local）固定用 **MLX + `mlx-community/Qwen3.5-2B-4bit`**（模型名稱可用
+  `.env` 的 `MLX_LLM_MODEL_NAME` 覆蓋），**只支援 Apple Silicon（M 系列晶片）Mac**，吃 Mac 的
+  Metal GPU 加速；需要額外安裝 `requirements-mlx.txt`（`pip install -r requirements-mlx.txt`）。
+  `app/llm.py` 預設用 `enable_thinking=False` 關掉內部思考過程直接回答，輸出偶爾還是簡體字，
+  `generate()` 會自動做簡轉繁（台灣用語）後處理。
+  **在非 Apple Silicon 機器上（包含正式環境 Cloud Run）呼叫 provider=local 會直接回錯誤**——
+  正式環境固定用線上 provider，不提供本地 LLM 這個選項；本機開發如果不是 Apple Silicon，也只能
+  選線上 provider。
+  （原本用的 openbmb/MiniCPM5-2B 已經拿掉：一來它在 Apple Silicon 的 MPS 上會直接當機
+  segfault，二來它要求的 `transformers>=5.6` 會跟其他想接的套件版本衝突。）
 - 或完全不跑本地模型，改用線上付費 API（見下方「切換回答模型」）
 
 ## 啟動步驟
@@ -42,7 +47,7 @@ Embedding 與本地 LLM 模型（第一次啟動會需要下載，依網路速�
 
 | provider | 說明 | 需要什麼 |
 |---|---|---|
-| `local`（預設） | 本地 openbmb/MiniCPM5-2B | 不需要 API key，免費但速度較慢 |
+| `local`（預設） | 本地 Qwen3.5-2B（MLX） | 不需要 API key、免費，但僅限 Apple Silicon 開發機 |
 | `anthropic` | Claude | `llm_keys.json` 填 `anthropic.api_key` |
 | `openai` | GPT | `llm_keys.json` 填 `openai.api_key` |
 | `google` | Gemini | `llm_keys.json` 填 `google.api_key` |
@@ -54,34 +59,91 @@ Embedding 與本地 LLM 模型（第一次啟動會需要下載，依網路速�
 
 ## RAG 引擎切換
 
-`.env` 的 `RAG_ENGINE` 決定檢索用哪套實作，三套功能等價、介面相同，可以隨時切換：
+`.env` 的 `RAG_ENGINE` 決定檢索用哪套實作，功能等價、介面相同，可以隨時切換：
 
-- `custom`：這個專案自己寫的 Chroma + e5 embedding 檢索邏輯（本地 embedding）
-- `llamaindex`：改用 LlamaIndex 的 `VectorStoreIndex` 做索引與檢索（本地 embedding）
+- `llamaindex`：LlamaIndex 的 `VectorStoreIndex` + **pgvector（PostgreSQL）**做索引與檢索（本地 embedding）。
+  支援單一文件的新增/刪除/更新（見下方「知識庫文件管理」），不用整批重建索引。
+  本地 embedding 模型用哪個實作由 `.env` 的 `EMBEDDING_BACKEND` 決定：
+  - `onnx_int8`（預設）：`app/rag/onnx_embedding.py` 直接用 `onnxruntime` 跑 int8 量化版
+    `multilingual-e5-base`（`Teradata/multilingual-e5-base` 這個 repo 轉換的），檔案小、
+    記憶體佔用低，繞過官方的 `optimum` 整合套件（跟 `mlx-lm` 等套件要求的 `transformers`
+    版本硬衝突，無解）。
+  - `huggingface`：原本的 fp32 `HuggingFaceEmbedding`，int8 版本有問題時可以切回這個，
+    不用改程式碼，`.env` 設 `EMBEDDING_BACKEND=huggingface` 即可。
 - `gemini`（或 `online`）：改用線上 Gemini API 做 embedding，不需要 `torch` / `sentence-transformers`
+
+（原本還有一套自製的 `custom` 引擎——Chroma + 手寫檢索，已隨 `llamaindex` 引擎改用 pgvector
+一起退休。）
 
 **不設定 `RAG_ENGINE` 時會自動判斷**（見 `app/config.py` 的 `_has_gemini_key()`）：偵測到
 `GEMINI_API_KEY`（環境變數或 `llm_keys.json` 的 `google.api_key`）就自動用 `gemini`，沒有 key
 就退回 `llamaindex`。本機開發通常不會特別設 `GEMINI_API_KEY`，所以預設會走 `llamaindex`（需要
 額外安裝 `requirements-local-llm.txt`）；GCP 部署會設定 `GEMINI_API_KEY`，所以會自動走 `gemini`，
-不需要另外設定 `RAG_ENGINE`。要強制指定某一套，就在 `.env` 明確寫上 `RAG_ENGINE=custom` 等值覆蓋。
+不需要另外設定 `RAG_ENGINE`。要強制指定某一套，就在 `.env` 明確寫上 `RAG_ENGINE=llamaindex` 等值覆蓋。
 
-三套引擎共用同一套語意拆分規則（`app/rag/product_parser.py`），差別只在「怎麼建索引、怎麼查」，
-所以檢索結果品質應該接近，但各自的距離分數尺度不同，`app/config.py` 的
-`RAG_NO_INFO_THRESHOLDS` 分開設定「查無資訊」的判斷門檻。索引檔也分開存放
-（`chroma_data/` / `llamaindex_data/` / `chroma_online_data/`），互不影響，可以多套都建好、隨時切換不用重建。
+兩套引擎共用同一套語意拆分規則（`app/rag/product_parser.py` / `app/rag/policy_parser.py`），差別
+只在「怎麼建索引、怎麼查」，所以檢索結果品質應該接近，但各自的距離分數尺度不同，`app/config.py` 的
+`RAG_NO_INFO_THRESHOLDS` 分開設定「查無資訊」的判斷門檻。
 
 知識庫檔案都在 `app/data/`：`products_20_quirky.md`（20 項產品文案，用 `product_parser.py` 拆分）
 與 `warranty_policy.md` / `return_policy.md` / `shipping_payment.md` / `faq.md`（保固、退換貨、運送
-付款、常見問題，用 `policy_parser.py` 依 markdown 標題拆分）。`app/documents.py` 的 `get_all_chunks()`
-把兩類文件的 chunk 合併成一份清單，兩套 RAG 引擎都吃同一份。若知識庫內容有更動，兩套引擎的索引
-都要手動刪除對應目錄（`chroma_data/` / `llamaindex_data/`）才會重建。
+付款、常見問題，用 `policy_parser.py` 依 markdown 標題拆分）。這些檔案只在 pgvector table 是空的
+時候（例如第一次接上新資料庫）由 `app/rag/documents_store.py` 的 `seed_if_empty()` 自動灌入一次，
+之後要新增/刪除/更新內容改走 `/api/admin/documents` 系列 API，不用再手動改檔案或清資料重建索引。
+
+### 本機開發：啟動 pgvector
+
+`llamaindex` 引擎需要一個有裝 pgvector extension 的 PostgreSQL，本機開發用 Docker 起一個即可：
+
+```bash
+docker run -d --name rag-pgvector -e POSTGRES_PASSWORD=postgres -p 5432:5432 pgvector/pgvector:pg16
+docker exec rag-pgvector psql -U postgres -c "CREATE DATABASE rag;"
+docker exec rag-pgvector psql -U postgres -d rag -c "CREATE EXTENSION IF NOT EXISTS vector;"
+```
+
+再到 `.env` 設定對應的連線資訊（預設值就是對應上面這個 docker 指令，通常不用改）：
+
+```
+RAG_PG_HOST=localhost
+RAG_PG_PORT=5432
+RAG_PG_DATABASE=rag
+RAG_PG_USER=postgres
+RAG_PG_PASSWORD=postgres
+RAG_PG_TABLE=kb_chunks
+```
+
+`PGVectorStore.from_params()` 預設 `perform_setup=True`，第一次寫入時會自動建立資料表
+（實體資料表名稱是 `data_<RAG_PG_TABLE>`，例如 `data_kb_chunks`，不是 `RAG_PG_TABLE` 本身），
+不用手動建 schema。正式環境改指向 Cloud SQL for PostgreSQL 即可（本次不處理 Cloud SQL 建置）。
+
+## 知識庫文件管理
+
+只有 `RAG_ENGINE=llamaindex` 支援下列 API（其他引擎目前沒有增量更新機制，呼叫會回 400）。
+新增/更新是上傳 `.md` 檔（`multipart/form-data`），不是 JSON body；**目前只支援 `.md`**，
+其他副檔名或非 UTF-8 編碼一律回 400：
+
+| Method | Path | 說明 |
+|---|---|---|
+| `GET` | `/api/admin/documents` | 列出所有文件（`doc_id`/`category`/`chunk_count`/`uploaded_at`/`file_size_bytes`） |
+| `POST` | `/api/admin/documents` | 上傳新文件（multipart：`file` + `category` 欄位），`doc_id` 直接沿用檔名，已存在回 409 |
+| `PUT` | `/api/admin/documents/{doc_id}` | 上傳新版檔案覆蓋內容（multipart：`file` 欄位，分類沿用既有值），查無文件回 404 |
+| `DELETE` | `/api/admin/documents/{doc_id}` | 刪除文件（該 `doc_id` 底下所有 chunk），查無文件回 404 |
+
+「更新」會先比對 SHA256（`content_hash`）：內容跟既有版本一樣就跳過刪除+重新 embed，回應
+`content_changed: false`；有變才刪除該文件舊 chunk、依 `category` 對應的 parser 重新解析插入
+新 chunk（`content_changed: true`）。不另外保存文件原文，pgvector 的 chunk 表（文字 + 向量 +
+metadata，含 `content_hash`/`uploaded_at`/`file_size_bytes`）就是唯一資料來源。
+
+新增或更新時若偵測到**其他** `doc_id` 存了完全一樣的內容（`content_hash` 相同），回應會帶
+`duplicate_of: "<那個 doc_id>"` 提示管理者，但不會擋下這次上傳/更新。
 
 ## 注意事項
 
 - 第一次啟動會需要下載 Embedding 模型與本地 LLM 模型，依網路速度可能需要數分鐘到數十分鐘
-- 向量資料庫（Chroma / LlamaIndex）都已改用持久化模式，服務重啟不需要重新 embed
-- `/api/admin/summary` 目前沒有任何身分驗證，正式上線前必須加上管理者登入/權限檢查
+- `llamaindex` 引擎的向量資料改存在 pgvector（PostgreSQL），服務重啟不需要重新 embed；
+  `online`/`gemini` 引擎仍用本地磁碟 persist（`chroma_online_data/`）
+- `/api/admin/summary`、`/api/admin/documents` 系列目前都沒有任何身分驗證，正式上線前必須加上
+  管理者登入/權限檢查
 
 ## API
 

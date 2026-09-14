@@ -1,6 +1,6 @@
 """
 專案設定值。讀取 .env（沒有的話用預設值），對應：
-- EMBEDDING_MODEL_NAME / LLM_MODEL_NAME: 對應提案中「Embedding 模型」與「生成模型」的技術選型
+- EMBEDDING_MODEL_NAME / MLX_LLM_MODEL_NAME: 對應提案中「Embedding 模型」與「生成模型」的技術選型
 """
 import os
 import json
@@ -26,7 +26,13 @@ def _has_gemini_key() -> bool:
 
 class Settings:
     EMBEDDING_MODEL_NAME: str = "intfloat/multilingual-e5-base"
-    LLM_MODEL_NAME: str = "openbmb/MiniCPM5-2B"
+    # "onnx_int8"（預設）：繞過 optimum，用 onnxruntime 跑 int8 量化版本，檔案小、記憶體佔用低
+    # （見 app/rag/onnx_embedding.py）；"huggingface"：原本的 fp32 HuggingFaceEmbedding，
+    # 遇到 int8 版本有問題時可以用這個切回去，不用改程式碼。
+    EMBEDDING_BACKEND: str = os.getenv("EMBEDDING_BACKEND", "onnx_int8")
+    # provider=local 固定用這顆，只能在 Apple Silicon（MLX）上跑，見 app/llm.py 的說明；
+    # 正式環境（Cloud Run）固定用線上 provider，不會用到這個設定值。
+    MLX_LLM_MODEL_NAME: str = os.getenv("MLX_LLM_MODEL_NAME", "mlx-community/Qwen3.5-2B-4bit")
 
     TOP_K: int = 3
 
@@ -61,12 +67,20 @@ class Settings:
     # 兩套引擎介面相同，見 app/rag/engine.py；語意拆分規則兩套共用（app/rag/product_parser.py）。
     RAG_ENGINE: str = os.getenv("RAG_ENGINE") or ("gemini" if _has_gemini_key() else "llamaindex")
 
-    # LlamaIndex 引擎與 Online 引擎的索引持久化目錄，跟 custom 引擎的 CHROMA_PERSIST_DIR 分開存放
-    LLAMAINDEX_PERSIST_DIR: str = os.getenv("LLAMAINDEX_PERSIST_DIR", "./llamaindex_data")
+    # Online 引擎的索引持久化目錄；llamaindex 引擎改用 pgvector（見下方 RAG_PG_*），不再用本地磁碟 persist
     CHROMA_ONLINE_PERSIST_DIR: str = os.getenv("CHROMA_ONLINE_PERSIST_DIR", "./chroma_online_data")
 
+    # llamaindex 引擎的 pgvector（PostgreSQL）連線設定；本機開發指向 docker 起的 pgvector，
+    # 正式環境改指向 Cloud SQL for PostgreSQL（本次不處理 Cloud SQL 建置，只確保連線設定可切換）
+    RAG_PG_HOST: str = os.getenv("RAG_PG_HOST", "localhost")
+    RAG_PG_PORT: int = int(os.getenv("RAG_PG_PORT", "5432"))
+    RAG_PG_DATABASE: str = os.getenv("RAG_PG_DATABASE", "rag")
+    RAG_PG_USER: str = os.getenv("RAG_PG_USER", "postgres")
+    RAG_PG_PASSWORD: str = os.getenv("RAG_PG_PASSWORD", "postgres")
+    RAG_PG_TABLE: str = os.getenv("RAG_PG_TABLE", "kb_chunks")
+
     # 檢索引擎的「有沒有查到答案」距離門檻分開設定，因為分數尺度不同、不能共用同一個數字
-    RAG_NO_INFO_THRESHOLDS: dict = {"custom": 0.30, "llamaindex": 0.30, "online": 0.90, "gemini": 0.90}
+    RAG_NO_INFO_THRESHOLDS: dict = {"llamaindex": 0.30, "online": 0.90, "gemini": 0.90}
 
 
 settings = Settings()
