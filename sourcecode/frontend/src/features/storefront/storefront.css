@@ -72,6 +72,15 @@
 .store-filters button:hover { border-color: var(--store-primary); }
 .store-filters button.is-active { border-color: var(--store-primary); background: var(--store-primary); color: var(--store-on-primary); }
 .store-product-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); max-width: 1280px; margin: 0 auto; gap: 24px; }
+.store-pagination { display: flex; max-width: 1280px; margin: 36px auto 0; align-items: center; justify-content: center; gap: 8px; }
+.store-pagination-desktop { display: contents; }
+.store-pagination-mobile { display: none; }
+.store-pagination button { display: inline-grid; min-width: 42px; min-height: 42px; place-items: center; padding: 0 10px; border: 1px solid var(--store-border); border-radius: 10px; background: var(--store-card); color: var(--store-text); cursor: pointer; font: inherit; font-weight: 800; }
+.store-pagination button:hover:not(:disabled) { opacity: .8; }
+.store-pagination button.is-active { border-color: var(--store-primary); background: var(--store-primary); color: var(--store-on-primary); }
+.store-pagination button:disabled { cursor: not-allowed; opacity: .35; }
+.store-pagination-ellipsis { display: inline-grid; min-width: 42px; min-height: 42px; place-items: center; color: var(--store-muted); font-weight: 800; letter-spacing: .15em; }
+.store-pagination-size select { min-height: 42px; padding: 0 12px; border: 1px solid var(--store-border); border-radius: 10px; background: var(--store-card); color: var(--store-text); font: inherit; font-weight: 700; }
 .store-products-feedback { display: grid; min-height: 180px; max-width: 1280px; margin: 0 auto; place-items: center; align-content: center; gap: 14px; color: var(--store-muted); text-align: center; }
 .store-products-feedback p { margin: 0; }
 .store-products-feedback.is-error { color: var(--store-danger); }
@@ -186,6 +195,11 @@
   .store-hero-badge { width: 112px; min-height: 64px; font-size: 11px; }
   .store-products-section { padding: 62px 16px; border-radius: 28px 28px 0 0; }
   .store-product-grid { grid-template-columns: 1fr; gap: 18px; }
+  .store-pagination { gap: 5px; }
+  .store-pagination-desktop { display: none; }
+  .store-pagination-mobile { display: contents; }
+  .store-pagination button { min-width: 38px; min-height: 38px; padding: 0 8px; }
+  .store-pagination-ellipsis { min-width: 30px; min-height: 38px; }
   .store-product-card { display: block; }
   .store-product-image { height: auto; aspect-ratio: 256 / 190; border-right: 0; border-bottom: 1px solid var(--store-border); }
   .store-product-body { min-height: 235px; padding: 18px; }

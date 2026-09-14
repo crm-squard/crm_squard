@@ -3,6 +3,8 @@ import {
   ArrowRight,
   Check,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   Minus,
   PackageCheck,
   Plus,
@@ -14,7 +16,7 @@ import {
 } from "lucide-react";
 import { submitCheckout } from "./orderApi";
 import { MOCK_CUSTOMERS } from "./mockCustomers";
-import { fetchProductPage } from "./productApi";
+import { fetchProductCount, fetchProductPage } from "./productApi";
 import type { CheckoutCustomer, Product } from "./types";
 import { useCart } from "./useCart";
 import "./storefront.css";
@@ -30,7 +32,8 @@ const PAYMENT_LABELS = {
   Cash: "現金付款",
 } as const;
 const PAYMENT_METHODS = Object.keys(PAYMENT_LABELS) as CheckoutCustomer["PaymentMethod"][];
-const PRODUCT_COUNT = 20;
+const PRODUCT_PAGE_SIZE_OPTIONS = [10, 20, 30, 40, 50] as const;
+const DEFAULT_PRODUCT_PAGE_SIZE = 20;
 
 function getProductImageStyle(imageUrl: string): CSSProperties {
   return imageUrl ? { backgroundImage: `url("${imageUrl}")` } : {};
@@ -40,6 +43,18 @@ function isPurchasableProduct(product: Product): boolean {
   return Boolean(product.imageUrl)
     && product.originalPrice !== null
     && product.realPrice !== null;
+}
+
+function getPaginationItems(currentPage: number, totalPages: number): Array<number | "start-ellipsis" | "end-ellipsis"> {
+  if (totalPages <= 7) return Array.from({ length: totalPages }, (_, index) => index + 1);
+  if (currentPage <= 4) return [1, 2, 3, 4, 5, "end-ellipsis", totalPages];
+  if (currentPage >= totalPages - 3) return [1, "start-ellipsis", totalPages - 4, totalPages - 3, totalPages - 2, totalPages - 1, totalPages];
+  return [1, "start-ellipsis", currentPage - 1, currentPage, currentPage + 1, "end-ellipsis", totalPages];
+}
+
+function getMobilePageNumbers(currentPage: number, totalPages: number): number[] {
+  const startPage = Math.max(1, Math.min(currentPage - 1, totalPages - 2));
+  return Array.from({ length: Math.min(3, totalPages) }, (_, index) => startPage + index);
 }
 
 function ProductCard({ product, onAdd }: { product: Product; onAdd: (product: Product) => void }) {
@@ -88,6 +103,10 @@ export default function Storefront() {
   const [isProductsLoading, setIsProductsLoading] = useState(true);
   const [productsError, setProductsError] = useState("");
   const [productRequestVersion, setProductRequestVersion] = useState(0);
+  const [currentProductPage, setCurrentProductPage] = useState(1);
+  const [productPageSize, setProductPageSize] = useState(DEFAULT_PRODUCT_PAGE_SIZE);
+  const [currentProductPageCount, setCurrentProductPageCount] = useState(0);
+  const [totalProductCount, setTotalProductCount] = useState<number | null>(null);
   const statusMessageTimerRef = useRef<number | null>(null);
   const { items, addItem, updateQuantity, clearCart, itemCount, total } = useCart();
 
@@ -95,6 +114,15 @@ export default function Storefront() {
   const visibleProducts = useMemo(() => activeCategory === "all"
     ? products
     : products.filter((product) => product.category === activeCategory), [activeCategory, products]);
+  const totalProductPages = totalProductCount === null ? 0 : Math.ceil(totalProductCount / productPageSize);
+  const paginationItems = useMemo(
+    () => getPaginationItems(currentProductPage, totalProductPages),
+    [currentProductPage, totalProductPages],
+  );
+  const mobilePageNumbers = useMemo(
+    () => getMobilePageNumbers(currentProductPage, totalProductPages),
+    [currentProductPage, totalProductPages],
+  );
   const selectedCustomer = useMemo(
     () => MOCK_CUSTOMERS.find((customer) => String(customer.CustomerID) === selectedCustomerId) ?? MOCK_CUSTOMERS[0],
     [selectedCustomerId],
@@ -109,9 +137,16 @@ export default function Storefront() {
     setIsProductsLoading(true);
     setProductsError("");
 
-    fetchProductPage(1, PRODUCT_COUNT, controller.signal)
-      .then((response) => {
+    const productPageRequest = fetchProductPage(currentProductPage, productPageSize, controller.signal);
+    const productCountRequest = totalProductCount === null
+      ? fetchProductCount(controller.signal)
+      : Promise.resolve(null);
+
+    Promise.all([productPageRequest, productCountRequest])
+      .then(([response, productCount]) => {
         setProducts(response.products);
+        setCurrentProductPageCount(response.count);
+        if (productCount !== null) setTotalProductCount(productCount);
       })
       .catch((error: unknown) => {
         if (error instanceof DOMException && error.name === "AbortError") return;
@@ -122,7 +157,7 @@ export default function Storefront() {
       });
 
     return () => controller.abort();
-  }, [productRequestVersion]);
+  }, [currentProductPage, productPageSize, productRequestVersion]);
 
   useEffect(() => () => {
     if (statusMessageTimerRef.current !== null) window.clearTimeout(statusMessageTimerRef.current);
@@ -154,6 +189,11 @@ export default function Storefront() {
     if (!isPurchasableProduct(product)) return;
     addItem(product);
     showStatusMessage(`已將${product.productNameZH}加入購物車`);
+  }
+
+  function handleProductPageSizeChange(pageSize: number) {
+    setProductPageSize(pageSize);
+    setCurrentProductPage(1);
   }
 
   function openCheckout() {
@@ -229,7 +269,7 @@ export default function Storefront() {
             <span className="store-shape store-shape-one" />
             <span className="store-shape store-shape-two" />
             <div className="store-hero-stat">
-              <b>{PRODUCT_COUNT}</b>
+              <b>{totalProductCount ?? "—"}</b>
               <span>件生活選物</span>
             </div>
             <div className="store-hero-badge">GOOD CHOICE<br />GOOD DAY</div>
@@ -242,7 +282,7 @@ export default function Storefront() {
               <p className="store-kicker">SHOP THE COLLECTION</p>
               <h2 id="products-title">全部商品</h2>
             </div>
-            <p>查看商品價格並加入購物車。</p>
+            <p aria-live="polite">本頁顯示 {currentProductPageCount} 筆商品，可查看價格並加入購物車。</p>
           </div>
           <div className="store-filters" aria-label="商品分類">
             {categories.map((category) => (
@@ -272,6 +312,61 @@ export default function Storefront() {
                 ))}
               </div>
               {!visibleProducts.length && <div className="store-products-feedback">此分類目前沒有商品。</div>}
+              {!!totalProductPages && (
+                <nav className="store-pagination" aria-label="商品分頁">
+                  <button
+                    type="button"
+                    aria-label="上一頁"
+                    disabled={currentProductPage === 1}
+                    onClick={() => setCurrentProductPage((page) => page - 1)}
+                  >
+                    <ChevronLeft size={18} aria-hidden="true" />
+                  </button>
+                  <span className="store-pagination-desktop">
+                    {paginationItems.map((item) => typeof item === "number" ? (
+                      <button
+                        key={item}
+                        type="button"
+                        className={item === currentProductPage ? "is-active" : ""}
+                        aria-current={item === currentProductPage ? "page" : undefined}
+                        onClick={() => setCurrentProductPage(item)}
+                      >
+                        {item}
+                      </button>
+                    ) : <span className="store-pagination-ellipsis" key={item} aria-hidden="true">•••</span>)}
+                  </span>
+                  <span className="store-pagination-mobile">
+                    {mobilePageNumbers.map((page) => (
+                      <button
+                        key={page}
+                        type="button"
+                        className={page === currentProductPage ? "is-active" : ""}
+                        aria-current={page === currentProductPage ? "page" : undefined}
+                        onClick={() => setCurrentProductPage(page)}
+                      >
+                        {page}
+                      </button>
+                    ))}
+                  </span>
+                  <button
+                    type="button"
+                    aria-label="下一頁"
+                    disabled={currentProductPage === totalProductPages}
+                    onClick={() => setCurrentProductPage((page) => page + 1)}
+                  >
+                    <ChevronRight size={18} aria-hidden="true" />
+                  </button>
+                  <label className="store-pagination-size" htmlFor="product-page-size">
+                    <select
+                      id="product-page-size"
+                      value={productPageSize}
+                      onChange={(event) => handleProductPageSizeChange(Number(event.target.value))}
+                    >
+                      {PRODUCT_PAGE_SIZE_OPTIONS.map((pageSize) => <option key={pageSize} value={pageSize}>{pageSize} / 頁</option>)}
+                    </select>
+                  </label>
+                </nav>
+              )}
             </>
           )}
         </section>

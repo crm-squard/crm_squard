@@ -22,6 +22,10 @@ interface ProductApiResponse {
   products: ProductApiItem[];
 }
 
+interface ProductCountApiResponse {
+  count: number;
+}
+
 export class ProductCatalogError extends Error {}
 
 function toPrice(value: string | number | null | undefined): number | null {
@@ -32,10 +36,11 @@ function toPrice(value: string | number | null | undefined): number | null {
   return Number.isFinite(price) && price >= 0 ? price : null;
 }
 
-function toStorefrontProduct(product: ProductApiItem): Product {
+function toStorefrontProduct(product: ProductApiItem): Product | null {
   const productId = Number(product.ProductID);
   if (!Number.isSafeInteger(productId)) {
-    throw new ProductCatalogError("商品資料缺少有效的 ProductID。");
+    // 購物車與訂單需要數字 ProductID；略過單筆異常資料，避免其餘商品整頁無法瀏覽。
+    return null;
   }
 
   return {
@@ -65,10 +70,30 @@ export async function fetchProductPage(
   }
 
   const payload = await response.json() as ProductApiResponse;
+  const products = payload.products.flatMap((product) => {
+    const storefrontProduct = toStorefrontProduct(product);
+    return storefrontProduct === null ? [] : [storefrontProduct];
+  });
+
   return {
     pidx: payload.pidx,
     pno: payload.pno,
-    count: payload.count,
-    products: payload.products.map(toStorefrontProduct),
+    count: products.length,
+    products,
   };
+}
+
+export async function fetchProductCount(signal?: AbortSignal): Promise<number> {
+  const response = await fetch(`${PRODUCT_API_BASE_URL}/api/v1/Product/count`, { signal });
+
+  if (!response.ok) {
+    throw new ProductCatalogError(`商品總數載入失敗（${response.status}）。請稍後重試。`);
+  }
+
+  const payload = await response.json() as ProductCountApiResponse;
+  if (!Number.isSafeInteger(payload.count) || payload.count < 0) {
+    throw new ProductCatalogError("商品總數資料格式錯誤。請稍後重試。");
+  }
+
+  return payload.count;
 }
