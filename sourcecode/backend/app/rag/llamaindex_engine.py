@@ -26,12 +26,29 @@ EMBED_DIM = 768
 
 
 def _get_embed_model():
+    # EMBEDDING_BACKEND=onnx_int8（預設）：繞過 llama-index 官方的 optimum 整合套件
+    # （跟這個專案其他套件的 transformers 版本要求硬衝突，無解，見 onnx_embedding.py 開頭
+    # 說明），改用 onnxruntime 直接跑 int8 量化版本，檔案小、記憶體佔用低，且 onnxruntime
+    # 本身沒有 MPS 執行緒安全的問題（下面 HuggingFaceEmbedding 那個坑不適用）。
+    if settings.EMBEDDING_BACKEND == "onnx_int8":
+        from app.rag.onnx_embedding import OnnxInt8Embedding
+
+        return OnnxInt8Embedding()
+
+    # EMBEDDING_BACKEND=huggingface：原本的 fp32 版本，保留當作 int8 版本出問題時的退路。
     # e5 系列模型需要 "query: " / "passage: " 前綴才能發揮非對稱檢索的效果，
     # HuggingFaceEmbedding 的 query_instruction/text_instruction 剛好對應這兩個前綴。
+    #
+    # device 強制指定 "cpu"：不指定時 torch 在 Apple Silicon 上會自動選用 MPS（GPU）後端，
+    # 但 PyTorch 的 MPS 後端不是執行緒安全的——FastAPI 用 threadpool 並行處理多個請求時，
+    # 兩個請求同時呼叫 embedding 會讓 MPS 內部共用的 MetalShaderLibrary 雜湊表在多執行緒下
+    # 被同時寫入而損毀，導致整個 process SIGSEGV 直接崩潰（曾在批次上傳測試中重現）。
+    # 這個模型不大，CPU 推論速度可接受，用 CPU 換取穩定性。
     return HuggingFaceEmbedding(
         model_name=settings.EMBEDDING_MODEL_NAME,
         query_instruction="query: ",
         text_instruction="passage: ",
+        device="cpu",
     )
 
 

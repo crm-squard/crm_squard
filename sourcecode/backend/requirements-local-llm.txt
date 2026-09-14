@@ -22,6 +22,13 @@ sentence-transformers>=3.0.1
 llama-index-core==0.11.17
 llama-index-embeddings-huggingface==0.3.1
 
+# EMBEDDING_BACKEND=onnx_int8（預設，見 app/rag/onnx_embedding.py）用 onnxruntime 直接跑
+# int8 量化模型，繞過官方的 optimum 整合套件（跟 transformers 版本硬衝突，見該檔案開頭
+# 說明）。requirements.txt 的 chromadb 本來就會間接裝到 onnxruntime，這裡明確宣告是因為
+# 我們現在直接依賴它做核心功能，不該只靠隱性的間接依賴（chromadb 之後升級版本可能不再需要
+# onnxruntime，屆時這裡沒宣告的話會直接壞掉）。
+onnxruntime==1.29.0
+
 # llamaindex 引擎的儲存後端改用 pgvector（PostgreSQL），取代本地磁碟 persist，
 # 換取 LlamaIndex 原生的 insert/delete_ref_doc 增量更新能力（見 app/rag/documents_store.py）。
 # 版本相容區間：llama-index-vector-stores-postgres==0.2.6 要求 llama-index-core>=0.11.0,<0.12.0

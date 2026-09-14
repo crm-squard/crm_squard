@@ -26,6 +26,10 @@ def _has_gemini_key() -> bool:
 
 class Settings:
     EMBEDDING_MODEL_NAME: str = "intfloat/multilingual-e5-base"
+    # "onnx_int8"（預設）：繞過 optimum，用 onnxruntime 跑 int8 量化版本，檔案小、記憶體佔用低
+    # （見 app/rag/onnx_embedding.py）；"huggingface"：原本的 fp32 HuggingFaceEmbedding，
+    # 遇到 int8 版本有問題時可以用這個切回去，不用改程式碼。
+    EMBEDDING_BACKEND: str = os.getenv("EMBEDDING_BACKEND", "onnx_int8")
     # provider=local 固定用這顆，只能在 Apple Silicon（MLX）上跑，見 app/llm.py 的說明；
     # 正式環境（Cloud Run）固定用線上 provider，不會用到這個設定值。
     MLX_LLM_MODEL_NAME: str = os.getenv("MLX_LLM_MODEL_NAME", "mlx-community/Qwen3.5-2B-4bit")

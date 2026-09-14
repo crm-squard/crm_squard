@@ -63,6 +63,13 @@ Embedding 與本地 LLM 模型（第一次啟動會需要下載，依網路速�
 
 - `llamaindex`：LlamaIndex 的 `VectorStoreIndex` + **pgvector（PostgreSQL）**做索引與檢索（本地 embedding）。
   支援單一文件的新增/刪除/更新（見下方「知識庫文件管理」），不用整批重建索引。
+  本地 embedding 模型用哪個實作由 `.env` 的 `EMBEDDING_BACKEND` 決定：
+  - `onnx_int8`（預設）：`app/rag/onnx_embedding.py` 直接用 `onnxruntime` 跑 int8 量化版
+    `multilingual-e5-base`（`Teradata/multilingual-e5-base` 這個 repo 轉換的），檔案小、
+    記憶體佔用低，繞過官方的 `optimum` 整合套件（跟 `mlx-lm` 等套件要求的 `transformers`
+    版本硬衝突，無解）。
+  - `huggingface`：原本的 fp32 `HuggingFaceEmbedding`，int8 版本有問題時可以切回這個，
+    不用改程式碼，`.env` 設 `EMBEDDING_BACKEND=huggingface` 即可。
 - `gemini`（或 `online`）：改用線上 Gemini API 做 embedding，不需要 `torch` / `sentence-transformers`
 
 （原本還有一套自製的 `custom` 引擎——Chroma + 手寫檢索，已隨 `llamaindex` 引擎改用 pgvector
