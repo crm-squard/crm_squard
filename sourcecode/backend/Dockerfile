@@ -14,15 +14,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# 複製依賴檔案並安裝 Python 套件
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# 複製依賴檔案並安裝 Python 套件；RAG 只剩 llamaindex 引擎（需要 pgvector），
+# requirements-local-llm.txt 不再是選用依賴，正式環境也要裝
+COPY requirements.txt requirements-local-llm.txt .
+RUN pip install --no-cache-dir -r requirements.txt -r requirements-local-llm.txt
 
 # 複製後端程式碼
 COPY . .
-
-# 建立 SQLite DB & Chroma 儲存目錄
-RUN mkdir -p /app/chroma_data /app/chroma_online_data
 
 # 暴露埠號 (Cloud Run 預設為 8000)
 EXPOSE 8000

@@ -2,7 +2,7 @@
 「LlamaIndex」RAG 引擎：用 LlamaIndex 的 VectorStoreIndex + pgvector（PostgreSQL）取代原本
 的本地磁碟 persist，換取 LlamaIndex 原生的 insert_nodes/delete_ref_doc 增量更新能力，讓
 app/rag/documents_store.py 能做單一文件的新增/刪除/更新，不用整批重建索引。
-跟 online_engine.py 提供同一種介面 retrieve(query, top_k)，方便用 RAG_ENGINE 設定切換。
+提供統一檢索介面 retrieve(query, top_k)，見 app/rag/engine.py。
 
 語意拆分（產品的介紹/規格/彩蛋、政策文件的各小節）沿用 app/rag/product_parser.py /
 app/rag/policy_parser.py 的純函式規則，「怎麼切」是文件格式特有的知識，跟「用哪套框架做
@@ -89,9 +89,7 @@ class LlamaIndexRetriever:
         for n in nodes:
             meta = n.node.metadata
             # LlamaIndex 的 score 是「相似度」（越高越相關），統一轉成 distance（越低越相關），
-            # 讓 agent.py 的 NO_INFO_DISTANCE_THRESHOLD 判斷邏輯跟 online_engine.py 共用；
-            # 但兩套引擎的分數尺度本來就不同，門檻值不能直接共用同一個數字
-            # （見 app/config.py 的 RAG_NO_INFO_THRESHOLDS）。
+            # 給 agent.py 的 RAG_NO_INFO_THRESHOLD 判斷邏輯使用（見 app/config.py）。
             score = n.score if n.score is not None else 0.0
             retrieved.append({
                 "text": n.node.get_content(),

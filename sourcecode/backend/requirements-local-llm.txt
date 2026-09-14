@@ -1,7 +1,6 @@
-# 選用依賴：只有需要「本地 RAG 引擎」（RAG_ENGINE=custom / llamaindex，embedding 用）
-# 時才需要安裝。provider=local（本地 LLM）現在改用 MLX（見 requirements-mlx.txt），
-# 不再需要這份檔案裡的 torch/transformers 跑生成模型。
-# GCP（線上 API only，RAG_ENGINE=gemini）部署不需要這份，裝 requirements.txt 就夠。
+# RAG 只剩 llamaindex 一套引擎，這份不再是選用依賴，任何環境（包含 GCP 正式環境）都要裝。
+# provider=local（本地 LLM）現在改用 MLX（見 requirements-mlx.txt），不再需要這份檔案裡的
+# torch/transformers 跑生成模型。
 #
 # 安裝：pip install -r requirements.txt -r requirements-local-llm.txt
 
@@ -15,18 +14,17 @@
 # 輸出簡體字
 opencc-python-reimplemented==0.1.7
 
-# RAG_ENGINE=custom 用（app/rag/embedding.py）
+# 已退休的 custom 引擎遺留依賴（app/rag/embedding.py 目前沒有任何引擎呼叫它，保留是因為
+# llama-index-embeddings-huggingface 的 fp32 備援路徑仍間接依賴 sentence-transformers）
 sentence-transformers>=3.0.1
 
-# RAG_ENGINE=llamaindex 用（app/rag/llamaindex_engine.py）
+# llamaindex 引擎用（app/rag/llamaindex_engine.py）
 llama-index-core==0.11.17
 llama-index-embeddings-huggingface==0.3.1
 
 # EMBEDDING_BACKEND=onnx_int8（預設，見 app/rag/onnx_embedding.py）用 onnxruntime 直接跑
 # int8 量化模型，繞過官方的 optimum 整合套件（跟 transformers 版本硬衝突，見該檔案開頭
-# 說明）。requirements.txt 的 chromadb 本來就會間接裝到 onnxruntime，這裡明確宣告是因為
-# 我們現在直接依賴它做核心功能，不該只靠隱性的間接依賴（chromadb 之後升級版本可能不再需要
-# onnxruntime，屆時這裡沒宣告的話會直接壞掉）。
+# 說明），這裡明確宣告是因為核心功能直接依賴它，不該只靠隱性的間接依賴。
 onnxruntime==1.29.0
 
 # llamaindex 引擎的儲存後端改用 pgvector（PostgreSQL），取代本地磁碟 persist，
