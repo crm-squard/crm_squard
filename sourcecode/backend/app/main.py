@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 
 from typing import Literal
 
-from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
@@ -30,6 +30,8 @@ from app.schemas import (
     PrecheckResponse,
     PrecheckResultItem,
     ProviderInfo,
+    WidgetConfig,
+    WidgetTheme,
 )
 from app.agent import get_agent
 from app.orders import get_order, init_db as init_orders_db
@@ -47,6 +49,7 @@ PROVIDER_LABELS = {
 }
 
 DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+MAX_CLIENT_ID_LENGTH = 128
 
 
 @asynccontextmanager
@@ -93,6 +96,16 @@ def _check_rate_limit(client_ip: str):
     timestamps.append(now)
 
 
+def _require_client_id(
+    x_client_id: str | None = Header(default=None, alias="X-Client-ID"),
+) -> str:
+    """先固定企業客戶識別介面；唯一性與啟停狀態由未來客戶管理服務驗證。"""
+    client_id = x_client_id.strip() if x_client_id else ""
+    if not client_id or len(client_id) > MAX_CLIENT_ID_LENGTH:
+        raise HTTPException(status_code=422, detail="X-Client-ID 必填，且長度不得超過 128 個字元。")
+    return client_id
+
+
 @app.get("/health")
 def health():
     return {"status": "ok"}
@@ -106,12 +119,28 @@ def warmup():
 
 
 @app.get("/api/providers", response_model=list[ProviderInfo])
-def list_providers():
+def list_providers(_client_id: str = Depends(_require_client_id)):
     """前端聊天視窗用來畫「選擇回答模型」下拉選單，含每個 provider 有沒有設定 key。"""
     return [
         ProviderInfo(id=pid, label=label, configured=is_configured(pid))
         for pid, label in PROVIDER_LABELS.items()
     ]
+
+
+@app.get("/api/widget/config", response_model=WidgetConfig)
+def widget_config(_client_id: str = Depends(_require_client_id)):
+    """MVP 先提供共用樣式；之後可在此依 client ID 讀取客戶品牌設定。"""
+    return WidgetConfig(
+        brand_name="線上客服",
+        welcome_message="您好，我是線上客服，可以問我任何產品的規格、特色，或是輸入訂單編號查詢配送狀態喔。",
+        logo_url=None,
+        theme=WidgetTheme(
+            primary_color="#315b7d",
+            surface_color="#ffffff",
+            text_color="#17212b",
+            border_radius=20,
+        ),
+    )
 
 
 @app.get("/api/admin/summary", response_model=DailySummaryResponse)
@@ -280,7 +309,7 @@ def delete_document(path: str):
 
 
 @app.post("/api/chat", response_model=ChatResponse)
-async def chat(req: ChatRequest, request: Request):
+async def chat(req: ChatRequest, request: Request, _client_id: str = Depends(_require_client_id)):
     client_ip = request.client.host if request.client else "unknown"
     _check_rate_limit(client_ip)
 

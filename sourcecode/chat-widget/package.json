@@ -1,0 +1,24 @@
+{
+  "name": "chat-widget",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "build": "npm run typecheck && vite build",
+    "inject:target": "node scripts/inject-target.mjs",
+    "preview": "npm run build && npm run inject:target && vite preview --host 0.0.0.0 --port 5175",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "lucide-react": "^0.383.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.31",
+    "@types/react-dom": "^18.3.7",
+    "@vitejs/plugin-react": "^4.2.1",
+    "typescript": "^5.9.2",
+    "vite": "^5.2.0"
+  }
+}

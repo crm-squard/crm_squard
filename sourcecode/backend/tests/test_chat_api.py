@@ -10,8 +10,11 @@
 import pytest
 from fastapi.testclient import TestClient
 
+from app.config import settings
 from app.main import app, _request_log
 from tests.conftest import SEED_ORDERS, NON_EXISTENT_ORDER_CODE
+
+CLIENT_HEADERS = {"X-Client-ID": "client_test"}
 
 
 @pytest.fixture(autouse=True)
@@ -32,7 +35,11 @@ def test_chat_with_valid_order_code_returns_order_card(client):
     code = "A12345"
     expected = SEED_ORDERS[code]
 
-    resp = client.post("/api/chat", json={"message": code, "history": [], "provider": "google"})
+    resp = client.post(
+        "/api/chat",
+        json={"message": code, "history": [], "provider": "google"},
+        headers=CLIENT_HEADERS,
+    )
 
     assert resp.status_code == 200
     body = resp.json()
@@ -51,6 +58,7 @@ def test_chat_with_order_keyword_and_valid_code(client):
     resp = client.post(
         "/api/chat",
         json={"message": f"請幫我查一下訂單 {code} 的狀態", "history": [], "provider": "google"},
+        headers=CLIENT_HEADERS,
     )
 
     assert resp.status_code == 200
@@ -70,6 +78,7 @@ def test_chat_with_unknown_order_code_returns_text_message(client):
     resp = client.post(
         "/api/chat",
         json={"message": NON_EXISTENT_ORDER_CODE, "history": [], "provider": "google"},
+        headers=CLIENT_HEADERS,
     )
 
     assert resp.status_code == 200
@@ -85,9 +94,60 @@ def test_chat_with_order_keyword_but_no_code_prompts_for_code(client):
     resp = client.post(
         "/api/chat",
         json={"message": "我想查訂單狀態", "history": [], "provider": "google"},
+        headers=CLIENT_HEADERS,
     )
 
     assert resp.status_code == 200
     body = resp.json()
     assert body["type"] == "text"
     assert "訂單編號" in body["text"]
+
+
+@pytest.mark.parametrize("path", ["/api/providers", "/api/widget/config"])
+def test_widget_get_endpoints_require_client_id(client, path):
+    resp = client.get(path)
+
+    assert resp.status_code == 422
+    assert "X-Client-ID" in resp.json()["detail"]
+
+
+def test_chat_rejects_too_long_client_id(client):
+    resp = client.post(
+        "/api/chat",
+        json={"message": "我想查訂單狀態", "history": [], "provider": "google"},
+        headers={"X-Client-ID": "x" * 129},
+    )
+
+    assert resp.status_code == 422
+
+
+def test_widget_config_returns_customizable_defaults(client):
+    resp = client.get("/api/widget/config", headers=CLIENT_HEADERS)
+
+    assert resp.status_code == 200
+    assert resp.json() == {
+        "brandName": "線上客服",
+        "welcomeMessage": "您好，我是線上客服，可以問我任何產品的規格、特色，或是輸入訂單編號查詢配送狀態喔。",
+        "logoUrl": None,
+        "theme": {
+            "primaryColor": "#315b7d",
+            "surfaceColor": "#ffffff",
+            "textColor": "#17212b",
+            "borderRadius": 20,
+        },
+    }
+
+
+def test_widget_client_header_is_allowed_by_cors(client):
+    allowed_origin = "https://example.com" if "*" in settings.CORS_ORIGINS else settings.CORS_ORIGINS[0]
+    resp = client.options(
+        "/api/chat",
+        headers={
+            "Origin": allowed_origin,
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "Content-Type,X-Client-ID",
+        },
+    )
+
+    assert resp.status_code == 200
+    assert "x-client-id" in resp.headers["access-control-allow-headers"].lower()
