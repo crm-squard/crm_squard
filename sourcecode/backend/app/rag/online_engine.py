@@ -5,6 +5,7 @@
     retrieve(query: str, top_k: int) -> [{"text", "source", "topic", "category", "distance"}]
 """
 import os
+# pyrefly: ignore [missing-import]
 import chromadb
 from app.config import settings
 from app.documents import get_all_chunks

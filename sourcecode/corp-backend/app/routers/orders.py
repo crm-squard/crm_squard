@@ -1,3 +1,5 @@
+import random
+import time
 from typing import Optional
 from fastapi import APIRouter, HTTPException, Query, status
 
@@ -15,6 +17,11 @@ router = APIRouter(prefix="/Order", tags=["Firebase Orders Operations"])
 COLLECTION_ORDERS = "Order"
 
 
+import logging
+
+logger = logging.getLogger("corp-backend.orders")
+
+
 @router.post(
     "",
     response_model=OrderResponse,
@@ -22,15 +29,26 @@ COLLECTION_ORDERS = "Order"
     summary="新增 Firebase 訂單資料",
     responses={500: {"model": ErrorDetail}}
 )
+@router.post(
+    "/",
+    response_model=OrderResponse,
+    status_code=status.HTTP_201_CREATED,
+    include_in_schema=False
+)
 def create_order(payload: OrderCreate):
     """
     寫入一筆新的訂單至 Firebase Firestore `Order` 集合中。
-    - **NewOrderID** 或 **OrderID** 會作為 Firestore 文件 ID。
+    - **doc_id** 生成規則：10 位 Unix Timestamp 秒數 + 3 位隨機數字 (共 13 位數字)。
     """
     try:
-        # 優先使用 NewOrderID 或 OrderID 作為 Doc ID
-        doc_id = payload.NewOrderID or str(payload.OrderID)
+        # 生成 10 位數 Unix 時間戳記與 3 位數隨機號碼 (例如: 1757409477832)
+        timestamp_part = int(time.time())
+        random_part = random.randint(100, 999)
+        doc_id = f"ORD-{timestamp_part}{random_part}"
+
         order_dict = payload.model_dump()
+        if not order_dict.get("NewOrderID"):
+            order_dict["NewOrderID"] = doc_id
 
         res = crud.create_document(
             collection_name=COLLECTION_ORDERS,
@@ -52,6 +70,11 @@ def create_order(payload: OrderCreate):
     summary="取得 Firebase 訂單列表",
     responses={500: {"model": ErrorDetail}}
 )
+@router.get(
+    "/",
+    response_model=OrderListResponse,
+    include_in_schema=False
+)
 def list_orders(
     limit: int = Query(100, ge=1, le=1000, description="查詢筆數限制 (1-1000)"),
     order_by: Optional[str] = Query(None, description="排序欄位 (例如: OrderDate 或 OrderID)")
@@ -66,10 +89,15 @@ def list_orders(
             order_by=order_by
         )
 
-        orders_list = [
-            OrderResponse(id=doc.id, **doc.data)
-            for doc in raw_res.documents
-        ]
+        orders_list = []
+        for doc in raw_res.documents:
+            try:
+                data = dict(doc.data)
+                if not data.get("NewOrderID"):
+                    data["NewOrderID"] = doc.id
+                orders_list.append(OrderResponse(id=doc.id, **data))
+            except Exception as parse_err:
+                logger.warning(f"解析 Order Document ID '{doc.id}' 時發生警告: {parse_err}")
 
         return OrderListResponse(
             count=len(orders_list),

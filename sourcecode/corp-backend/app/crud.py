@@ -76,12 +76,14 @@ def get_document(collection_name: str, doc_id: str) -> Optional[DocumentResponse
 def list_documents(
     collection_name: str,
     limit: int = 100,
+    offset: int = 0,
     order_by: Optional[str] = None
 ) -> DocumentListResponse:
     """
     查詢指定 Collection 中的文件清單。
     :param collection_name: Firestore Collection 名稱
     :param limit: 回傳上限數量 (預設 100)
+    :param offset: 跳過筆數 (預設 0)
     :param order_by: 排序欄位名稱 (選填)
     :return: DocumentListResponse
     """
@@ -90,6 +92,9 @@ def list_documents(
 
     if order_by:
         query = query.order_by(order_by)
+
+    if offset > 0:
+        query = query.offset(offset)
 
     query = query.limit(limit)
     docs = query.stream()

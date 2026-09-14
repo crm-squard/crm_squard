@@ -106,6 +106,7 @@ gcloud builds submit --config=cloudbuild.yaml .
 | 檔案路徑 | 說明 |
 | :--- | :--- |
 | [`backend/Dockerfile`](file:///c:/Source%20Code/crm_squard/sourcecode/backend/Dockerfile) | Backend Python 3.10 FastAPI 容器設定 |
+| [`corp-backend/Dockerfile`](file:///c:/Source%20Code/crm_squard/sourcecode/corp-backend/Dockerfile) | Corp Backend Python 3.10 FastAPI (Firebase Firestore) 容器設定 |
 | [`frontend/Dockerfile`](file:///c:/Source%20Code/crm_squard/sourcecode/frontend/Dockerfile) | Frontend Vite Node + Nginx 雙階段建置容器設定 |
 | [`frontend/nginx.conf`](file:///c:/Source%20Code/crm_squard/sourcecode/frontend/nginx.conf) | Nginx 前端靜態資源與路由設定 |
 | [`docker-compose.yml`](file:///c:/Source%20Code/crm_squard/sourcecode/docker-compose.yml) | Docker Compose 本地與 VM 一鍵啟動檔 |

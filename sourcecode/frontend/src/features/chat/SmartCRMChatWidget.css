@@ -1,0 +1,99 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700&display=swap');
+
+.ccw-root {
+  --ccw-primary: #315b7d;
+  --ccw-primary-strong: #1f3d57;
+  --ccw-on-primary: #ffffff;
+  --ccw-background: #f4f7f9;
+  --ccw-surface: #ffffff;
+  --ccw-text: #17212b;
+  --ccw-text-muted: #5d6b78;
+  --ccw-text-subtle: #80909d;
+  --ccw-success: #2e8b70;
+  --ccw-border: #d7e0e8;
+  --ccw-focus: #4b84b5;
+  --ccw-launcher-shadow: 0 8px 20px rgba(31, 61, 87, 0.24);
+  --ccw-panel-shadow: 0 20px 50px rgba(23, 33, 43, 0.18);
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 1000;
+  display: flex;
+  width: auto;
+  min-height: 0;
+  align-items: flex-end;
+  justify-content: flex-end;
+  padding: 0;
+  box-sizing: border-box;
+  background: transparent;
+  color: var(--ccw-text);
+  font-family: "DM Sans", system-ui, -apple-system, "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+}
+
+.ccw-root *, .ccw-root *::before, .ccw-root *::after { box-sizing: border-box; }
+
+.ccw-launcher {
+  display: flex;
+  width: 56px;
+  height: 56px;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 50%;
+  background: var(--ccw-primary);
+  box-shadow: var(--ccw-launcher-shadow);
+  color: var(--ccw-on-primary);
+  cursor: pointer;
+  transition: transform 0.15s ease;
+}
+
+.ccw-launcher:hover { transform: translateY(-2px); }
+.ccw-launcher:focus-visible { outline: 3px solid var(--ccw-focus); outline-offset: 3px; }
+
+.ccw-panel {
+  display: flex;
+  width: 380px;
+  max-width: 100%;
+  height: min(580px, calc(100dvh - 48px));
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 20px;
+  background: var(--ccw-surface);
+  box-shadow: var(--ccw-panel-shadow);
+  animation: ccw-pop 0.22s ease;
+}
+
+.ccw-quick-replies {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 14px;
+}
+
+.ccw-chip {
+  padding: 6px 12px;
+  border: 1px solid var(--ccw-border);
+  border-radius: 999px;
+  background: var(--ccw-surface);
+  color: var(--ccw-primary-strong);
+  cursor: pointer;
+  font-size: 12.5px;
+}
+
+.ccw-chip:hover { border-color: var(--ccw-primary); }
+.ccw-chip:focus-visible { outline: 3px solid var(--ccw-focus); outline-offset: 2px; }
+
+@keyframes ccw-pop {
+  from { opacity: 0; transform: translateY(12px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ccw-panel { animation: none; }
+}
+
+@media (max-width: 480px) {
+  .ccw-root { inset: auto 0 0 auto; min-height: 0; align-items: stretch; justify-content: stretch; padding: 0; }
+  .ccw-panel { width: 100vw; height: 100dvh; border-radius: 0; }
+  .ccw-launcher { margin: 0 16px 16px 0; }
+}

@@ -65,8 +65,14 @@ def initialize_firebase() -> Optional[firebase_admin.App]:
 
     # 4. 執行初始化
     options = {}
-    if settings.GCP_PROJECT_ID:
-        options["projectId"] = settings.GCP_PROJECT_ID
+    project_id = (
+        settings.GCP_PROJECT_ID
+        or os.getenv("GCP_PROJECT_ID")
+        or os.getenv("GOOGLE_CLOUD_PROJECT")
+        or os.getenv("GCP_PROJECT")
+    )
+    if project_id:
+        options["projectId"] = project_id
 
     try:
         if cred is not None:

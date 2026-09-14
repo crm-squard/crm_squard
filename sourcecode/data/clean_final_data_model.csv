@@ -1,4 +1,4 @@
-OrderID,CustomerID,OrderDate,ProductID,Quantity,Discount,PaymentMethod,Status,Age,City,SignupDate,CustomerSegment,ProductName,Category,UnitPrice,Sales,OrderValue,NewOrderID,訂單人電話
+OrderID,CustomerID,OrderDate,ProductID,Quantity,Discount,PaymentMethod,Status,Age,City,SignupDate,CustomerSegment,ProductName,Category,UnitPrice,Sales,OrderValue,NewOrderID,PhoneNumber
 500001,103695,2025-08-28,2003,4,10,Gateway,Completed,36,Qom,2024-03-05,Regular,USB-C Cable,Accessories,9,32,32,ORD-500001,980051642
 500002,107935,2024-05-31,2014,1,10,Wallet,Completed,49,Kerman,2025-06-04,Regular,Backpack,Accessories,42,38,38,ORD-500002,902196690
 500003,105141,2025-08-10,2002,1,20,CardToCard,Completed,36,Tehran,2025-10-19,Regular,Mechanical Keyboard,Electronics,62,50,50,ORD-500003,924469001

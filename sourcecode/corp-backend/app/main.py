@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.firebase_client import initialize_firebase
 from app.mcp_server import mcp
-from app.routers import firestore, health, orders
+from app.routers import firestore, health, orders, products
 
 # 設定 Logging 格式與層級
 logging.basicConfig(
@@ -70,6 +70,7 @@ app.add_middleware(
 app.include_router(health.router)
 app.include_router(firestore.router, prefix=settings.API_V1_STR)
 app.include_router(orders.router, prefix=settings.API_V1_STR)
+app.include_router(products.router, prefix=settings.API_V1_STR)
 
 # MCP server（訂單 CRUD tools），跟上面的 REST API 並存，共用同一份 app/crud.py
 #
