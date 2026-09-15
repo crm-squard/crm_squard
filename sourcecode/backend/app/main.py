@@ -215,12 +215,16 @@ def widget_config(_client_id: str = Depends(_require_client_id)):
 
 
 @app.get("/api/admin/summary", response_model=DailySummaryResponse)
-def admin_summary(date: str | None = None):
+def admin_summary(
+    company_id: str = Query(...),
+    date: str | None = None,
+    _account: dict = Depends(auth.require_company_access),
+):
     """
-    管理者查看指定日期（預設今天，UTC）使用者提問的主題摘要。
+    管理者查看指定公司、指定日期（預設今天，UTC）使用者提問的主題摘要。
 
-    注意：目前沒有任何身分驗證，正式上線前必須加上管理者登入/權限檢查，
-    否則任何人都能呼叫這支 API 看到顧客提問內容。
+    company_id 必填 + require_company_access：只有 platform 帳號或綁定這家公司的帳號
+    才能看到這家公司的顧客提問內容，比照 /api/admin/documents* 的驗證模式。
     """
     if date is None:
         date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
@@ -228,7 +232,7 @@ def admin_summary(date: str | None = None):
         raise HTTPException(status_code=400, detail="date 格式須為 YYYY-MM-DD")
 
     try:
-        result = summarize_day(date)
+        result = summarize_day(date, company_id)
     except Exception as e:
         # 同 /api/chat：未預期的例外要在應用程式層處理掉，回傳正常的錯誤回應，
         # 避免整個請求掛掉變成 Cloud Run 層級的 502/503（不帶 CORS 標頭）。
@@ -570,7 +574,10 @@ async def chat(req: ChatRequest, request: Request, _client_id: str = Depends(_re
 
     try:
         log_text = response.text if response.text is not None else f"[訂單 {response.code}]"
-        log_chat(message=text, response_type=response.type, response_text=log_text, client_ip=client_ip)
+        log_chat(
+            message=text, response_type=response.type, response_text=log_text, client_ip=client_ip,
+            company_id=_client_id,
+        )
     except Exception:
         # 對話紀錄失敗不該讓使用者的聊天請求跟著失敗
         pass

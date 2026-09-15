@@ -1,3 +1,4 @@
+import CustomerServiceOutlined from "@ant-design/icons/CustomerServiceOutlined";
 import DatabaseOutlined from "@ant-design/icons/DatabaseOutlined";
 import DownOutlined from "@ant-design/icons/DownOutlined";
 import HomeOutlined from "@ant-design/icons/HomeOutlined";
@@ -26,12 +27,14 @@ const navigationItems = [
   { key: "/", icon: <HomeOutlined />, label: "儀表板" },
   { key: "/orders", icon: <ShoppingOutlined />, label: "訂單管理" },
   { key: "/rag", icon: <DatabaseOutlined />, label: "RAG 知識庫" },
+  { key: "/summary", icon: <CustomerServiceOutlined />, label: "客服機器人" },
 ];
 
 function resolveSelectedKey(pathname: string) {
   if (pathname.startsWith("/orders")) return "/orders";
   if (pathname.startsWith("/rag")) return "/rag";
   if (pathname.startsWith("/company-settings")) return "/company-settings";
+  if (pathname.startsWith("/summary")) return "/summary";
   return "/";
 }
 
