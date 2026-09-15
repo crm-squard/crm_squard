@@ -28,6 +28,7 @@ import { useBeforeUnload, useBlocker } from "react-router-dom";
 import { deleteDocument, fetchDocuments, precheckDocuments, sha256Hex, upsertDocument } from "../api/documents";
 import type { DocumentInfo, PrecheckRequestItem, PrecheckStatus } from "../types/documents";
 import { useAuth } from "../auth/AuthContext";
+import ChatWidgetPreview from "../components/ChatWidgetPreview";
 
 const { Text } = Typography;
 const { Dragger } = Upload;
@@ -460,6 +461,8 @@ export default function AdminDocumentsPage() {
     <main className={`rag-page${isDraggingFiles ? " is-file-dragging" : ""}`}>
       {messageContextHolder}
       {modalContextHolder}
+      {/* 讓管理者可以直接在這頁測試「目前選定公司」的聊天機器人回答，不用切去 corp-frontend。 */}
+      <ChatWidgetPreview companyId={selectedCompanyId} />
       {isDraggingFiles ? <div className="rag-drag-overlay" aria-hidden="true" /> : null}
       <div className="page-heading">
         <div>
