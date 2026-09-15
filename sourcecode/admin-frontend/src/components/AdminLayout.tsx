@@ -1,20 +1,23 @@
 import DatabaseOutlined from "@ant-design/icons/DatabaseOutlined";
+import DownOutlined from "@ant-design/icons/DownOutlined";
 import HomeOutlined from "@ant-design/icons/HomeOutlined";
+import LogoutOutlined from "@ant-design/icons/LogoutOutlined";
 import MenuOutlined from "@ant-design/icons/MenuOutlined";
 import ShoppingOutlined from "@ant-design/icons/ShoppingOutlined";
 import UserOutlined from "@ant-design/icons/UserOutlined";
 import Avatar from "antd/es/avatar";
 import Button from "antd/es/button";
 import Drawer from "antd/es/drawer";
+import Dropdown from "antd/es/dropdown";
 import Layout from "antd/es/layout";
 import Menu from "antd/es/menu";
 import Tooltip from "antd/es/tooltip";
 import { useEffect, useState } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import BrandMark from "./BrandMark";
+import { useAuth } from "../auth/AuthContext";
 
 const { Header, Sider, Content } = Layout;
-const tenantName = import.meta.env.VITE_TENANT_NAME || "CRM Select Demo";
 
 const navigationItems = [
   { key: "/", icon: <HomeOutlined />, label: "儀表板" },
@@ -31,10 +34,17 @@ function resolveSelectedKey(pathname: string) {
 export default function AdminLayout() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { account, companies, selectedCompanyId, selectCompany, logout } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(() => window.innerWidth < 900);
   const selectedKey = resolveSelectedKey(location.pathname);
+  const selectedCompany = companies.find((company) => company.id === selectedCompanyId);
+
+  async function handleLogout() {
+    await logout();
+    navigate("/login", { replace: true });
+  }
 
   useEffect(() => {
     const media = window.matchMedia("(max-width: 899px)");
@@ -49,8 +59,19 @@ export default function AdminLayout() {
       <div className="sider-brand"><BrandMark compact={collapsed && !isMobile} /></div>
       {(!collapsed || isMobile) && (
         <div className="tenant-block">
-          <span>目前租戶</span>
-          <strong>{tenantName}</strong>
+          <span>目前商家</span>
+          {companies.length > 1 ? (
+            <Dropdown
+              menu={{
+                items: companies.map((company) => ({ key: company.id, label: company.name })),
+                onClick: ({ key }) => selectCompany(key),
+              }}
+            >
+              <strong className="tenant-switcher">{selectedCompany?.name ?? "選擇商家"} <DownOutlined /></strong>
+            </Dropdown>
+          ) : (
+            <strong>{selectedCompany?.name ?? "-"}</strong>
+          )}
         </div>
       )}
       <Menu
@@ -88,10 +109,17 @@ export default function AdminLayout() {
               onClick={() => isMobile ? setMobileOpen(true) : setCollapsed((value) => !value)}
             />
           </Tooltip>
-          <div className="account-placeholder" aria-label="帳號功能尚未啟用">
-            <Avatar icon={<UserOutlined />} />
-            <span><strong>帳號功能</strong><small>敬請期待</small></span>
-          </div>
+          <Dropdown
+            menu={{
+              items: [{ key: "logout", icon: <LogoutOutlined />, label: "登出" }],
+              onClick: ({ key }) => { if (key === "logout") handleLogout(); },
+            }}
+          >
+            <div className="account-placeholder" aria-label="帳號選單">
+              <Avatar icon={<UserOutlined />} />
+              <span><strong>{account?.email ?? "-"}</strong><small>{account?.role ?? ""}</small></span>
+            </div>
+          </Dropdown>
         </Header>
         <Content className="admin-content"><Outlet /></Content>
       </Layout>
