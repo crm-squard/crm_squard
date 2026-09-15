@@ -69,11 +69,13 @@ services:
       dockerfile: Dockerfile
       args:
         VITE_ADMIN_API_URL: ${VITE_ADMIN_API_URL:-http://localhost:8001}
+        VITE_RAG_API_URL: ${VITE_RAG_API_URL:-http://localhost:8000}
         VITE_TENANT_NAME: ${VITE_TENANT_NAME:-CRM Select Demo}
     container_name: crm_admin_frontend
     ports:
       - "8080:80"
     depends_on:
+      - backend
       - corp-backend
     restart: always
 

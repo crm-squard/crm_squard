@@ -1,4 +1,4 @@
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, RouterProvider, createBrowserRouter } from "react-router-dom";
 import { lazy, Suspense, type ReactNode } from "react";
 import AdminLayout from "../components/AdminLayout";
 
@@ -15,16 +15,19 @@ function loadPage(page: ReactNode) {
   return <Suspense fallback={<PageLoading />}>{page}</Suspense>;
 }
 
+const router = createBrowserRouter([
+  {
+    element: <AdminLayout />,
+    children: [
+      { index: true, element: loadPage(<DashboardPage />) },
+      { path: "orders", element: loadPage(<OrdersPage />) },
+      { path: "orders/:orderId", element: loadPage(<OrderDetailPage />) },
+      { path: "rag", element: loadPage(<RagPage />) },
+      { path: "*", element: <Navigate to="/" replace /> },
+    ],
+  },
+]);
+
 export default function AdminRouter() {
-  return (
-    <Routes>
-      <Route element={<AdminLayout />}>
-        <Route index element={loadPage(<DashboardPage />)} />
-        <Route path="orders" element={loadPage(<OrdersPage />)} />
-        <Route path="orders/:orderId" element={loadPage(<OrderDetailPage />)} />
-        <Route path="rag" element={loadPage(<RagPage />)} />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Route>
-    </Routes>
-  );
+  return <RouterProvider router={router} />;
 }

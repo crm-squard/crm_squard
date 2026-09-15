@@ -1,6 +1,6 @@
-import type { DocumentInfo, PrecheckRequestItem, PrecheckResponse } from "../types";
+import type { DocumentInfo, PrecheckRequestItem, PrecheckResponse } from "../types/documents";
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+const API_BASE_URL = import.meta.env.VITE_RAG_API_URL || "http://localhost:8000";
 
 async function throwIfNotOk(response: Response): Promise<void> {
   if (!response.ok) {
