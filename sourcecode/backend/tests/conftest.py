@@ -56,13 +56,20 @@ def platform_token(platform_account):
 
 
 @pytest.fixture
-def test_company():
-    """建立一家測試用公司，測試結束後硬刪除（含清掉該公司的 RAG 文件記錄與向量 chunk）。"""
+def test_company(request):
+    """
+    建立一家測試用公司，測試結束後硬刪除（含清掉該公司的 RAG 文件記錄與向量 chunk）。
+
+    支援用 @pytest.mark.parametrize 或 indirect fixture 的方式帶入 mcp_url（見
+    test_orders.py／test_chat_api.py 的訂單查詢測試，需要一家「有設定 mcp_url」的公司）；
+    沒有額外參數時預設 mcp_url=None，對應「公司沒開訂單查詢功能」的情境。
+    """
     from app import accounts_store
     from app.rag.documents_store import purge_company
     from app.rag.engine import get_retriever
 
-    company = accounts_store.create_company(f"Pytest Company {uuid.uuid4().hex[:8]}", None)
+    mcp_url = getattr(request, "param", None)
+    company = accounts_store.create_company(f"Pytest Company {uuid.uuid4().hex[:8]}", mcp_url)
     yield company
     accounts_store.delete_company(company["id"])
     try:

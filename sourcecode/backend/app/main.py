@@ -573,7 +573,23 @@ async def _handle_chat(
                 text="請提供訂單編號（例如 A12345 或 ORD-500001）以便查詢。",
             )
         code = match.group(0)
-        order = await get_order(code)
+        # company_id 來自未經驗證的 X-Client-ID header，可能是 None、空字串，或格式不合法
+        # 的 UUID；get_company() 底層是 Postgres 查詢，帶入不合法 UUID 會直接拋例外，這裡
+        # 要包一層防呆，統一當作「查無公司」，不能讓整個 /api/chat 請求跟著炸掉。
+        company = None
+        if company_id:
+            try:
+                company = accounts_store.get_company(company_id)
+            except Exception:
+                company = None
+        if not company or not company.get("mcp_url"):
+            # 沒有對應公司，或公司沒填 mcp_url：這家服務沒開訂單查詢功能，不落到 SQLite
+            # fallback（那是全域 demo 資料，跟任何一家真的公司無關，不該冒充出現）。
+            return ChatResponse(
+                type="text",
+                text="此服務目前尚未提供訂單查詢功能，如需協助請聯繫客服（0800-123-456）。",
+            )
+        order = await get_order(code, company["mcp_url"])
         if order is None:
             return ChatResponse(
                 type="text",

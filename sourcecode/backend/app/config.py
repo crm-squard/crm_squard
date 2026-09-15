@@ -29,9 +29,6 @@ class Settings:
     # 訂單資料 SQLite 檔案路徑；MCP 查不到 corp-backend 時的 fallback 資料來源
     ORDERS_DB_PATH: str = os.getenv("ORDERS_DB_PATH", "./orders.db")
 
-    # corp-backend 的 MCP Streamable HTTP endpoint，訂單查詢的真正資料來源（見 app/orders.py）
-    CORP_BACKEND_MCP_URL: str = os.getenv("CORP_BACKEND_MCP_URL", "http://localhost:8001/mcp")
-
     # 多輪對話最多保留幾輪（一輪 = 一則使用者訊息 + 一則機器人回覆），避免 context 太長讓本地小模型變慢
     MAX_HISTORY_TURNS: int = 4
 
