@@ -111,6 +111,38 @@ def list_orders(
 
 
 @router.get(
+    "/search",
+    response_model=OrderResponse,
+    summary="根據訂單編號與電話查詢訂單，缺一不可",
+    responses={404: {"model": ErrorDetail}, 500: {"model": ErrorDetail}}
+)
+def get_order_by_orderid_and_phone(
+    oid: str = Query(description="訂單編號"),
+    pno: str = Query(description="電話號碼")
+):
+    try:
+        doc = crud.get_document(collection_name=COLLECTION_ORDERS, doc_id=oid)
+        if not doc:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"查無訂單"
+            )
+        if doc.data.get("PhoneNumber") != pno:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"查無訂單"
+            )
+        return OrderResponse(id=doc.id, **doc.data)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"讀取 Firebase 訂單失敗: {str(e)}"
+        )
+
+
+@router.get(
     "/{order_id}",
     response_model=OrderResponse,
     summary="查詢單筆 Firebase 訂單",
