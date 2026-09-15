@@ -193,17 +193,19 @@ steps:
       - '--allow-unauthenticated'
       - '--port=80'
 
-  # 13. 建置 Admin Frontend 容器鏡像（使用已部署的 Corp Backend 網址）
+  # 13. 建置 Admin Frontend 容器鏡像（注入訂單與 RAG 各自的 Backend 網址）
   - id: 'admin-frontend-build'
     name: 'gcr.io/cloud-builders/docker'
-    waitFor: ['corp-frontend-deploy']
+    waitFor: ['backend-url', 'corp-backend-url']
     entrypoint: bash
     args:
       - '-c'
       - |
+        BACKEND_URL=$$(cat /workspace/backend_url.txt)
         CORP_URL=$$(cat /workspace/corp_backend_url.txt)
         docker build \
           --build-arg VITE_ADMIN_API_URL=$$CORP_URL \
+          --build-arg VITE_RAG_API_URL=$$BACKEND_URL \
           -t europe-west1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/crm-admin-frontend:latest \
           ./sourcecode/admin-frontend
 
