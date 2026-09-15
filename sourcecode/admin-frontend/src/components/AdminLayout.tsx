@@ -72,6 +72,15 @@ export default function AdminLayout() {
           ) : (
             <strong>{selectedCompany?.name ?? "-"}</strong>
           )}
+          {/* 只有一家公司時上面沒有下拉選單，這裡另外給一個固定入口，不然新增第二家商家後
+              就永遠回不到選公司頁面了（選了一家之後 CompanySelectPage 不會再自動出現）。 */}
+          <button
+            type="button"
+            className="tenant-manage-link"
+            onClick={() => navigate("/select-company")}
+          >
+            管理商家服務
+          </button>
         </div>
       )}
       <Menu

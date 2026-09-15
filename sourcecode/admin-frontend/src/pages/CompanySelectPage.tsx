@@ -63,20 +63,18 @@ export default function CompanySelectPage() {
     setCompanyList(companies);
   }, [companies]);
 
-  // 只有一家公司時沒有「選擇」的意義，自動選定並跳過此頁。
+  // 只有一家公司、且「還沒選過」（剛登入、第一次進來）時，自動選定並跳過此頁——
+  // 條件限定在 !selectedCompanyId，所以之後從 AdminLayout 的「管理商家服務」手動回到
+  // 這一頁時（此時 selectedCompanyId 已經有值）不會被這個 effect 搶著導走，頁面才能
+  // 真的用來新增/切換第二家以後的商家（不然選過一次之後就永遠回不到這頁了）。
   useEffect(() => {
     if (companyList.length === 1 && !selectedCompanyId) {
       selectCompany(companyList[0].id);
+      navigate("/", { replace: true });
     }
-  }, [companyList, selectedCompanyId, selectCompany]);
+  }, [companyList, selectedCompanyId, selectCompany, navigate]);
 
   if (!token) return <Navigate to="/login" replace />;
-  // 只有 selectedCompanyId 真的被設定後才導向主畫面；只憑 companyList.length === 1
-  // 就導頁的話，會搶在上面的 useEffect 呼叫 selectCompany 之前跳走，
-  // 導致 selectedCompanyId 永遠沒被設定、被 RequireAuth 導回本頁造成循環。
-  if (selectedCompanyId) {
-    return <Navigate to="/" replace />;
-  }
 
   async function handleCreate(values: { name: string; mcp_url?: string }) {
     if (!token) return;
