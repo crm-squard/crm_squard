@@ -1,0 +1,75 @@
+"""
+Google 登入 + session 驗證 + RBAC dependencies。
+
+Session 傳輸走 `Authorization: Bearer <token>` header（不是 cookie）——延續現有 API 完全
+stateless、header-based 的風格（見 main.py 的 _require_client_id / X-Client-ID），也避免
+allow_credentials／cross-origin cookie 的額外複雜度；main.py 現有的
+CORSMiddleware(allow_headers=["*"]) 已經涵蓋 Authorization header，不用改 CORS 設定。
+
+RBAC dependencies 沿用 main.py._require_client_id 一樣的 sync function + Header()/Depends()
+寫法，維持專案既有慣例。
+"""
+from fastapi import Depends, Header, HTTPException
+
+from app import accounts_store
+from app.config import settings
+
+
+def verify_google_id_token(id_token_str: str) -> str:
+    """
+    驗證 Google ID token，回傳 email。驗證失敗（簽章不對、過期、aud 不符）一律拋
+    ValueError，讓呼叫端統一轉成 401——不把 google-auth 底層的例外型別外洩到路由層。
+
+    獨立成一個函式（不是直接寫在路由裡）方便測試 monkeypatch：pytest 沒辦法真的跟 Google
+    要一個有效 ID token，測試會直接 monkeypatch 這個函式回傳固定 email。
+    """
+    from google.auth.transport import requests as google_requests
+    from google.oauth2 import id_token as google_id_token
+
+    try:
+        payload = google_id_token.verify_oauth2_token(
+            id_token_str, google_requests.Request(), settings.GOOGLE_CLIENT_ID
+        )
+    except Exception as e:
+        raise ValueError(f"Google ID token 驗證失敗：{e}")
+    email = payload.get("email")
+    if not email:
+        raise ValueError("Google ID token 沒有 email 欄位。")
+    return email
+
+
+def require_session(
+    authorization: str | None = Header(default=None),
+) -> dict:
+    """
+    讀 Authorization: Bearer <token> header，查 accounts_store.get_account_by_session，
+    查無或過期回 401。回傳的 dict 是 accounts_store._row_to_account() 的格式
+    （id/email/role/created_by/created_at）。
+    """
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="缺少或格式錯誤的 Authorization header。")
+    token = authorization[len("Bearer "):].strip()
+    if not token:
+        raise HTTPException(status_code=401, detail="缺少或格式錯誤的 Authorization header。")
+    account = accounts_store.get_account_by_session(token)
+    if account is None:
+        raise HTTPException(status_code=401, detail="登入已失效，請重新登入。")
+    return account
+
+
+def require_platform_role(account: dict = Depends(require_session)) -> dict:
+    """在 require_session() 基礎上檢查角色是 platform_*，否則 403。"""
+    if account["role"] not in accounts_store.PLATFORM_ROLES:
+        raise HTTPException(status_code=403, detail="此操作僅限平台維運帳號。")
+    return account
+
+
+def require_company_access(company_id: str, account: dict = Depends(require_session)) -> dict:
+    """
+    company_id 來自 route path/query（FastAPI 依參數名稱注入，main.py 的路由固定用
+    `company_id` 這個名字）。檢查目前帳號是 platform 角色，或在 company_accounts 裡有
+    該 company_id 的綁定，否則 403。
+    """
+    if not accounts_store.account_has_company_access(account, company_id):
+        raise HTTPException(status_code=403, detail="沒有這家公司的存取權限。")
+    return account

@@ -16,16 +16,27 @@ from datetime import datetime, timezone
 
 from typing import Literal
 
-from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request, UploadFile
+from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
+from app import accounts_store, auth
 from app.config import settings
 from app.schemas import (
+    AccountCreateRequest,
+    AccountInfo,
+    AccountListResponse,
     ChatRequest,
     ChatResponse,
+    CompanyCreateRequest,
+    CompanyInfo,
+    CompanyListResponse,
+    CompanyUpdateRequest,
     DailySummaryResponse,
     DocumentInfo,
     DocumentListResponse,
+    GoogleLoginRequest,
+    LoginResponse,
+    MeResponse,
     PrecheckRequest,
     PrecheckResponse,
     PrecheckResultItem,
@@ -60,6 +71,12 @@ async def lifespan(app: FastAPI):
         init_orders_db()
     except Exception as e:
         print(f"[Warning] Backend startup db init failed: {e}")
+    try:
+        # 多租戶帳號表（companies/accounts/company_accounts/sessions/audit_log）冪等建立，
+        # 順便跑 bootstrap_initial_platform_admins()（見 accounts_store._ensure_schema()）。
+        accounts_store._ensure_schema()
+    except Exception as e:
+        print(f"[Warning] Backend startup accounts_store schema init failed: {e}")
     yield
 
 
@@ -109,6 +126,47 @@ def _require_client_id(
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+# ---- 多租戶帳號：Google 登入 / session / 目前登入者資訊（Phase 1，見 app/auth.py） ----
+
+
+@app.post("/api/auth/google", response_model=LoginResponse)
+def login_with_google(req: GoogleLoginRequest):
+    """
+    驗證前端拿到的 Google ID token，查帳號表；帳號不存在回 403（帳號需要平台/商家主帳號
+    手動加入，不是隨便一個 Google 帳號登入就能用）。驗證成功建立 session，回傳明文 token
+    （僅此一次，之後的請求都帶 Authorization: Bearer <token>）。
+    """
+    try:
+        email = auth.verify_google_id_token(req.id_token)
+    except ValueError as e:
+        raise HTTPException(status_code=401, detail=str(e))
+    account = accounts_store.get_account_by_email(email)
+    if account is None:
+        raise HTTPException(status_code=403, detail="這個帳號尚未被加入系統，請聯繫管理者。")
+    token = accounts_store.create_session(account["id"])
+    return LoginResponse(token=token, account=AccountInfo(**account))
+
+
+@app.post("/api/auth/logout")
+def logout(authorization: str | None = Header(default=None)):
+    """撤銷目前 session（刪掉對應的 sessions row）。沒帶 token 或格式錯誤視同已登出，不報錯。"""
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization[len("Bearer "):].strip()
+        if token:
+            accounts_store.revoke_session(token)
+    return {"status": "logged_out"}
+
+
+@app.get("/api/auth/me", response_model=MeResponse)
+def get_me(account: dict = Depends(auth.require_session)):
+    """回傳目前登入帳號資訊，以及這個帳號看得到的公司清單（platform 角色回全部）。"""
+    companies = accounts_store.list_companies_visible_to(account)
+    return MeResponse(
+        account=AccountInfo(**account),
+        companies=[CompanyInfo(**c) for c in companies],
+    )
 
 
 @app.post("/api/warmup")
@@ -306,6 +364,141 @@ def delete_document(path: str):
     if not deleted:
         raise HTTPException(status_code=404, detail=f"查無路徑 {path}，請確認路徑是否正確。")
     return {"status": "deleted", "path": path}
+
+
+# ---- 公司（商家服務）管理：/api/admin/companies ----
+
+
+@app.post("/api/admin/companies", response_model=CompanyInfo)
+def create_company(req: CompanyCreateRequest, account: dict = Depends(auth.require_platform_role)):
+    """建立公司僅限平台維運帳號（商家沒辦法自己開一家新公司進系統）。"""
+    company = accounts_store.create_company(req.name, req.mcp_url)
+    accounts_store.record_audit(
+        account["id"], action="create_company", target_type="company", target_id=company["id"],
+        detail={"name": req.name},
+    )
+    return CompanyInfo(**company)
+
+
+@app.get("/api/admin/companies", response_model=CompanyListResponse)
+def list_companies(account: dict = Depends(auth.require_session)):
+    """回傳呼叫者可見的公司清單：platform 角色看全部，tenant 角色只看自己綁定的。"""
+    companies = accounts_store.list_companies_visible_to(account)
+    return CompanyListResponse(companies=[CompanyInfo(**c) for c in companies])
+
+
+@app.put("/api/admin/companies/{company_id}", response_model=CompanyInfo)
+def update_company(
+    company_id: str, req: CompanyUpdateRequest, account: dict = Depends(auth.require_company_access)
+):
+    """
+    更新公司資訊（目前是 name／mcp_url）：platform 帳號或綁定這家公司的商家帳號都能改，
+    對應「公司資訊頁面可設定 MCP URL」的需求。
+    """
+    company = accounts_store.update_company(company_id, req.name, req.mcp_url)
+    if company is None:
+        raise HTTPException(status_code=404, detail="查無這家公司。")
+    accounts_store.record_audit(
+        account["id"], action="update_company", target_type="company", target_id=company_id,
+        detail={"name": req.name, "mcp_url": req.mcp_url},
+    )
+    return CompanyInfo(**company)
+
+
+@app.delete("/api/admin/companies/{company_id}")
+def delete_company(company_id: str, account: dict = Depends(auth.require_platform_role)):
+    """
+    硬刪除公司：僅限平台維運帳號。連同該公司的 RAG 文件記錄與向量 chunk 一起清掉
+    （見 documents_store.purge_company()），company_accounts 綁定靠 ON DELETE CASCADE 自動清。
+    """
+    from app.rag.documents_store import purge_company
+
+    index = _get_llamaindex_index()
+    deleted = accounts_store.delete_company(company_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="查無這家公司。")
+    try:
+        purge_company(company_id, index)
+    except Exception as e:
+        # 公司本身已經刪除成功；RAG 資料清理失敗只印 log，不讓整個刪除請求回錯誤
+        # （避免呼叫端誤以為公司沒刪成功而重試，造成後續 accounts_store.delete_company 再次回 404 的困惑）。
+        print(f"[Company Delete Error] purge_company {company_id} failed: {e}")
+    accounts_store.record_audit(
+        account["id"], action="delete_company", target_type="company", target_id=company_id,
+    )
+    return {"status": "deleted", "company_id": company_id}
+
+
+# ---- 帳號管理：/api/admin/accounts（主帳號/主開發者新增次帳號/次開發者） ----
+
+
+def _can_manage_account_for(actor: dict, req: AccountCreateRequest) -> bool:
+    """
+    新增/移除帳號的權限判斷：
+    - 新增 platform_secondary：僅限 platform_primary。
+    - 新增 tenant_*（綁定某 company）：呼叫者對該 company 要有存取權
+      （platform 角色，或 tenant_primary/tenant_secondary 且已綁定該公司——見實作計畫，
+      次帳號權限跟主帳號相同，差別只在誰能新增/移除誰，這裡不特別區分 primary/secondary）。
+    """
+    if req.role == "platform_primary":
+        return False  # 不開放透過 API 新增第二個 platform_primary，避免權限模型混亂
+    if req.role == "platform_secondary":
+        return actor["role"] == "platform_primary"
+    # tenant_primary / tenant_secondary
+    if not req.company_id:
+        return False
+    return accounts_store.account_has_company_access(actor, req.company_id)
+
+
+@app.post("/api/admin/accounts", response_model=AccountInfo)
+def create_account(req: AccountCreateRequest, actor: dict = Depends(auth.require_session)):
+    if not _can_manage_account_for(actor, req):
+        raise HTTPException(status_code=403, detail="沒有權限新增這個角色的帳號。")
+    if accounts_store.get_account_by_email(req.email) is not None:
+        raise HTTPException(status_code=400, detail="這個 email 已經是系統帳號了。")
+    account = accounts_store.create_account(req.email, req.role, actor["id"])
+    if req.role in accounts_store.TENANT_ROLES and req.company_id:
+        accounts_store.bind_company(account["id"], req.company_id)
+    accounts_store.record_audit(
+        actor["id"], action="create_account", target_type="account", target_id=account["id"],
+        detail={"email": req.email, "role": req.role, "company_id": req.company_id},
+    )
+    return AccountInfo(**account)
+
+
+@app.get("/api/admin/accounts", response_model=AccountListResponse)
+def list_accounts(actor: dict = Depends(auth.require_session)):
+    accounts = accounts_store.list_accounts_visible_to(actor)
+    return AccountListResponse(accounts=[AccountInfo(**a) for a in accounts])
+
+
+@app.delete("/api/admin/accounts/{account_id}")
+def delete_account(account_id: str, actor: dict = Depends(auth.require_session)):
+    """
+    刪除帳號：權限比照新增（platform_primary 能刪 platform_secondary；對某公司有存取權的帳號
+    能刪同公司的 tenant 帳號）。刪除後連帶清掉該帳號所有 sessions（ON DELETE CASCADE），
+    達成「移除次帳號時立刻讓對方 session 失效」。
+    """
+    target = accounts_store.get_account_by_id(account_id)
+    if target is None:
+        raise HTTPException(status_code=404, detail="查無這個帳號。")
+    if target["role"] == "platform_primary":
+        raise HTTPException(status_code=403, detail="不能透過 API 刪除 platform_primary 帳號。")
+    if target["role"] == "platform_secondary":
+        if actor["role"] != "platform_primary":
+            raise HTTPException(status_code=403, detail="沒有權限刪除這個帳號。")
+    else:
+        # tenant_* 帳號：呼叫者要對這個帳號目前綁定的任一家公司有存取權才能刪
+        companies = accounts_store.list_companies_visible_to(target)
+        if actor["role"] not in accounts_store.PLATFORM_ROLES and not any(
+            accounts_store.account_has_company_access(actor, c["id"]) for c in companies
+        ):
+            raise HTTPException(status_code=403, detail="沒有權限刪除這個帳號。")
+    accounts_store.delete_account(account_id)
+    accounts_store.record_audit(
+        actor["id"], action="delete_account", target_type="account", target_id=account_id,
+    )
+    return {"status": "deleted", "account_id": account_id}
 
 
 @app.post("/api/chat", response_model=ChatResponse)
