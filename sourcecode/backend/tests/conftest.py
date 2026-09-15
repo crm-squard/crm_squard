@@ -14,7 +14,10 @@
 import os
 import sys
 import tempfile
+import uuid
 from pathlib import Path
+
+import pytest
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BACKEND_DIR))
@@ -23,6 +26,49 @@ _tmp_dir = tempfile.mkdtemp(prefix="crm_backend_test_")
 os.environ["CHAT_LOG_DB_PATH"] = str(Path(_tmp_dir) / "chat_log_test.db")
 
 os.chdir(BACKEND_DIR)
+
+# 多租戶帳號測試共用 helper：直接透過 accounts_store 建帳號/session（不透過真的 Google
+# 登入流程——pytest 沒辦法真的拿到一個有效的 Google ID token，Google 驗證本身用
+# monkeypatch app.auth.verify_google_id_token 在 test_auth.py 個別測試），
+# 跟 documents_api／companies／accounts 測試共用同一套 fixture，統一在這裡定義避免重複。
+
+
+def _unique_email(prefix: str = "pytest") -> str:
+    return f"{prefix}_{uuid.uuid4().hex[:10]}@example.com"
+
+
+@pytest.fixture
+def platform_account():
+    """建立一個 platform_primary 帳號，測試結束後刪除（連帶清掉 session，見 accounts_store）。"""
+    from app import accounts_store
+
+    account = accounts_store.create_account(_unique_email("platform"), "platform_primary", None)
+    yield account
+    accounts_store.delete_account(account["id"])
+
+
+@pytest.fixture
+def platform_token(platform_account):
+    """platform_account 的登入 session token，供 Authorization: Bearer 使用。"""
+    from app import accounts_store
+
+    return accounts_store.create_session(platform_account["id"])
+
+
+@pytest.fixture
+def test_company():
+    """建立一家測試用公司，測試結束後硬刪除（含清掉該公司的 RAG 文件記錄與向量 chunk）。"""
+    from app import accounts_store
+    from app.rag.documents_store import purge_company
+    from app.rag.engine import get_retriever
+
+    company = accounts_store.create_company(f"Pytest Company {uuid.uuid4().hex[:8]}", None)
+    yield company
+    accounts_store.delete_company(company["id"])
+    try:
+        purge_company(company["id"], get_retriever().index)
+    except Exception:
+        pass
 
 # 對應 app/orders.py 的 _SEED_ORDERS，orders.db 啟動時已灌入這 5 筆範例資料，
 # 供各測試檔直接引用，避免每個檔案各自重複硬編碼一份。

@@ -232,17 +232,18 @@ def _get_llamaindex_index():
 
 
 @app.get("/api/admin/documents", response_model=DocumentListResponse)
-def list_documents():
+def list_documents(company_id: str = Query(...), _account: dict = Depends(auth.require_company_access)):
     """
-    列出知識庫目前所有路徑（一份內容掛兩個路徑就是兩列，各自標籤），供管理頁面畫列表。
+    列出這家公司知識庫目前所有路徑（一份內容掛兩個路徑就是兩列，各自標籤），供管理頁面畫列表。
 
-    注意：目前沒有任何身分驗證，正式上線前必須加上管理者登入/權限檢查（同 /api/admin/summary）。
+    company_id 查詢參數 + require_company_access：只有 platform 帳號或綁定這家公司的帳號
+    才能查看（見 app/auth.py）。
     """
     from app.rag.documents_store import list_documents as _list_documents
 
     _get_llamaindex_index()  # 確認 pgvector 連線正常，不通就提早回錯誤
     try:
-        docs = _list_documents()
+        docs = _list_documents(company_id)
     except Exception as e:
         print(f"[Documents Error] list failed: {e}")
         raise HTTPException(status_code=502, detail="讀取知識庫文件列表時發生錯誤，請稍後再試。")
@@ -271,15 +272,18 @@ def _check_client_hash(server_hash: str, client_sha256: str):
 
 
 @app.post("/api/admin/documents/precheck", response_model=PrecheckResponse)
-def precheck_documents(req: PrecheckRequest):
+def precheck_documents(
+    req: PrecheckRequest, company_id: str = Query(...), _account: dict = Depends(auth.require_company_access)
+):
     """
-    批次上傳前的預檢：對每個 (path, client_sha256, tags) 交叉查「這個路徑目前指向什麼」跟
-    「這個雜湊是不是已經存在別的地方」，讓前端知道每份文件是 new/unchanged/content_changed/
-    tags_only_changed/linked，不用實際寫入/重新 embed。純讀取（不動向量索引），但比照其他
-    admin 文件端點一併確認 pgvector 連線正常，行為與其餘端點保持一致。
+    批次上傳前的預檢：對每個 (path, client_sha256, tags) 交叉查「這家公司底下這個路徑目前
+    指向什麼」跟「這個雜湊是不是已經存在這家公司別的地方」，讓前端知道每份文件是
+    new/unchanged/content_changed/tags_only_changed/linked，不用實際寫入/重新 embed。
+    純讀取（不動向量索引），但比照其他 admin 文件端點一併確認 pgvector 連線正常，行為與其餘
+    端點保持一致。
 
-    完全不需要 doc_id：身分判斷全部靠路徑查 kb_document_labels、內容雜湊查 kb_documents，
-    這兩張表的細節見 app/rag/documents_store.py。
+    完全不需要 doc_id：身分判斷全部靠公司+路徑查 kb_document_labels、公司+內容雜湊查
+    kb_documents，這兩張表的細節見 app/rag/documents_store.py。
     """
     from app.rag.documents_store import find_document_by_hash, get_label, list_paths_by_prefix
 
@@ -289,12 +293,12 @@ def precheck_documents(req: PrecheckRequest):
         seen_paths = set()
         for item in req.items:
             seen_paths.add(item.path)
-            label = get_label(item.path)
+            label = get_label(company_id, item.path)
             if label is not None and label["content_hash"] == item.client_sha256:
                 status: Literal[
                     "new", "unchanged", "content_changed", "tags_only_changed", "linked"
                 ] = "unchanged" if set(label["tags"]) == set(item.tags) else "tags_only_changed"
-            elif find_document_by_hash(item.client_sha256) is not None:
+            elif find_document_by_hash(company_id, item.client_sha256) is not None:
                 status = "linked"
             elif label is not None:
                 status = "content_changed"
@@ -304,7 +308,9 @@ def precheck_documents(req: PrecheckRequest):
 
         stale_paths: list[str] = []
         if req.scope_prefix:
-            stale_paths = [p for p in list_paths_by_prefix(req.scope_prefix) if p not in seen_paths]
+            stale_paths = [
+                p for p in list_paths_by_prefix(company_id, req.scope_prefix) if p not in seen_paths
+            ]
     except Exception as e:
         print(f"[Documents Error] precheck failed: {e}")
         raise HTTPException(status_code=502, detail="預檢知識庫文件時發生錯誤，請稍後再試。")
@@ -317,11 +323,15 @@ def upsert_document(
     tags: list[str] = Form(default=[]),
     client_sha256: str = Form(...),
     file: UploadFile | None = File(default=None),
+    company_id: str = Query(...),
+    account: dict = Depends(auth.require_company_access),
 ):
     """
     新增/更新內容/改標籤/掛到既有內容（linked）統一走這支端點，不需要呼叫端提供 doc_id。
-    後端依「這個路徑目前指向什麼」跟「這個雜湊是不是已經存在別的地方」決定實際動作，
-    見 app/rag/documents_store.py 的 upsert_document()。
+    後端依「這家公司底下這個路徑目前指向什麼」跟「這個雜湊是不是已經存在這家公司別的地方」
+    決定實際動作，見 app/rag/documents_store.py 的 upsert_document()。平台帳號也能直接修改
+    商家的 RAG 資料（非唯讀），跟商家帳號走同一條路徑，差別只在權限檢查（require_company_access
+    對 platform 角色一律放行）。
 
     `file` 只有在真的需要新內容（新文件／內容變更）時才要帶；純改標籤或掛到既有內容
     （雜湊已經存在別處）不需要上傳檔案。帶了 file 的情況一律先驗證雜湊，跟 client_sha256
@@ -335,12 +345,20 @@ def upsert_document(
         raw_text = _read_md_upload(file)
         _check_client_hash(hash_content(raw_text), client_sha256)
     try:
-        result = _upsert_document(path, tags, client_sha256, raw_text, index)
+        result = _upsert_document(company_id, path, tags, client_sha256, raw_text, index)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         print(f"[Documents Error] upsert {path} failed: {e}")
         raise HTTPException(status_code=502, detail="新增或更新知識庫文件時發生錯誤，請稍後再試。")
+    try:
+        accounts_store.record_audit(
+            account["id"], action="upsert_document", target_type="kb_document", target_id=path,
+            detail={"company_id": company_id, "status": result["status"], "tags": tags},
+        )
+    except Exception as e:
+        # 稽核紀錄失敗不該讓文件已經寫入成功的請求跟著失敗，只印 log。
+        print(f"[Audit Error] upsert_document {path} failed to record: {e}")
     return DocumentInfo(
         path=path, tags=tags, chunk_count=result["chunk_count"],
         content_changed=result["content_changed"], content_hash=client_sha256,
@@ -348,21 +366,30 @@ def upsert_document(
 
 
 @app.delete("/api/admin/documents/{path:path}")
-def delete_document(path: str):
+def delete_document(
+    path: str, company_id: str = Query(...), account: dict = Depends(auth.require_company_access)
+):
     """
-    刪除這個路徑的標籤紀錄；該內容如果沒有其他路徑指著了，才真的刪掉向量與內容紀錄
+    刪除這家公司底下這個路徑的標籤紀錄；該內容如果沒有其他路徑指著了，才真的刪掉向量與內容紀錄
     （見 documents_store.delete_document_by_path()）。
     """
     from app.rag.documents_store import delete_document_by_path
 
     index = _get_llamaindex_index()
     try:
-        deleted = delete_document_by_path(path, index)
+        deleted = delete_document_by_path(company_id, path, index)
     except Exception as e:
         print(f"[Documents Error] delete {path} failed: {e}")
         raise HTTPException(status_code=502, detail="刪除知識庫文件時發生錯誤，請稍後再試。")
     if not deleted:
         raise HTTPException(status_code=404, detail=f"查無路徑 {path}，請確認路徑是否正確。")
+    try:
+        accounts_store.record_audit(
+            account["id"], action="delete_document", target_type="kb_document", target_id=path,
+            detail={"company_id": company_id},
+        )
+    except Exception as e:
+        print(f"[Audit Error] delete_document {path} failed to record: {e}")
     return {"status": "deleted", "path": path}
 
 
@@ -510,7 +537,11 @@ async def chat(req: ChatRequest, request: Request, _client_id: str = Depends(_re
     history = [{"role": h.role, "content": h.content} for h in req.history]
     history = history[-(settings.MAX_HISTORY_TURNS * 2):]
     try:
-        response = await _handle_chat(text, history, req.provider)
+        # Phase 1 過渡設計：company_id 直接借用現有的 X-Client-ID（_client_id，值不變、
+        # header 不變）——Phase 2 widget 改送真的 company UUID 時，這條呼叫鏈不用再改。
+        # 現階段 companies 表通常還沒有對應資料，檢索合理地回傳空結果（不是錯誤），
+        # 不影響其他訂單分流邏輯。
+        response = await _handle_chat(text, history, req.provider, company_id=_client_id)
     except Exception as e:
         # 任何未預期的例外（金鑰失效、首次建索引逾時等）都要回傳正常的 200 回應，
         # 讓 FastAPI/CORSMiddleware 有機會處理，避免請求整個掛掉變成 Cloud Run
@@ -528,7 +559,9 @@ async def chat(req: ChatRequest, request: Request, _client_id: str = Depends(_re
     return response
 
 
-async def _handle_chat(text: str, history: list, provider: str) -> ChatResponse:
+async def _handle_chat(
+    text: str, history: list, provider: str, company_id: str | None = None
+) -> ChatResponse:
     if not text:
         return ChatResponse(type="text", text="請輸入您的問題。")
 
@@ -555,7 +588,7 @@ async def _handle_chat(text: str, history: list, provider: str) -> ChatResponse:
         )
 
     agent = get_agent()
-    answer, retrieved = agent.generate_answer(text, history=history, provider=provider)
+    answer, retrieved = agent.generate_answer(text, history=history, provider=provider, company_id=company_id)
     if not retrieved:
         # 沒有實際檢索結果（查無資訊、provider 未設定或呼叫失敗）：這是提示/錯誤訊息，不是
         # 根據知識庫生成的產品/政策回答，依 contracts.md 的分類該用 type: text，且不該帶無關的 source。
