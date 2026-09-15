@@ -9,6 +9,7 @@ const OrdersPage = lazy(() => import("../pages/OrdersPage"));
 const RagPage = lazy(() => import("../pages/RagPage"));
 const LoginPage = lazy(() => import("../pages/LoginPage"));
 const CompanySelectPage = lazy(() => import("../pages/CompanySelectPage"));
+const CompanySettingsPage = lazy(() => import("../pages/CompanySettingsPage"));
 
 function PageLoading() {
   return <div className="route-loading" role="status">頁面載入中…</div>;
@@ -32,6 +33,7 @@ const router = createBrowserRouter([
       { path: "orders", element: loadPage(<OrdersPage />) },
       { path: "orders/:orderId", element: loadPage(<OrderDetailPage />) },
       { path: "rag", element: loadPage(<RagPage />) },
+      { path: "company-settings", element: loadPage(<CompanySettingsPage />) },
       { path: "*", element: <Navigate to="/" replace /> },
     ],
   },

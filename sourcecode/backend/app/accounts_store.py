@@ -17,6 +17,7 @@ session 只存 token 的 SHA-256 雜湊（不存明文），避免資料庫外�
 明文 token 只在 create_session() 當下回傳給呼叫端一次。
 """
 import hashlib
+import json
 import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Optional
@@ -50,6 +51,17 @@ def _ensure_schema() -> None:
                 created_at TIMESTAMPTZ NOT NULL DEFAULT now()
             )
             """
+        ))
+        # companies 表已經有真實資料（商家自己建立的公司），不能用「砍掉重建」的方式加欄位；
+        # 用 ALTER TABLE ADD COLUMN IF NOT EXISTS 冪等地補上 welcome_message
+        # （聊天機器人開頭語，取代 main.py 原本寫死的字串，見 widget_config()）。
+        conn.execute(sql_text(
+            "ALTER TABLE companies ADD COLUMN IF NOT EXISTS welcome_message TEXT"
+        ))
+        # quick_replies：開場快速提問清單（原本 chat-widget 寫死 3 題），存成 JSON 陣列字串
+        # （TEXT 欄位），比另開一張子表簡單，反正只是一份不需要單獨查詢/索引的小清單。
+        conn.execute(sql_text(
+            "ALTER TABLE companies ADD COLUMN IF NOT EXISTS quick_replies TEXT"
         ))
         conn.execute(sql_text(
             """
@@ -248,30 +260,44 @@ def _row_to_company(row) -> dict:
         "id": str(row.id),
         "name": row.name,
         "mcp_url": row.mcp_url,
+        "welcome_message": row.welcome_message,
+        "quick_replies": json.loads(row.quick_replies) if row.quick_replies else None,
         "created_at": row.created_at.isoformat() if row.created_at is not None else None,
     }
 
 
-def create_company(name: str, mcp_url: Optional[str]) -> dict:
+def create_company(
+    name: str, mcp_url: Optional[str], welcome_message: Optional[str] = None,
+    quick_replies: Optional[list[str]] = None,
+) -> dict:
     _ensure_schema()
     engine = get_engine()
     with engine.begin() as conn:
         row = conn.execute(
             sql_text(
                 """
-                INSERT INTO companies (name, mcp_url) VALUES (:name, :mcp_url)
-                RETURNING id, name, mcp_url, created_at
+                INSERT INTO companies (name, mcp_url, welcome_message, quick_replies)
+                VALUES (:name, :mcp_url, :welcome_message, :quick_replies)
+                RETURNING id, name, mcp_url, welcome_message, quick_replies, created_at
                 """
             ),
-            {"name": name, "mcp_url": mcp_url},
+            {
+                "name": name, "mcp_url": mcp_url, "welcome_message": welcome_message,
+                "quick_replies": json.dumps(quick_replies) if quick_replies is not None else None,
+            },
         ).fetchone()
     return _row_to_company(row)
 
 
-def update_company(company_id: str, name: Optional[str], mcp_url: Optional[str]) -> Optional[dict]:
+def update_company(
+    company_id: str, name: Optional[str], mcp_url: Optional[str], welcome_message: Optional[str] = None,
+    quick_replies: Optional[list[str]] = None,
+) -> Optional[dict]:
     """
     只更新有帶值的欄位（None 代表「這次沒有要改這個欄位」，不是「要清空」）——
-    公司資訊頁面可能只改名稱、只改 mcp_url，或兩個都改，呼叫端不用先查目前值再整包送回來。
+    公司資訊頁面可能只改名稱、只改 mcp_url、只改 welcome_message／quick_replies，或同時改，
+    呼叫端不用先查目前值再整包送回來。quick_replies 是清單，先序列化成 JSON 字串再跟其他
+    欄位一樣用 COALESCE 判斷「這次有沒有要改」。
     """
     _ensure_schema()
     engine = get_engine()
@@ -280,12 +306,18 @@ def update_company(company_id: str, name: Optional[str], mcp_url: Optional[str])
             sql_text(
                 """
                 UPDATE companies
-                SET name = COALESCE(:name, name), mcp_url = COALESCE(:mcp_url, mcp_url)
+                SET name = COALESCE(:name, name),
+                    mcp_url = COALESCE(:mcp_url, mcp_url),
+                    welcome_message = COALESCE(:welcome_message, welcome_message),
+                    quick_replies = COALESCE(:quick_replies, quick_replies)
                 WHERE id = :id
-                RETURNING id, name, mcp_url, created_at
+                RETURNING id, name, mcp_url, welcome_message, quick_replies, created_at
                 """
             ),
-            {"id": company_id, "name": name, "mcp_url": mcp_url},
+            {
+                "id": company_id, "name": name, "mcp_url": mcp_url, "welcome_message": welcome_message,
+                "quick_replies": json.dumps(quick_replies) if quick_replies is not None else None,
+            },
         ).fetchone()
     return _row_to_company(row) if row is not None else None
 
@@ -295,7 +327,10 @@ def get_company(company_id: str) -> Optional[dict]:
     engine = get_engine()
     with engine.connect() as conn:
         row = conn.execute(
-            sql_text("SELECT id, name, mcp_url, created_at FROM companies WHERE id = :id"),
+            sql_text(
+                "SELECT id, name, mcp_url, welcome_message, quick_replies, created_at "
+                "FROM companies WHERE id = :id"
+            ),
             {"id": company_id},
         ).fetchone()
     return _row_to_company(row) if row is not None else None
@@ -321,12 +356,15 @@ def list_companies_visible_to(account: dict) -> list[dict]:
     _ensure_schema()
     engine = get_engine()
     if account["role"] in PLATFORM_ROLES:
-        sql = sql_text("SELECT id, name, mcp_url, created_at FROM companies ORDER BY created_at")
+        sql = sql_text(
+            "SELECT id, name, mcp_url, welcome_message, quick_replies, created_at "
+            "FROM companies ORDER BY created_at"
+        )
         params = {}
     else:
         sql = sql_text(
             """
-            SELECT c.id, c.name, c.mcp_url, c.created_at
+            SELECT c.id, c.name, c.mcp_url, c.welcome_message, c.quick_replies, c.created_at
             FROM companies c
             JOIN company_accounts ca ON ca.company_id = c.id
             WHERE ca.account_id = :account_id

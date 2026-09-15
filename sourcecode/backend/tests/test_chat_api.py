@@ -191,6 +191,7 @@ def test_widget_config_returns_customizable_defaults(client):
             "textColor": "#17212b",
             "borderRadius": 20,
         },
+        "quickReplies": ["無線滑鼠支援多少 DPI？", "查詢訂單 A12345", "退貨要幾天內申請？"],
     }
 
 

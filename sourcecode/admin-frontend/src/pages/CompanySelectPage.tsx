@@ -4,13 +4,12 @@ import Form from "antd/es/form";
 import Input from "antd/es/input";
 import List from "antd/es/list";
 import message from "antd/es/message";
-import Space from "antd/es/space";
 import Typography from "antd/es/typography";
 import { useEffect, useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import BrandMark from "../components/BrandMark";
 import { useAuth } from "../auth/AuthContext";
-import { createCompany, updateCompany } from "../api/companies";
+import { createCompany } from "../api/companies";
 import type { CompanyInfo } from "../api/auth";
 
 const { Text } = Typography;
@@ -19,45 +18,13 @@ function isPlatformRole(role: string | undefined): boolean {
   return role === "platform_primary" || role === "platform_secondary";
 }
 
-function CompanyMcpUrlEditor({ company, token, onUpdated }: { company: CompanyInfo; token: string; onUpdated: (company: CompanyInfo) => void }) {
-  const [messageApi, contextHolder] = message.useMessage();
-  const [value, setValue] = useState(company.mcp_url ?? "");
-  const [saving, setSaving] = useState(false);
-
-  async function handleSave() {
-    setSaving(true);
-    try {
-      const updated = await updateCompany(token, company.id, { mcp_url: value });
-      onUpdated(updated);
-      messageApi.success("已更新 MCP URL");
-    } catch (err) {
-      messageApi.error(err instanceof Error ? err.message : "更新失敗");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <Space>
-      {contextHolder}
-      <Input
-        placeholder="mcp_url（選填，未設定則不支援訂單查詢）"
-        value={value}
-        onChange={(event) => setValue(event.target.value)}
-        style={{ width: 320 }}
-      />
-      <Button size="small" loading={saving} onClick={handleSave}>儲存</Button>
-    </Space>
-  );
-}
-
 export default function CompanySelectPage() {
   const navigate = useNavigate();
   const [messageApi, contextHolder] = message.useMessage();
   const { token, account, companies, selectedCompanyId, selectCompany, refreshMe } = useAuth();
   const [creating, setCreating] = useState(false);
   const [companyList, setCompanyList] = useState<CompanyInfo[]>(companies);
-  const [form] = Form.useForm<{ name: string; mcp_url?: string }>();
+  const [form] = Form.useForm<{ name: string }>();
 
   useEffect(() => {
     setCompanyList(companies);
@@ -76,14 +43,14 @@ export default function CompanySelectPage() {
 
   if (!token) return <Navigate to="/login" replace />;
 
-  async function handleCreate(values: { name: string; mcp_url?: string }) {
+  async function handleCreate(values: { name: string }) {
     if (!token) return;
     setCreating(true);
     try {
-      await createCompany(token, { name: values.name, mcp_url: values.mcp_url || undefined });
+      await createCompany(token, { name: values.name });
       await refreshMe();
       form.resetFields();
-      messageApi.success("已新增商家服務");
+      messageApi.success("已新增商家服務，MCP URL／開頭語可以到「公司設定」頁面填寫");
     } catch (err) {
       messageApi.error(err instanceof Error ? err.message : "新增失敗");
     } finally {
@@ -91,8 +58,18 @@ export default function CompanySelectPage() {
     }
   }
 
-  function handleCompanyUpdated(updated: CompanyInfo) {
-    setCompanyList((prev) => prev.map((company) => (company.id === updated.id ? updated : company)));
+  async function handleCopyId(companyId: string) {
+    try {
+      await navigator.clipboard.writeText(companyId);
+      messageApi.success("已複製商家識別碼");
+    } catch {
+      messageApi.error("複製失敗，請手動選取文字複製。");
+    }
+  }
+
+  function goToSettings(companyId: string) {
+    selectCompany(companyId);
+    navigate("/company-settings");
   }
 
   return (
@@ -107,16 +84,30 @@ export default function CompanySelectPage() {
           <List
             dataSource={companyList}
             renderItem={(company) => {
-              const canEdit = isPlatformRole(account?.role);
+              const canManage = isPlatformRole(account?.role);
               return (
                 <List.Item
                   actions={[
+                    canManage ? (
+                      <Button key="settings" onClick={() => goToSettings(company.id)}>設定</Button>
+                    ) : null,
                     <Button key="select" type="primary" onClick={() => { selectCompany(company.id); navigate("/", { replace: true }); }}>
                       選擇
                     </Button>,
-                  ]}
+                  ].filter(Boolean)}
                 >
-                  <List.Item.Meta title={company.name} description={canEdit && token ? <CompanyMcpUrlEditor company={company} token={token} onUpdated={handleCompanyUpdated} /> : (company.mcp_url || "未設定 mcp_url")} />
+                  <List.Item.Meta
+                    title={company.name}
+                    description={
+                      <Text
+                        type="secondary"
+                        code
+                        copyable={{ text: company.id, onCopy: () => handleCopyId(company.id) }}
+                      >
+                        商家識別碼：{company.id}
+                      </Text>
+                    }
+                  />
                 </List.Item>
               );
             }}
@@ -128,9 +119,6 @@ export default function CompanySelectPage() {
             <Form form={form} layout="inline" onFinish={handleCreate}>
               <Form.Item name="name" rules={[{ required: true, message: "請輸入商家名稱" }]}>
                 <Input placeholder="商家名稱" />
-              </Form.Item>
-              <Form.Item name="mcp_url">
-                <Input placeholder="mcp_url（選填）" style={{ width: 280 }} />
               </Form.Item>
               <Form.Item>
                 <Button type="primary" htmlType="submit" loading={creating}>新增</Button>

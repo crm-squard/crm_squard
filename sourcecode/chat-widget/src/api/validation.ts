@@ -85,5 +85,9 @@ export function parseWidgetConfig(value: unknown): WidgetConfig {
         ? radius
         : DEFAULT_WIDGET_CONFIG.theme.borderRadius,
     },
+    quickReplies: Array.isArray(value.quickReplies) && value.quickReplies.every((q) => typeof q === "string") &&
+        value.quickReplies.length > 0
+      ? value.quickReplies as string[]
+      : DEFAULT_WIDGET_CONFIG.quickReplies,
   };
 }

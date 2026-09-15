@@ -12,6 +12,7 @@ export interface WidgetConfig {
   welcomeMessage: string;
   logoUrl: string | null;
   theme: WidgetTheme;
+  quickReplies: string[];
 }
 
 export const DEFAULT_WIDGET_CONFIG: WidgetConfig = {
@@ -24,6 +25,7 @@ export const DEFAULT_WIDGET_CONFIG: WidgetConfig = {
     textColor: "#17212b",
     borderRadius: 20,
   },
+  quickReplies: ["無線滑鼠支援多少 DPI？", "查詢訂單 A12345", "退貨要幾天內申請？"],
 };
 
 type ThemeStyle = CSSProperties & Record<`--ccw-${string}`, string>;

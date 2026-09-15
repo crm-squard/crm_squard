@@ -12,6 +12,8 @@ export interface CompanyInfo {
   id: string;
   name: string;
   mcp_url: string | null;
+  welcome_message: string | null;
+  quick_replies: string[] | null;
   created_at: string;
 }
 

@@ -3,6 +3,7 @@ import DownOutlined from "@ant-design/icons/DownOutlined";
 import HomeOutlined from "@ant-design/icons/HomeOutlined";
 import LogoutOutlined from "@ant-design/icons/LogoutOutlined";
 import MenuOutlined from "@ant-design/icons/MenuOutlined";
+import SettingOutlined from "@ant-design/icons/SettingOutlined";
 import ShoppingOutlined from "@ant-design/icons/ShoppingOutlined";
 import UserOutlined from "@ant-design/icons/UserOutlined";
 import Avatar from "antd/es/avatar";
@@ -19,7 +20,9 @@ import { useAuth } from "../auth/AuthContext";
 
 const { Header, Sider, Content } = Layout;
 
+// 公司設定排第一個（使用者明確要求：進到後台第一眼要能設定/確認目前是哪家公司）。
 const navigationItems = [
+  { key: "/company-settings", icon: <SettingOutlined />, label: "公司設定" },
   { key: "/", icon: <HomeOutlined />, label: "儀表板" },
   { key: "/orders", icon: <ShoppingOutlined />, label: "訂單管理" },
   { key: "/rag", icon: <DatabaseOutlined />, label: "RAG 知識庫" },
@@ -28,6 +31,7 @@ const navigationItems = [
 function resolveSelectedKey(pathname: string) {
   if (pathname.startsWith("/orders")) return "/orders";
   if (pathname.startsWith("/rag")) return "/rag";
+  if (pathname.startsWith("/company-settings")) return "/company-settings";
   return "/";
 }
 

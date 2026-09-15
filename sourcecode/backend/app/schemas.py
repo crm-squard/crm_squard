@@ -67,6 +67,7 @@ class WidgetConfig(BaseModel):
     welcome_message: str = Field(serialization_alias="welcomeMessage", min_length=1, max_length=500)
     logo_url: Optional[str] = Field(default=None, serialization_alias="logoUrl")
     theme: WidgetTheme
+    quick_replies: List[str] = Field(serialization_alias="quickReplies", default_factory=list)
 
 
 class DocumentInfo(BaseModel):
@@ -138,6 +139,8 @@ class CompanyInfo(BaseModel):
     id: str
     name: str
     mcp_url: Optional[str] = None
+    welcome_message: Optional[str] = None
+    quick_replies: Optional[List[str]] = None
     created_at: Optional[str] = None
 
 
@@ -153,12 +156,16 @@ class CompanyListResponse(BaseModel):
 class CompanyCreateRequest(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     mcp_url: Optional[str] = Field(default=None, max_length=500)
+    welcome_message: Optional[str] = Field(default=None, max_length=500)
+    quick_replies: Optional[List[str]] = Field(default=None, max_length=10)
 
 
 class CompanyUpdateRequest(BaseModel):
     # 只更新有帶值的欄位；沒帶的欄位維持不變（不是清空），見 accounts_store.update_company()。
     name: Optional[str] = Field(default=None, min_length=1, max_length=200)
     mcp_url: Optional[str] = Field(default=None, max_length=500)
+    welcome_message: Optional[str] = Field(default=None, max_length=500)
+    quick_replies: Optional[List[str]] = Field(default=None, max_length=10)
 
 
 class AccountCreateRequest(BaseModel):

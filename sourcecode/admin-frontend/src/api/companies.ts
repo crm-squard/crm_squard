@@ -20,7 +20,7 @@ export async function listCompanies(token: string): Promise<CompanyInfo[]> {
 
 export async function createCompany(
   token: string,
-  params: { name: string; mcp_url?: string }
+  params: { name: string; mcp_url?: string; welcome_message?: string; quick_replies?: string[] }
 ): Promise<CompanyInfo> {
   const response = await fetch(`${API_BASE_URL}/api/admin/companies`, {
     method: "POST",
@@ -34,7 +34,7 @@ export async function createCompany(
 export async function updateCompany(
   token: string,
   companyId: string,
-  params: { name?: string; mcp_url?: string }
+  params: { name?: string; mcp_url?: string; welcome_message?: string; quick_replies?: string[] }
 ): Promise<CompanyInfo> {
   const response = await fetch(`${API_BASE_URL}/api/admin/companies/${encodeURIComponent(companyId)}`, {
     method: "PUT",

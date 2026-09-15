@@ -185,12 +185,24 @@ def list_providers(_client_id: str = Depends(_require_client_id)):
     ]
 
 
+DEFAULT_WELCOME_MESSAGE = "您好，我是線上客服，可以問我任何產品的規格、特色，或是輸入訂單編號查詢配送狀態喔。"
+DEFAULT_QUICK_REPLIES = ["無線滑鼠支援多少 DPI？", "查詢訂單 A12345", "退貨要幾天內申請？"]
+
+
 @app.get("/api/widget/config", response_model=WidgetConfig)
 def widget_config(_client_id: str = Depends(_require_client_id)):
-    """MVP 先提供共用樣式；之後可在此依 client ID 讀取客戶品牌設定。"""
+    """
+    開頭語（welcome_message）、開場快速提問（quick_replies）依 _client_id（過渡性地當
+    company_id 用，見 _lookup_company）讀取公司自訂的值；查無公司或公司沒填就退回
+    DEFAULT_WELCOME_MESSAGE／DEFAULT_QUICK_REPLIES（原本 chat-widget 端寫死的內容搬過來
+    當預設值），不讓 widget 掛掉。其餘品牌樣式 MVP 先共用，之後可以一併搬進公司資訊頁面。
+    """
+    company = _lookup_company(_client_id)
+    welcome_message = (company.get("welcome_message") if company else None) or DEFAULT_WELCOME_MESSAGE
+    quick_replies = (company.get("quick_replies") if company else None) or DEFAULT_QUICK_REPLIES
     return WidgetConfig(
         brand_name="線上客服",
-        welcome_message="您好，我是線上客服，可以問我任何產品的規格、特色，或是輸入訂單編號查詢配送狀態喔。",
+        welcome_message=welcome_message,
         logo_url=None,
         theme=WidgetTheme(
             primary_color="#315b7d",
@@ -198,6 +210,7 @@ def widget_config(_client_id: str = Depends(_require_client_id)):
             text_color="#17212b",
             border_radius=20,
         ),
+        quick_replies=quick_replies,
     )
 
 
@@ -399,7 +412,7 @@ def delete_document(
 @app.post("/api/admin/companies", response_model=CompanyInfo)
 def create_company(req: CompanyCreateRequest, account: dict = Depends(auth.require_platform_role)):
     """建立公司僅限平台維運帳號（商家沒辦法自己開一家新公司進系統）。"""
-    company = accounts_store.create_company(req.name, req.mcp_url)
+    company = accounts_store.create_company(req.name, req.mcp_url, req.welcome_message, req.quick_replies)
     accounts_store.record_audit(
         account["id"], action="create_company", target_type="company", target_id=company["id"],
         detail={"name": req.name},
@@ -419,15 +432,21 @@ def update_company(
     company_id: str, req: CompanyUpdateRequest, account: dict = Depends(auth.require_company_access)
 ):
     """
-    更新公司資訊（目前是 name／mcp_url）：platform 帳號或綁定這家公司的商家帳號都能改，
-    對應「公司資訊頁面可設定 MCP URL」的需求。
+    更新公司資訊（name／mcp_url／welcome_message／quick_replies）：platform 帳號或綁定
+    這家公司的商家帳號都能改，對應「公司資訊頁面可設定 MCP URL、聊天機器人開頭語、
+    開場快速提問」的需求。
     """
-    company = accounts_store.update_company(company_id, req.name, req.mcp_url)
+    company = accounts_store.update_company(
+        company_id, req.name, req.mcp_url, req.welcome_message, req.quick_replies
+    )
     if company is None:
         raise HTTPException(status_code=404, detail="查無這家公司。")
     accounts_store.record_audit(
         account["id"], action="update_company", target_type="company", target_id=company_id,
-        detail={"name": req.name, "mcp_url": req.mcp_url},
+        detail={
+            "name": req.name, "mcp_url": req.mcp_url, "welcome_message": req.welcome_message,
+            "quick_replies": req.quick_replies,
+        },
     )
     return CompanyInfo(**company)
 
@@ -559,6 +578,21 @@ async def chat(req: ChatRequest, request: Request, _client_id: str = Depends(_re
     return response
 
 
+def _lookup_company(company_id: str | None) -> dict | None:
+    """
+    company_id 來自未經驗證的 X-Client-ID header，可能是 None、空字串，或格式不合法的
+    UUID；accounts_store.get_company() 底層是 Postgres 查詢，帶入不合法 UUID 會直接拋
+    例外，這裡統一包一層防呆，查不到／格式不對都當作「查無公司」，不能讓呼叫端的請求
+    跟著炸掉。widget_config() 與 _handle_chat() 的訂單查詢分流都靠這個函式取得公司資料。
+    """
+    if not company_id:
+        return None
+    try:
+        return accounts_store.get_company(company_id)
+    except Exception:
+        return None
+
+
 async def _handle_chat(
     text: str, history: list, provider: str, company_id: str | None = None
 ) -> ChatResponse:
@@ -573,15 +607,7 @@ async def _handle_chat(
                 text="請提供訂單編號（例如 A12345 或 ORD-500001）以便查詢。",
             )
         code = match.group(0)
-        # company_id 來自未經驗證的 X-Client-ID header，可能是 None、空字串，或格式不合法
-        # 的 UUID；get_company() 底層是 Postgres 查詢，帶入不合法 UUID 會直接拋例外，這裡
-        # 要包一層防呆，統一當作「查無公司」，不能讓整個 /api/chat 請求跟著炸掉。
-        company = None
-        if company_id:
-            try:
-                company = accounts_store.get_company(company_id)
-            except Exception:
-                company = None
+        company = _lookup_company(company_id)
         if not company or not company.get("mcp_url"):
             # 沒有對應公司，或公司沒填 mcp_url：這家服務沒開訂單查詢功能，不落到 SQLite
             # fallback（那是全域 demo 資料，跟任何一家真的公司無關，不該冒充出現）。
