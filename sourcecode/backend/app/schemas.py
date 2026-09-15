@@ -67,6 +67,7 @@ class WidgetConfig(BaseModel):
     welcome_message: str = Field(serialization_alias="welcomeMessage", min_length=1, max_length=500)
     logo_url: Optional[str] = Field(default=None, serialization_alias="logoUrl")
     theme: WidgetTheme
+    quick_replies: List[str] = Field(serialization_alias="quickReplies", default_factory=list)
 
 
 class DocumentInfo(BaseModel):
@@ -112,3 +113,67 @@ class PrecheckResponse(BaseModel):
     items: List[PrecheckResultItem]
     # scope_prefix 底下、這次上傳沒包含到的既有路徑；沒帶 scope_prefix 就固定是空陣列。
     stale_paths: List[str] = Field(default_factory=list)
+
+
+# ---- 多租戶帳號 / Google 登入 / 公司管理（Phase 1，見 app/auth.py、app/accounts_store.py） ----
+
+
+class GoogleLoginRequest(BaseModel):
+    id_token: str
+
+
+class AccountInfo(BaseModel):
+    id: str
+    email: str
+    role: Literal["platform_primary", "platform_secondary", "tenant_primary", "tenant_secondary"]
+    created_by: Optional[str] = None
+    created_at: Optional[str] = None
+
+
+class LoginResponse(BaseModel):
+    token: str
+    account: AccountInfo
+
+
+class CompanyInfo(BaseModel):
+    id: str
+    name: str
+    mcp_url: Optional[str] = None
+    welcome_message: Optional[str] = None
+    quick_replies: Optional[List[str]] = None
+    created_at: Optional[str] = None
+
+
+class MeResponse(BaseModel):
+    account: AccountInfo
+    companies: List[CompanyInfo]
+
+
+class CompanyListResponse(BaseModel):
+    companies: List[CompanyInfo]
+
+
+class CompanyCreateRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    mcp_url: Optional[str] = Field(default=None, max_length=500)
+    welcome_message: Optional[str] = Field(default=None, max_length=500)
+    quick_replies: Optional[List[str]] = Field(default=None, max_length=10)
+
+
+class CompanyUpdateRequest(BaseModel):
+    # 只更新有帶值的欄位；沒帶的欄位維持不變（不是清空），見 accounts_store.update_company()。
+    name: Optional[str] = Field(default=None, min_length=1, max_length=200)
+    mcp_url: Optional[str] = Field(default=None, max_length=500)
+    welcome_message: Optional[str] = Field(default=None, max_length=500)
+    quick_replies: Optional[List[str]] = Field(default=None, max_length=10)
+
+
+class AccountCreateRequest(BaseModel):
+    email: str = Field(min_length=3, max_length=320)
+    role: Literal["platform_primary", "platform_secondary", "tenant_primary", "tenant_secondary"]
+    # tenant_* 角色新增時必填（要綁定到哪家公司）；platform_* 角色不需要。
+    company_id: Optional[str] = None
+
+
+class AccountListResponse(BaseModel):
+    accounts: List[AccountInfo]

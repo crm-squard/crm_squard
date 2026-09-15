@@ -1,40 +1,57 @@
+import CustomerServiceOutlined from "@ant-design/icons/CustomerServiceOutlined";
 import DatabaseOutlined from "@ant-design/icons/DatabaseOutlined";
+import DownOutlined from "@ant-design/icons/DownOutlined";
 import HomeOutlined from "@ant-design/icons/HomeOutlined";
+import LogoutOutlined from "@ant-design/icons/LogoutOutlined";
 import MenuOutlined from "@ant-design/icons/MenuOutlined";
+import SettingOutlined from "@ant-design/icons/SettingOutlined";
 import ShoppingOutlined from "@ant-design/icons/ShoppingOutlined";
 import UserOutlined from "@ant-design/icons/UserOutlined";
 import Avatar from "antd/es/avatar";
 import Button from "antd/es/button";
 import Drawer from "antd/es/drawer";
+import Dropdown from "antd/es/dropdown";
 import Layout from "antd/es/layout";
 import Menu from "antd/es/menu";
 import Tooltip from "antd/es/tooltip";
 import { useEffect, useState } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import BrandMark from "./BrandMark";
+import { useAuth } from "../auth/AuthContext";
 
 const { Header, Sider, Content } = Layout;
-const tenantName = import.meta.env.VITE_TENANT_NAME || "CRM Select Demo";
 
+// 公司設定排第一個（使用者明確要求：進到後台第一眼要能設定/確認目前是哪家公司）。
 const navigationItems = [
+  { key: "/company-settings", icon: <SettingOutlined />, label: "公司設定" },
   { key: "/", icon: <HomeOutlined />, label: "儀表板" },
   { key: "/orders", icon: <ShoppingOutlined />, label: "訂單管理" },
   { key: "/rag", icon: <DatabaseOutlined />, label: "RAG 知識庫" },
+  { key: "/summary", icon: <CustomerServiceOutlined />, label: "客服機器人" },
 ];
 
 function resolveSelectedKey(pathname: string) {
   if (pathname.startsWith("/orders")) return "/orders";
   if (pathname.startsWith("/rag")) return "/rag";
+  if (pathname.startsWith("/company-settings")) return "/company-settings";
+  if (pathname.startsWith("/summary")) return "/summary";
   return "/";
 }
 
 export default function AdminLayout() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { account, companies, selectedCompanyId, selectCompany, logout } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(() => window.innerWidth < 900);
   const selectedKey = resolveSelectedKey(location.pathname);
+  const selectedCompany = companies.find((company) => company.id === selectedCompanyId);
+
+  async function handleLogout() {
+    await logout();
+    navigate("/login", { replace: true });
+  }
 
   useEffect(() => {
     const media = window.matchMedia("(max-width: 899px)");
@@ -49,8 +66,28 @@ export default function AdminLayout() {
       <div className="sider-brand"><BrandMark compact={collapsed && !isMobile} /></div>
       {(!collapsed || isMobile) && (
         <div className="tenant-block">
-          <span>目前租戶</span>
-          <strong>{tenantName}</strong>
+          <span>目前商家</span>
+          {companies.length > 1 ? (
+            <Dropdown
+              menu={{
+                items: companies.map((company) => ({ key: company.id, label: company.name })),
+                onClick: ({ key }) => selectCompany(key),
+              }}
+            >
+              <strong className="tenant-switcher">{selectedCompany?.name ?? "選擇商家"} <DownOutlined /></strong>
+            </Dropdown>
+          ) : (
+            <strong>{selectedCompany?.name ?? "-"}</strong>
+          )}
+          {/* 只有一家公司時上面沒有下拉選單，這裡另外給一個固定入口，不然新增第二家商家後
+              就永遠回不到選公司頁面了（選了一家之後 CompanySelectPage 不會再自動出現）。 */}
+          <button
+            type="button"
+            className="tenant-manage-link"
+            onClick={() => navigate("/select-company")}
+          >
+            管理商家服務
+          </button>
         </div>
       )}
       <Menu
@@ -88,10 +125,17 @@ export default function AdminLayout() {
               onClick={() => isMobile ? setMobileOpen(true) : setCollapsed((value) => !value)}
             />
           </Tooltip>
-          <div className="account-placeholder" aria-label="帳號功能尚未啟用">
-            <Avatar icon={<UserOutlined />} />
-            <span><strong>帳號功能</strong><small>敬請期待</small></span>
-          </div>
+          <Dropdown
+            menu={{
+              items: [{ key: "logout", icon: <LogoutOutlined />, label: "登出" }],
+              onClick: ({ key }) => { if (key === "logout") handleLogout(); },
+            }}
+          >
+            <div className="account-placeholder" aria-label="帳號選單">
+              <Avatar icon={<UserOutlined />} />
+              <span><strong>{account?.email ?? "-"}</strong><small>{account?.role ?? ""}</small></span>
+            </div>
+          </Dropdown>
         </Header>
         <Content className="admin-content"><Outlet /></Content>
       </Layout>

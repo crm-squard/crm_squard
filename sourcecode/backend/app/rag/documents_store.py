@@ -30,13 +30,10 @@ from typing import Callable, Optional
 
 from llama_index.core import VectorStoreIndex
 from llama_index.core.schema import NodeRelationship, RelatedNodeInfo, TextNode
-from sqlalchemy import create_engine
 from sqlalchemy import text as sql_text
-from sqlalchemy.engine import Engine, URL
 
 from app.config import settings
-from app.documents import get_seed_sources
-from app.rag.product_parser import parse_products
+from app.db import get_engine as _get_engine
 
 Parser = Callable[[str, str], list[dict]]
 
@@ -75,11 +72,17 @@ def parse_generic_markdown(raw_text: str, source: str) -> list[dict]:
     return chunks
 
 
-def _build_nodes(ref_doc_id: str, display_source: str, chunks: list[dict]) -> list[TextNode]:
+def _build_nodes(
+    company_id: str, ref_doc_id: str, display_source: str, chunks: list[dict]
+) -> list[TextNode]:
     """
     把解析出來的 chunk 包成帶 ref_doc_id 的 TextNode。ref_doc_id 是 kb_documents.doc_id
     （流水號字串化，管理/刪除用的穩定身分），display_source 是給聊天檢索顯示用的路徑
     （建立當下觸發 embed 的那個路徑，多個路徑共用同一份內容時不會動態更新，只是顯示用途）。
+
+    company_id 存進 metadata：llamaindex_engine.retrieve() 用 MetadataFilters 依這個欄位
+    過濾，是 RAG company 隔離真正生效的地方（documents_store 這邊的 company_id 只管理
+    kb_documents/kb_document_labels 這兩張「身分」表，不代表向量檢索也會自動隔離）。
     """
     nodes = []
     for i, c in enumerate(chunks):
@@ -87,6 +90,7 @@ def _build_nodes(ref_doc_id: str, display_source: str, chunks: list[dict]) -> li
             text=c["text"],
             id_=f"{ref_doc_id}-{i}",
             metadata={
+                "company_id": company_id,
                 "source": display_source,
                 "topic": c["topic"],
                 "category": c["category"],
@@ -101,38 +105,19 @@ def _build_nodes(ref_doc_id: str, display_source: str, chunks: list[dict]) -> li
     return nodes
 
 
-_engine: Optional[Engine] = None
 _schema_ready = False
-
-
-def _get_engine() -> Engine:
-    """整個 process 共用同一個 Engine（含連線池），不要每次呼叫都重新建立——這個函式
-    呼叫頻率很高（幾乎每支公開函式都會呼叫一次），重複 create_engine() 等於重複開連線池，
-    長期跑下去會浪費資源、增加資料庫端的閒置連線數。"""
-    global _engine
-    if _engine is None:
-        # 用 URL.create() 組連線字串（不是手動 f-string 拼接）：Supabase 的 pooler
-        # user 名稱帶了「.」（例如 postgres.xxxxx），密碼也可能含特殊字元，URL.create()
-        # 會自動做必要的 URL 編碼，手動拼字串遇到這些字元會組出錯誤的連線字串。
-        # sslmode=require：Supabase（以及大多數雲端 Postgres）要求 TLS 連線，本機
-        # docker pgvector 沒有這個限制但加上通常也相容，不用依環境切換。
-        url = URL.create(
-            "postgresql+psycopg2",
-            username=settings.RAG_PG_USER,
-            password=settings.RAG_PG_PASSWORD,
-            host=settings.RAG_PG_HOST,
-            port=settings.RAG_PG_PORT,
-            database=settings.RAG_PG_DATABASE,
-            query={"sslmode": "require"},
-        )
-        _engine = create_engine(url)
-    return _engine
 
 
 def _ensure_schema() -> None:
     """
     確保 kb_documents／kb_document_labels 這兩張身分/標籤表存在。冪等、每個 process
     只會真的執行一次 DDL（用模組層級旗標快取），之後呼叫都是無成本的早退。
+
+    company_id 隔離（Phase 1）：兩張表都加上 company_id，唯一性從「全域唯一」改成
+    「同一 company_id 底下唯一」（UNIQUE(company_id, content_hash) / UNIQUE(company_id, path)），
+    讓不同公司可以各自有同路徑、同內容的文件而互不干擾。舊的（無公司歸屬）RAG 資料直接砍掉
+    重建，不用遷移（見實作計畫），所以這裡用 CREATE TABLE IF NOT EXISTS 搭配新 schema，
+    不寫 ALTER TABLE 相容舊表。
     """
     global _schema_ready
     if _schema_ready:
@@ -143,10 +128,12 @@ def _ensure_schema() -> None:
             """
             CREATE TABLE IF NOT EXISTS kb_documents (
                 doc_id          BIGSERIAL PRIMARY KEY,
-                content_hash    CHAR(64) NOT NULL UNIQUE,
+                company_id      UUID NOT NULL,
+                content_hash    CHAR(64) NOT NULL,
                 file_size_bytes INTEGER NOT NULL,
                 chunk_count     INTEGER NOT NULL DEFAULT 0,
-                created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+                created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+                UNIQUE (company_id, content_hash)
             )
             """
         ))
@@ -155,31 +142,39 @@ def _ensure_schema() -> None:
             CREATE TABLE IF NOT EXISTS kb_document_labels (
                 id         BIGSERIAL PRIMARY KEY,
                 doc_id     BIGINT NOT NULL REFERENCES kb_documents(doc_id) ON DELETE CASCADE,
-                path       TEXT NOT NULL UNIQUE,
+                company_id UUID NOT NULL,
+                path       TEXT NOT NULL,
                 tags       TEXT[] NOT NULL DEFAULT '{}',
-                created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+                created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                UNIQUE (company_id, path)
             )
             """
         ))
         conn.execute(sql_text(
             "CREATE INDEX IF NOT EXISTS kb_document_labels_doc_id_idx ON kb_document_labels (doc_id)"
         ))
+        conn.execute(sql_text(
+            "CREATE INDEX IF NOT EXISTS kb_documents_company_id_idx ON kb_documents (company_id)"
+        ))
+        conn.execute(sql_text(
+            "CREATE INDEX IF NOT EXISTS kb_document_labels_company_id_idx ON kb_document_labels (company_id)"
+        ))
     _schema_ready = True
 
 
-def get_label(path: str) -> Optional[dict]:
-    """查這個路徑目前指向哪份內容（doc_id/tags/content_hash/chunk_count），查不到回 None。"""
+def get_label(company_id: str, path: str) -> Optional[dict]:
+    """查這個公司底下、這個路徑目前指向哪份內容（doc_id/tags/content_hash/chunk_count），查不到回 None。"""
     _ensure_schema()
     sql = sql_text(
         """
         SELECT l.doc_id, l.tags, d.content_hash, d.chunk_count
         FROM kb_document_labels l JOIN kb_documents d ON d.doc_id = l.doc_id
-        WHERE l.path = :path
+        WHERE l.company_id = :company_id AND l.path = :path
         """
     )
     engine = _get_engine()
     with engine.connect() as conn:
-        row = conn.execute(sql, {"path": path}).fetchone()
+        row = conn.execute(sql, {"company_id": company_id, "path": path}).fetchone()
     if row is None:
         return None
     return {
@@ -190,19 +185,23 @@ def get_label(path: str) -> Optional[dict]:
     }
 
 
-def find_document_by_hash(content_hash: str) -> Optional[dict]:
-    """查這個內容雜湊有沒有既有的 kb_documents 紀錄（不管掛在哪個路徑底下），查不到回 None。"""
+def find_document_by_hash(company_id: str, content_hash: str) -> Optional[dict]:
+    """查這個公司底下、這個內容雜湊有沒有既有的 kb_documents 紀錄（不管掛在哪個路徑底下），查不到回 None。"""
     _ensure_schema()
-    sql = sql_text("SELECT doc_id, chunk_count FROM kb_documents WHERE content_hash = :h")
+    sql = sql_text(
+        "SELECT doc_id, chunk_count FROM kb_documents WHERE company_id = :company_id AND content_hash = :h"
+    )
     engine = _get_engine()
     with engine.connect() as conn:
-        row = conn.execute(sql, {"h": content_hash}).fetchone()
+        row = conn.execute(sql, {"company_id": company_id, "h": content_hash}).fetchone()
     if row is None:
         return None
     return {"doc_id": row.doc_id, "chunk_count": row.chunk_count}
 
 
-def _relabel_and_collect_orphan(path: str, doc_id: int, tags: list[str], old_doc_id: Optional[int]) -> Optional[int]:
+def _relabel_and_collect_orphan(
+    company_id: str, path: str, doc_id: int, tags: list[str], old_doc_id: Optional[int]
+) -> Optional[int]:
     """
     把路徑指向 doc_id（不存在就新增、存在就整筆覆蓋），跟「舊 doc_id 是否變成孤兒」這兩件事
     都是純 SQL、彼此之間不需要插入任何外部呼叫，包在同一個 transaction 裡一次做完。
@@ -217,12 +216,12 @@ def _relabel_and_collect_orphan(path: str, doc_id: int, tags: list[str], old_doc
         conn.execute(
             sql_text(
                 """
-                INSERT INTO kb_document_labels (doc_id, path, tags)
-                VALUES (:doc_id, :path, :tags)
-                ON CONFLICT (path) DO UPDATE SET doc_id = EXCLUDED.doc_id, tags = EXCLUDED.tags
+                INSERT INTO kb_document_labels (doc_id, company_id, path, tags)
+                VALUES (:doc_id, :company_id, :path, :tags)
+                ON CONFLICT (company_id, path) DO UPDATE SET doc_id = EXCLUDED.doc_id, tags = EXCLUDED.tags
                 """
             ),
-            {"doc_id": doc_id, "path": path, "tags": tags},
+            {"doc_id": doc_id, "company_id": company_id, "path": path, "tags": tags},
         )
         if old_doc_id is None or old_doc_id == doc_id:
             return None
@@ -247,7 +246,7 @@ def _finalize_orphan_deletion(doc_id: int, index: VectorStoreIndex) -> None:
 
 
 def _create_document_with_embedding(
-    path: str, raw_text: str, index: VectorStoreIndex, parser: Parser = parse_generic_markdown
+    company_id: str, path: str, raw_text: str, index: VectorStoreIndex, parser: Parser = parse_generic_markdown
 ) -> dict:
     """真的解析＋embed 一份新內容：新增 kb_documents 一筆，插入對應的向量，回傳新 doc_id 與 chunk 數。"""
     encoded = raw_text.encode("utf-8")
@@ -257,15 +256,15 @@ def _create_document_with_embedding(
         doc_id = conn.execute(
             sql_text(
                 """
-                INSERT INTO kb_documents (content_hash, file_size_bytes, chunk_count)
-                VALUES (:h, :s, 0) RETURNING doc_id
+                INSERT INTO kb_documents (company_id, content_hash, file_size_bytes, chunk_count)
+                VALUES (:company_id, :h, :s, 0) RETURNING doc_id
                 """
             ),
-            {"h": content_hash, "s": len(encoded)},
+            {"company_id": company_id, "h": content_hash, "s": len(encoded)},
         ).scalar_one()
 
     chunks = parser(raw_text, path)
-    nodes = _build_nodes(str(doc_id), path, chunks)
+    nodes = _build_nodes(company_id, str(doc_id), path, chunks)
     if nodes:
         index.insert_nodes(nodes)
 
@@ -278,11 +277,19 @@ def _create_document_with_embedding(
 
 
 def upsert_document(
-    path: str, tags: list[str], client_sha256: str, raw_text: Optional[str], index: VectorStoreIndex
+    company_id: str,
+    path: str,
+    tags: list[str],
+    client_sha256: str,
+    raw_text: Optional[str],
+    index: VectorStoreIndex,
 ) -> dict:
     """
-    知識庫文件管理的唯一寫入入口：不需要呼叫端提供任何 doc_id，純粹依「路徑」跟「內容雜湊」
-    交叉查詢決定要做什麼事。回傳 {"status", "chunk_count", "content_changed"}。
+    知識庫文件管理的唯一寫入入口：不需要呼叫端提供任何 doc_id，純粹依「公司 + 路徑」跟
+    「公司 + 內容雜湊」交叉查詢決定要做什麼事。回傳 {"status", "chunk_count", "content_changed"}。
+
+    所有判斷都限定在同一個 company_id 範圍內——不同公司即使路徑、內容完全一樣，也各自視為
+    獨立的 new，不會互相命中對方的雜湊或路徑（多租戶隔離）。
 
     - 這個路徑本來就指向這個雜湊：標籤沒變 -> unchanged；標籤變了 -> tags_only_changed（不重新 embed）。
     - 這個雜湊命中「別的」既有內容（不管這個路徑本來有沒有紀錄）：linked，只改標籤紀錄指向該內容，
@@ -290,19 +297,19 @@ def upsert_document(
     - 兩者都沒中：真的需要 raw_text 才能新增/更新內容（呼叫端要保證這種情況一定有帶檔案）。
     """
     _ensure_schema()
-    label = get_label(path)
+    label = get_label(company_id, path)
 
     if label is not None and label["content_hash"] == client_sha256:
         if set(label["tags"]) == set(tags):
             return {"status": "unchanged", "chunk_count": label["chunk_count"], "content_changed": False}
-        _relabel_and_collect_orphan(path, label["doc_id"], tags, old_doc_id=None)
+        _relabel_and_collect_orphan(company_id, path, label["doc_id"], tags, old_doc_id=None)
         return {"status": "tags_only_changed", "chunk_count": label["chunk_count"], "content_changed": False}
 
     old_doc_id = label["doc_id"] if label is not None else None
 
-    matched = find_document_by_hash(client_sha256)
+    matched = find_document_by_hash(company_id, client_sha256)
     if matched is not None:
-        orphan = _relabel_and_collect_orphan(path, matched["doc_id"], tags, old_doc_id)
+        orphan = _relabel_and_collect_orphan(company_id, path, matched["doc_id"], tags, old_doc_id)
         if orphan is not None:
             _finalize_orphan_deletion(orphan, index)
         return {"status": "linked", "chunk_count": matched["chunk_count"], "content_changed": False}
@@ -310,27 +317,28 @@ def upsert_document(
     if raw_text is None:
         raise ValueError("需要上傳檔案內容才能新增或更新這份文件。")
 
-    created = _create_document_with_embedding(path, raw_text, index)
-    orphan = _relabel_and_collect_orphan(path, created["doc_id"], tags, old_doc_id)
+    created = _create_document_with_embedding(company_id, path, raw_text, index)
+    orphan = _relabel_and_collect_orphan(company_id, path, created["doc_id"], tags, old_doc_id)
     if orphan is not None:
         _finalize_orphan_deletion(orphan, index)
     status = "content_changed" if label is not None else "new"
     return {"status": status, "chunk_count": created["chunk_count"], "content_changed": True}
 
 
-def list_documents() -> list[dict]:
-    """列出所有路徑（一份內容掛兩個路徑就是兩列，各自標籤）。"""
+def list_documents(company_id: str) -> list[dict]:
+    """列出這個公司底下所有路徑（一份內容掛兩個路徑就是兩列，各自標籤）。"""
     _ensure_schema()
     sql = sql_text(
         """
         SELECT l.path, l.tags, d.chunk_count, d.file_size_bytes, d.created_at, d.content_hash
         FROM kb_document_labels l JOIN kb_documents d ON d.doc_id = l.doc_id
+        WHERE l.company_id = :company_id
         ORDER BY l.path
         """
     )
     engine = _get_engine()
     with engine.connect() as conn:
-        rows = conn.execute(sql).fetchall()
+        rows = conn.execute(sql, {"company_id": company_id}).fetchall()
     return [
         {
             "path": row.path,
@@ -344,23 +352,29 @@ def list_documents() -> list[dict]:
     ]
 
 
-def list_paths_by_prefix(prefix: str) -> list[str]:
-    """列出以 prefix 開頭的所有路徑，用於「資料夾全量覆蓋上傳」比對這次沒包含到的舊路徑。"""
+def list_paths_by_prefix(company_id: str, prefix: str) -> list[str]:
+    """列出這個公司底下以 prefix 開頭的所有路徑，用於「資料夾全量覆蓋上傳」比對這次沒包含到的舊路徑。"""
     _ensure_schema()
-    sql = sql_text("SELECT path FROM kb_document_labels WHERE path LIKE :pattern")
+    sql = sql_text(
+        "SELECT path FROM kb_document_labels WHERE company_id = :company_id AND path LIKE :pattern"
+    )
     engine = _get_engine()
     with engine.connect() as conn:
-        rows = conn.execute(sql, {"pattern": prefix + "%"}).fetchall()
+        rows = conn.execute(sql, {"company_id": company_id, "pattern": prefix + "%"}).fetchall()
     return [row.path for row in rows]
 
 
-def delete_document_by_path(path: str, index: VectorStoreIndex) -> bool:
-    """刪除這個路徑的標籤紀錄；該內容沒有其他路徑指著了才真的刪掉向量與內容紀錄。"""
+def delete_document_by_path(company_id: str, path: str, index: VectorStoreIndex) -> bool:
+    """刪除這個公司底下這個路徑的標籤紀錄；該內容沒有其他路徑指著了才真的刪掉向量與內容紀錄。"""
     _ensure_schema()
     engine = _get_engine()
     with engine.begin() as conn:
         row = conn.execute(
-            sql_text("DELETE FROM kb_document_labels WHERE path = :path RETURNING doc_id"), {"path": path}
+            sql_text(
+                "DELETE FROM kb_document_labels WHERE company_id = :company_id AND path = :path "
+                "RETURNING doc_id"
+            ),
+            {"company_id": company_id, "path": path},
         ).fetchone()
         if row is None:
             return False
@@ -370,6 +384,40 @@ def delete_document_by_path(path: str, index: VectorStoreIndex) -> bool:
     if remaining == 0:
         _finalize_orphan_deletion(row.doc_id, index)
     return True
+
+
+def purge_company(company_id: str, index: VectorStoreIndex) -> None:
+    """
+    硬刪除一家公司的所有 RAG 資料：kb_document_labels/kb_documents 的列，以及 pgvector
+    物理表裡屬於這家公司的向量 chunk。供公司刪除（DELETE /api/admin/companies/{id}）呼叫。
+
+    向量部分直接對 PGVectorStore 的實體表（data_<RAG_PG_TABLE>，見檔案頂端說明）下 SQL，
+    用 metadata_ JSONB 欄位的 company_id 篩選——不透過 index.delete_ref_doc() 逐筆刪
+    （那個方法要先知道每個 doc_id，公司刪除是整批清空，直接對表下 SQL 更直接也更不容易漏刪）。
+    """
+    _ensure_schema()
+    engine = _get_engine()
+    table = _table_full_name()
+    try:
+        # 向量物理表是 lazy 建立的（第一次 insert_nodes 才會觸發建表，見 seed_if_empty()
+        # 的說明），全新資料庫可能還沒有任何文件、表根本不存在，這種情況視同沒有向量要清，
+        # 不用另外擋成錯誤，跟 _count_rows() 的處理方式一致。
+        with engine.begin() as conn:
+            conn.execute(
+                sql_text(f"DELETE FROM {table} WHERE metadata_->>'company_id' = :company_id"),
+                {"company_id": company_id},
+            )
+    except Exception:
+        pass
+    with engine.begin() as conn:
+        conn.execute(
+            sql_text("DELETE FROM kb_document_labels WHERE company_id = :company_id"),
+            {"company_id": company_id},
+        )
+        conn.execute(
+            sql_text("DELETE FROM kb_documents WHERE company_id = :company_id"),
+            {"company_id": company_id},
+        )
 
 
 def _table_full_name() -> str:
@@ -387,28 +435,12 @@ def _count_rows() -> int:
 
 def seed_if_empty(index: VectorStoreIndex) -> None:
     """
-    服務啟動時，如果 pgvector table 是空的（例如第一次接上新資料庫），把現有 app/data/*.md
-    知識庫內容灌進去；一次性、冪等（table 有資料後就不會再跑）。跟管理頁面上傳走同一套
-    kb_documents／kb_document_labels 身分管理，seed 進來的文件一樣會出現在
-    GET /api/admin/documents，路徑固定用檔名、標籤固定用種子分類（product/policy）。
-
-    產品種子文件（規格條列格式）用 product_parser.parse_products 保留逐條拆分的檢索精準度；
-    其餘政策文件用通用的 parse_generic_markdown（H1/H2 拆段落，效果等同已淘汰的
-    policy_parser.parse_policy_doc，兩者輸出格式相容，不需要保留兩套邏輯）。
-
-    PGVectorStore 的實體資料表是 lazy 建立的（第一次 insert_nodes/query 時才會觸發
-    perform_setup 建表），全新資料庫在任何操作前直接查表會是「table 不存在」而不是「筆數 0」，
-    這裡當成「視同空表」處理即可，交給後面 _create_document_with_embedding() 觸發建表。
+    Phase 1 多租戶隔離後的已知限制：這個函式原本會在 pgvector table 全空時（例如全新資料庫）
+    自動把 app/data/*.md 的示範知識庫內容灌進去；但現在 kb_documents.company_id 是必填
+    （見 _ensure_schema() 的說明），啟動階段並不存在任何「預設公司」可以歸屬這批示範資料
+    （公司要透過 POST /api/admin/companies 由平台帳號手動建立），繼續硬塞一個假的 company_id
+    會混淆真正的租戶資料，所以 Phase 1 先把自動灌入示範資料整個停用，改成純粹的 no-op。
+    後續如果要恢復「新公司預先帶入示範知識庫」的體驗，應該在建立公司當下明確呼叫、帶入
+    該公司的 company_id，而不是在啟動階段猜一個全域對象。
     """
-    try:
-        if _count_rows() > 0:
-            return
-    except Exception:
-        pass
-
-    for seed in get_seed_sources():
-        raw_text = seed["path"].read_text(encoding="utf-8")
-        path = seed["source"]
-        parser = parse_products if seed["category"] == "product" else parse_generic_markdown
-        created = _create_document_with_embedding(path, raw_text, index, parser=parser)
-        _relabel_and_collect_orphan(path, created["doc_id"], [seed["category"]], old_doc_id=None)
+    return

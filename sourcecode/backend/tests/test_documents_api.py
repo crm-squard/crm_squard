@@ -40,8 +40,15 @@ def _reset_rate_limit():
 
 
 @pytest.fixture
-def client():
+def client(platform_token, test_company):
+    """
+    這份測試檔案的所有請求都需要 company_id 查詢參數 + Authorization header
+    （/api/admin/documents* 加了 require_company_access，見 app/main.py）。用 httpx.Client
+    的預設 headers／params 機制，讓每一筆請求自動帶上，測試本體的呼叫寫法不用逐一修改。
+    """
     with TestClient(app) as c:
+        c.headers["Authorization"] = f"Bearer {platform_token}"
+        c.params = {"company_id": test_company["id"]}
         yield c
         # 測試後清乾淨，避免留下測試資料污染共用的 pgvector table
         c.delete(f"/api/admin/documents/{TEST_PATH}")
@@ -341,3 +348,79 @@ class TestPrecheck:
             assert resp.json()["stale_paths"] == []
         finally:
             client.delete(f"/api/admin/documents/{path}")
+
+
+class TestCompanyIsolation:
+    """
+    多租戶 company_id 隔離：同名 path／同雜湊在不同 company_id 下互不干擾，各自視為獨立的
+    new；一家公司的文件列表看不到另一家公司的文件；purge_company 之後這家公司的文件與
+    （靠 company_id metadata 過濾的）檢索都要清空。
+    """
+
+    def test_same_path_and_hash_are_independent_across_companies(self, client, platform_token):
+        from app import accounts_store
+
+        other_company = accounts_store.create_company("Pytest 隔離測試 - 另一家公司", None)
+        path = "pytest_isolation_shared_path.md"
+        content = "# 隔離測試\n\n## 小節\n兩家公司各自上傳同樣的路徑跟內容。\n"
+        headers = {"Authorization": f"Bearer {platform_token}"}
+        try:
+            # 公司 A（client fixture 預設的 test_company）新增這個路徑
+            resp_a = client.put(
+                f"/api/admin/documents/{path}",
+                data={"tags": ["a"], "client_sha256": _sha256(content)},
+                files=_md_file(content, filename=path),
+            )
+            assert resp_a.status_code == 200
+
+            # 公司 B 上傳一模一樣的路徑＋內容：因為 company_id 不同，應該視為全新的 new
+            # （不是 linked、也不會被視為已存在），content_changed 為 True。
+            resp_b = client.put(
+                f"/api/admin/documents/{path}",
+                params={"company_id": other_company["id"]},
+                data={"tags": ["b"], "client_sha256": _sha256(content)},
+                files=_md_file(content, filename=path),
+            )
+            assert resp_b.status_code == 200
+            assert resp_b.json()["content_changed"] is True
+
+            # 公司 A 的列表看不到公司 B 的標籤，反之亦然（各自只看到自己那份，tags 不同）
+            list_a = client.get("/api/admin/documents").json()["documents"]
+            list_b = client.get(
+                "/api/admin/documents", params={"company_id": other_company["id"]}
+            ).json()["documents"]
+            docs_a = {d["path"]: d for d in list_a}
+            docs_b = {d["path"]: d for d in list_b}
+            assert docs_a[path]["tags"] == ["a"]
+            assert docs_b[path]["tags"] == ["b"]
+        finally:
+            client.delete(f"/api/admin/documents/{path}")
+            client.delete(f"/api/admin/documents/{path}", params={"company_id": other_company["id"]})
+            accounts_store.delete_company(other_company["id"])
+
+    def test_purge_company_clears_documents_and_vectors(self, client, platform_token):
+        from app import accounts_store
+        from app.rag.documents_store import list_documents as _list_documents, purge_company
+        from app.rag.engine import get_retriever
+
+        purge_company_target = accounts_store.create_company("Pytest 待刪除公司", None)
+        path = "pytest_purge_target.md"
+        content = "# 待刪除\n\n## 小節\n這份文件所屬的公司會被整個刪除。\n"
+
+        upload_resp = client.put(
+            f"/api/admin/documents/{path}",
+            params={"company_id": purge_company_target["id"]},
+            data={"tags": [], "client_sha256": _sha256(content)},
+            files=_md_file(content, filename=path),
+        )
+        assert upload_resp.status_code == 200
+        assert upload_resp.json()["chunk_count"] > 0
+
+        # 刪除前：list_documents(company_id) 應該看得到這筆
+        assert len(_list_documents(purge_company_target["id"])) == 1
+
+        purge_company(purge_company_target["id"], get_retriever().index)
+        accounts_store.delete_company(purge_company_target["id"])
+
+        # 刪除後：文件記錄清空
+        assert _list_documents(purge_company_target["id"]) == []

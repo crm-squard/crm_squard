@@ -29,9 +29,6 @@ class Settings:
     # 訂單資料 SQLite 檔案路徑；MCP 查不到 corp-backend 時的 fallback 資料來源
     ORDERS_DB_PATH: str = os.getenv("ORDERS_DB_PATH", "./orders.db")
 
-    # corp-backend 的 MCP Streamable HTTP endpoint，訂單查詢的真正資料來源（見 app/orders.py）
-    CORP_BACKEND_MCP_URL: str = os.getenv("CORP_BACKEND_MCP_URL", "http://localhost:8001/mcp")
-
     # 多輪對話最多保留幾輪（一輪 = 一則使用者訊息 + 一則機器人回覆），避免 context 太長讓本地小模型變慢
     MAX_HISTORY_TURNS: int = 4
 
@@ -56,6 +53,22 @@ class Settings:
     # llamaindex 引擎「有沒有查到答案」的距離門檻（1 - 相似度分數），只在 provider=local 時
     # 用來判斷要不要跳過 LLM 直接回「查無此資訊」，見 app/agent.py 的說明。
     RAG_NO_INFO_THRESHOLD: float = 0.30
+
+    # 多租戶帳號（Google 登入）：前端拿到的 Google ID token 要用這個 OAuth Client ID 驗證
+    # 簽發對象，避免拿到別的應用程式簽的 token 也被接受。Phase 1 還沒有前端串接，這裡先
+    # 留設定值供 app/auth.py 使用，本機測試靠 monkeypatch 繞過真的驗證。
+    GOOGLE_CLIENT_ID: str = os.getenv("GOOGLE_CLIENT_ID", "")
+
+    # session token 有效期限（小時），過期後 accounts_store.get_account_by_session() 視同查無此帳號。
+    SESSION_TTL_HOURS: int = int(os.getenv("SESSION_TTL_HOURS", "24"))
+
+    # 服務啟動時，若 accounts 表是空的（例如全新資料庫，還沒有人能登入），把這裡列出的
+    # email（逗號分隔）建成 platform_primary 帳號，解決「雞生蛋」的 bootstrap 問題。
+    INITIAL_PLATFORM_ADMIN_EMAILS: list = [
+        email.strip()
+        for email in os.getenv("INITIAL_PLATFORM_ADMIN_EMAILS", "").split(",")
+        if email.strip()
+    ]
 
 
 settings = Settings()

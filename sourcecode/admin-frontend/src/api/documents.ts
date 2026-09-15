@@ -26,20 +26,24 @@ export async function sha256Hex(file: File): Promise<string> {
     .join("");
 }
 
-export async function fetchDocuments(): Promise<DocumentInfo[]> {
-  const response = await fetch(`${API_BASE_URL}/api/admin/documents`);
+export async function fetchDocuments(token: string, companyId: string): Promise<DocumentInfo[]> {
+  const response = await fetch(`${API_BASE_URL}/api/admin/documents?company_id=${encodeURIComponent(companyId)}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
   await throwIfNotOk(response);
   const data = (await response.json()) as { documents: DocumentInfo[] };
   return data.documents;
 }
 
 export async function precheckDocuments(
+  token: string,
+  companyId: string,
   items: PrecheckRequestItem[],
   scopePrefix: string | null
 ): Promise<PrecheckResponse> {
-  const response = await fetch(`${API_BASE_URL}/api/admin/documents/precheck`, {
+  const response = await fetch(`${API_BASE_URL}/api/admin/documents/precheck?company_id=${encodeURIComponent(companyId)}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
     body: JSON.stringify({ scope_prefix: scopePrefix, items }),
   });
   await throwIfNotOk(response);
@@ -56,22 +60,30 @@ interface UpsertDocumentParams {
 
 // 新增/更新內容/改標籤/掛到既有內容統一走這支：doc_id 完全不需要呼叫端提供，
 // 後端依路徑跟雜湊自己判斷要做什麼事（見 contracts.md）。
-export async function upsertDocument(params: UpsertDocumentParams): Promise<DocumentInfo> {
+export async function upsertDocument(token: string, companyId: string, params: UpsertDocumentParams): Promise<DocumentInfo> {
   const formData = new FormData();
   params.tags.forEach((tag) => formData.append("tags", tag));
   formData.append("client_sha256", params.clientSha256);
   if (params.file) formData.append("file", params.file);
-  const response = await fetch(`${API_BASE_URL}/api/admin/documents/${encodePathForUrl(params.path)}`, {
-    method: "PUT",
-    body: formData,
-  });
+  const response = await fetch(
+    `${API_BASE_URL}/api/admin/documents/${encodePathForUrl(params.path)}?company_id=${encodeURIComponent(companyId)}`,
+    {
+      method: "PUT",
+      headers: { Authorization: `Bearer ${token}` },
+      body: formData,
+    }
+  );
   await throwIfNotOk(response);
   return (await response.json()) as DocumentInfo;
 }
 
-export async function deleteDocument(path: string): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/api/admin/documents/${encodePathForUrl(path)}`, {
-    method: "DELETE",
-  });
+export async function deleteDocument(token: string, companyId: string, path: string): Promise<void> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/admin/documents/${encodePathForUrl(path)}?company_id=${encodeURIComponent(companyId)}`,
+    {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` },
+    }
+  );
   await throwIfNotOk(response);
 }

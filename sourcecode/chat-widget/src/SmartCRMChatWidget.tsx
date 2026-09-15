@@ -9,8 +9,6 @@ import { useProviders } from "./hooks/useProviders";
 import { fetchWidgetConfig } from "./api/chat";
 import { DEFAULT_WIDGET_CONFIG, toThemeStyle, type WidgetConfig } from "./config";
 
-const QUICK_REPLIES = ["無線滑鼠支援多少 DPI？", "查詢訂單 A12345", "退貨要幾天內申請？"];
-
 export default function SmartCRMChatWidget({ clientId }: { clientId: string }) {
   const [isOpen, setIsOpen] = useState(false);
   const [input, setInput] = useState("");
@@ -37,7 +35,7 @@ export default function SmartCRMChatWidget({ clientId }: { clientId: string }) {
       <ProviderSelect providers={providers} value={provider} onChange={setProvider} />
       <MessageList messages={messages} isSending={isSending} />
       {messages.length < 2 && <div className="ccw-quick-replies">
-        {QUICK_REPLIES.map((question) => <button key={question} className="ccw-chip" onClick={() => handleSend(question)}>
+        {config.quickReplies.map((question) => <button key={question} className="ccw-chip" onClick={() => handleSend(question)}>
           {question}
         </button>)}
       </div>}

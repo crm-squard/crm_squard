@@ -16,16 +16,27 @@ from datetime import datetime, timezone
 
 from typing import Literal
 
-from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request, UploadFile
+from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
+from app import accounts_store, auth
 from app.config import settings
 from app.schemas import (
+    AccountCreateRequest,
+    AccountInfo,
+    AccountListResponse,
     ChatRequest,
     ChatResponse,
+    CompanyCreateRequest,
+    CompanyInfo,
+    CompanyListResponse,
+    CompanyUpdateRequest,
     DailySummaryResponse,
     DocumentInfo,
     DocumentListResponse,
+    GoogleLoginRequest,
+    LoginResponse,
+    MeResponse,
     PrecheckRequest,
     PrecheckResponse,
     PrecheckResultItem,
@@ -60,6 +71,12 @@ async def lifespan(app: FastAPI):
         init_orders_db()
     except Exception as e:
         print(f"[Warning] Backend startup db init failed: {e}")
+    try:
+        # 多租戶帳號表（companies/accounts/company_accounts/sessions/audit_log）冪等建立，
+        # 順便跑 bootstrap_initial_platform_admins()（見 accounts_store._ensure_schema()）。
+        accounts_store._ensure_schema()
+    except Exception as e:
+        print(f"[Warning] Backend startup accounts_store schema init failed: {e}")
     yield
 
 
@@ -111,6 +128,47 @@ def health():
     return {"status": "ok"}
 
 
+# ---- 多租戶帳號：Google 登入 / session / 目前登入者資訊（Phase 1，見 app/auth.py） ----
+
+
+@app.post("/api/auth/google", response_model=LoginResponse)
+def login_with_google(req: GoogleLoginRequest):
+    """
+    驗證前端拿到的 Google ID token，查帳號表；帳號不存在回 403（帳號需要平台/商家主帳號
+    手動加入，不是隨便一個 Google 帳號登入就能用）。驗證成功建立 session，回傳明文 token
+    （僅此一次，之後的請求都帶 Authorization: Bearer <token>）。
+    """
+    try:
+        email = auth.verify_google_id_token(req.id_token)
+    except ValueError as e:
+        raise HTTPException(status_code=401, detail=str(e))
+    account = accounts_store.get_account_by_email(email)
+    if account is None:
+        raise HTTPException(status_code=403, detail="這個帳號尚未被加入系統，請聯繫管理者。")
+    token = accounts_store.create_session(account["id"])
+    return LoginResponse(token=token, account=AccountInfo(**account))
+
+
+@app.post("/api/auth/logout")
+def logout(authorization: str | None = Header(default=None)):
+    """撤銷目前 session（刪掉對應的 sessions row）。沒帶 token 或格式錯誤視同已登出，不報錯。"""
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization[len("Bearer "):].strip()
+        if token:
+            accounts_store.revoke_session(token)
+    return {"status": "logged_out"}
+
+
+@app.get("/api/auth/me", response_model=MeResponse)
+def get_me(account: dict = Depends(auth.require_session)):
+    """回傳目前登入帳號資訊，以及這個帳號看得到的公司清單（platform 角色回全部）。"""
+    companies = accounts_store.list_companies_visible_to(account)
+    return MeResponse(
+        account=AccountInfo(**account),
+        companies=[CompanyInfo(**c) for c in companies],
+    )
+
+
 @app.post("/api/warmup")
 def warmup():
     """手動觸發載入 Embedding / LLM 模型，避免第一次聊天時使用者要空等模型下載。"""
@@ -127,12 +185,24 @@ def list_providers(_client_id: str = Depends(_require_client_id)):
     ]
 
 
+DEFAULT_WELCOME_MESSAGE = "您好，我是線上客服，可以問我任何產品的規格、特色，或是輸入訂單編號查詢配送狀態喔。"
+DEFAULT_QUICK_REPLIES = ["無線滑鼠支援多少 DPI？", "查詢訂單 A12345", "退貨要幾天內申請？"]
+
+
 @app.get("/api/widget/config", response_model=WidgetConfig)
 def widget_config(_client_id: str = Depends(_require_client_id)):
-    """MVP 先提供共用樣式；之後可在此依 client ID 讀取客戶品牌設定。"""
+    """
+    開頭語（welcome_message）、開場快速提問（quick_replies）依 _client_id（過渡性地當
+    company_id 用，見 _lookup_company）讀取公司自訂的值；查無公司或公司沒填就退回
+    DEFAULT_WELCOME_MESSAGE／DEFAULT_QUICK_REPLIES（原本 chat-widget 端寫死的內容搬過來
+    當預設值），不讓 widget 掛掉。其餘品牌樣式 MVP 先共用，之後可以一併搬進公司資訊頁面。
+    """
+    company = _lookup_company(_client_id)
+    welcome_message = (company.get("welcome_message") if company else None) or DEFAULT_WELCOME_MESSAGE
+    quick_replies = (company.get("quick_replies") if company else None) or DEFAULT_QUICK_REPLIES
     return WidgetConfig(
         brand_name="線上客服",
-        welcome_message="您好，我是線上客服，可以問我任何產品的規格、特色，或是輸入訂單編號查詢配送狀態喔。",
+        welcome_message=welcome_message,
         logo_url=None,
         theme=WidgetTheme(
             primary_color="#315b7d",
@@ -140,16 +210,21 @@ def widget_config(_client_id: str = Depends(_require_client_id)):
             text_color="#17212b",
             border_radius=20,
         ),
+        quick_replies=quick_replies,
     )
 
 
 @app.get("/api/admin/summary", response_model=DailySummaryResponse)
-def admin_summary(date: str | None = None):
+def admin_summary(
+    company_id: str = Query(...),
+    date: str | None = None,
+    _account: dict = Depends(auth.require_company_access),
+):
     """
-    管理者查看指定日期（預設今天，UTC）使用者提問的主題摘要。
+    管理者查看指定公司、指定日期（預設今天，UTC）使用者提問的主題摘要。
 
-    注意：目前沒有任何身分驗證，正式上線前必須加上管理者登入/權限檢查，
-    否則任何人都能呼叫這支 API 看到顧客提問內容。
+    company_id 必填 + require_company_access：只有 platform 帳號或綁定這家公司的帳號
+    才能看到這家公司的顧客提問內容，比照 /api/admin/documents* 的驗證模式。
     """
     if date is None:
         date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
@@ -157,7 +232,7 @@ def admin_summary(date: str | None = None):
         raise HTTPException(status_code=400, detail="date 格式須為 YYYY-MM-DD")
 
     try:
-        result = summarize_day(date)
+        result = summarize_day(date, company_id)
     except Exception as e:
         # 同 /api/chat：未預期的例外要在應用程式層處理掉，回傳正常的錯誤回應，
         # 避免整個請求掛掉變成 Cloud Run 層級的 502/503（不帶 CORS 標頭）。
@@ -174,17 +249,18 @@ def _get_llamaindex_index():
 
 
 @app.get("/api/admin/documents", response_model=DocumentListResponse)
-def list_documents():
+def list_documents(company_id: str = Query(...), _account: dict = Depends(auth.require_company_access)):
     """
-    列出知識庫目前所有路徑（一份內容掛兩個路徑就是兩列，各自標籤），供管理頁面畫列表。
+    列出這家公司知識庫目前所有路徑（一份內容掛兩個路徑就是兩列，各自標籤），供管理頁面畫列表。
 
-    注意：目前沒有任何身分驗證，正式上線前必須加上管理者登入/權限檢查（同 /api/admin/summary）。
+    company_id 查詢參數 + require_company_access：只有 platform 帳號或綁定這家公司的帳號
+    才能查看（見 app/auth.py）。
     """
     from app.rag.documents_store import list_documents as _list_documents
 
     _get_llamaindex_index()  # 確認 pgvector 連線正常，不通就提早回錯誤
     try:
-        docs = _list_documents()
+        docs = _list_documents(company_id)
     except Exception as e:
         print(f"[Documents Error] list failed: {e}")
         raise HTTPException(status_code=502, detail="讀取知識庫文件列表時發生錯誤，請稍後再試。")
@@ -213,15 +289,18 @@ def _check_client_hash(server_hash: str, client_sha256: str):
 
 
 @app.post("/api/admin/documents/precheck", response_model=PrecheckResponse)
-def precheck_documents(req: PrecheckRequest):
+def precheck_documents(
+    req: PrecheckRequest, company_id: str = Query(...), _account: dict = Depends(auth.require_company_access)
+):
     """
-    批次上傳前的預檢：對每個 (path, client_sha256, tags) 交叉查「這個路徑目前指向什麼」跟
-    「這個雜湊是不是已經存在別的地方」，讓前端知道每份文件是 new/unchanged/content_changed/
-    tags_only_changed/linked，不用實際寫入/重新 embed。純讀取（不動向量索引），但比照其他
-    admin 文件端點一併確認 pgvector 連線正常，行為與其餘端點保持一致。
+    批次上傳前的預檢：對每個 (path, client_sha256, tags) 交叉查「這家公司底下這個路徑目前
+    指向什麼」跟「這個雜湊是不是已經存在這家公司別的地方」，讓前端知道每份文件是
+    new/unchanged/content_changed/tags_only_changed/linked，不用實際寫入/重新 embed。
+    純讀取（不動向量索引），但比照其他 admin 文件端點一併確認 pgvector 連線正常，行為與其餘
+    端點保持一致。
 
-    完全不需要 doc_id：身分判斷全部靠路徑查 kb_document_labels、內容雜湊查 kb_documents，
-    這兩張表的細節見 app/rag/documents_store.py。
+    完全不需要 doc_id：身分判斷全部靠公司+路徑查 kb_document_labels、公司+內容雜湊查
+    kb_documents，這兩張表的細節見 app/rag/documents_store.py。
     """
     from app.rag.documents_store import find_document_by_hash, get_label, list_paths_by_prefix
 
@@ -231,12 +310,12 @@ def precheck_documents(req: PrecheckRequest):
         seen_paths = set()
         for item in req.items:
             seen_paths.add(item.path)
-            label = get_label(item.path)
+            label = get_label(company_id, item.path)
             if label is not None and label["content_hash"] == item.client_sha256:
                 status: Literal[
                     "new", "unchanged", "content_changed", "tags_only_changed", "linked"
                 ] = "unchanged" if set(label["tags"]) == set(item.tags) else "tags_only_changed"
-            elif find_document_by_hash(item.client_sha256) is not None:
+            elif find_document_by_hash(company_id, item.client_sha256) is not None:
                 status = "linked"
             elif label is not None:
                 status = "content_changed"
@@ -246,7 +325,9 @@ def precheck_documents(req: PrecheckRequest):
 
         stale_paths: list[str] = []
         if req.scope_prefix:
-            stale_paths = [p for p in list_paths_by_prefix(req.scope_prefix) if p not in seen_paths]
+            stale_paths = [
+                p for p in list_paths_by_prefix(company_id, req.scope_prefix) if p not in seen_paths
+            ]
     except Exception as e:
         print(f"[Documents Error] precheck failed: {e}")
         raise HTTPException(status_code=502, detail="預檢知識庫文件時發生錯誤，請稍後再試。")
@@ -259,11 +340,15 @@ def upsert_document(
     tags: list[str] = Form(default=[]),
     client_sha256: str = Form(...),
     file: UploadFile | None = File(default=None),
+    company_id: str = Query(...),
+    account: dict = Depends(auth.require_company_access),
 ):
     """
     新增/更新內容/改標籤/掛到既有內容（linked）統一走這支端點，不需要呼叫端提供 doc_id。
-    後端依「這個路徑目前指向什麼」跟「這個雜湊是不是已經存在別的地方」決定實際動作，
-    見 app/rag/documents_store.py 的 upsert_document()。
+    後端依「這家公司底下這個路徑目前指向什麼」跟「這個雜湊是不是已經存在這家公司別的地方」
+    決定實際動作，見 app/rag/documents_store.py 的 upsert_document()。平台帳號也能直接修改
+    商家的 RAG 資料（非唯讀），跟商家帳號走同一條路徑，差別只在權限檢查（require_company_access
+    對 platform 角色一律放行）。
 
     `file` 只有在真的需要新內容（新文件／內容變更）時才要帶；純改標籤或掛到既有內容
     （雜湊已經存在別處）不需要上傳檔案。帶了 file 的情況一律先驗證雜湊，跟 client_sha256
@@ -277,12 +362,20 @@ def upsert_document(
         raw_text = _read_md_upload(file)
         _check_client_hash(hash_content(raw_text), client_sha256)
     try:
-        result = _upsert_document(path, tags, client_sha256, raw_text, index)
+        result = _upsert_document(company_id, path, tags, client_sha256, raw_text, index)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         print(f"[Documents Error] upsert {path} failed: {e}")
         raise HTTPException(status_code=502, detail="新增或更新知識庫文件時發生錯誤，請稍後再試。")
+    try:
+        accounts_store.record_audit(
+            account["id"], action="upsert_document", target_type="kb_document", target_id=path,
+            detail={"company_id": company_id, "status": result["status"], "tags": tags},
+        )
+    except Exception as e:
+        # 稽核紀錄失敗不該讓文件已經寫入成功的請求跟著失敗，只印 log。
+        print(f"[Audit Error] upsert_document {path} failed to record: {e}")
     return DocumentInfo(
         path=path, tags=tags, chunk_count=result["chunk_count"],
         content_changed=result["content_changed"], content_hash=client_sha256,
@@ -290,22 +383,172 @@ def upsert_document(
 
 
 @app.delete("/api/admin/documents/{path:path}")
-def delete_document(path: str):
+def delete_document(
+    path: str, company_id: str = Query(...), account: dict = Depends(auth.require_company_access)
+):
     """
-    刪除這個路徑的標籤紀錄；該內容如果沒有其他路徑指著了，才真的刪掉向量與內容紀錄
+    刪除這家公司底下這個路徑的標籤紀錄；該內容如果沒有其他路徑指著了，才真的刪掉向量與內容紀錄
     （見 documents_store.delete_document_by_path()）。
     """
     from app.rag.documents_store import delete_document_by_path
 
     index = _get_llamaindex_index()
     try:
-        deleted = delete_document_by_path(path, index)
+        deleted = delete_document_by_path(company_id, path, index)
     except Exception as e:
         print(f"[Documents Error] delete {path} failed: {e}")
         raise HTTPException(status_code=502, detail="刪除知識庫文件時發生錯誤，請稍後再試。")
     if not deleted:
         raise HTTPException(status_code=404, detail=f"查無路徑 {path}，請確認路徑是否正確。")
+    try:
+        accounts_store.record_audit(
+            account["id"], action="delete_document", target_type="kb_document", target_id=path,
+            detail={"company_id": company_id},
+        )
+    except Exception as e:
+        print(f"[Audit Error] delete_document {path} failed to record: {e}")
     return {"status": "deleted", "path": path}
+
+
+# ---- 公司（商家服務）管理：/api/admin/companies ----
+
+
+@app.post("/api/admin/companies", response_model=CompanyInfo)
+def create_company(req: CompanyCreateRequest, account: dict = Depends(auth.require_platform_role)):
+    """建立公司僅限平台維運帳號（商家沒辦法自己開一家新公司進系統）。"""
+    company = accounts_store.create_company(req.name, req.mcp_url, req.welcome_message, req.quick_replies)
+    accounts_store.record_audit(
+        account["id"], action="create_company", target_type="company", target_id=company["id"],
+        detail={"name": req.name},
+    )
+    return CompanyInfo(**company)
+
+
+@app.get("/api/admin/companies", response_model=CompanyListResponse)
+def list_companies(account: dict = Depends(auth.require_session)):
+    """回傳呼叫者可見的公司清單：platform 角色看全部，tenant 角色只看自己綁定的。"""
+    companies = accounts_store.list_companies_visible_to(account)
+    return CompanyListResponse(companies=[CompanyInfo(**c) for c in companies])
+
+
+@app.put("/api/admin/companies/{company_id}", response_model=CompanyInfo)
+def update_company(
+    company_id: str, req: CompanyUpdateRequest, account: dict = Depends(auth.require_company_access)
+):
+    """
+    更新公司資訊（name／mcp_url／welcome_message／quick_replies）：platform 帳號或綁定
+    這家公司的商家帳號都能改，對應「公司資訊頁面可設定 MCP URL、聊天機器人開頭語、
+    開場快速提問」的需求。
+    """
+    company = accounts_store.update_company(
+        company_id, req.name, req.mcp_url, req.welcome_message, req.quick_replies
+    )
+    if company is None:
+        raise HTTPException(status_code=404, detail="查無這家公司。")
+    accounts_store.record_audit(
+        account["id"], action="update_company", target_type="company", target_id=company_id,
+        detail={
+            "name": req.name, "mcp_url": req.mcp_url, "welcome_message": req.welcome_message,
+            "quick_replies": req.quick_replies,
+        },
+    )
+    return CompanyInfo(**company)
+
+
+@app.delete("/api/admin/companies/{company_id}")
+def delete_company(company_id: str, account: dict = Depends(auth.require_platform_role)):
+    """
+    硬刪除公司：僅限平台維運帳號。連同該公司的 RAG 文件記錄與向量 chunk 一起清掉
+    （見 documents_store.purge_company()），company_accounts 綁定靠 ON DELETE CASCADE 自動清。
+    """
+    from app.rag.documents_store import purge_company
+
+    index = _get_llamaindex_index()
+    deleted = accounts_store.delete_company(company_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="查無這家公司。")
+    try:
+        purge_company(company_id, index)
+    except Exception as e:
+        # 公司本身已經刪除成功；RAG 資料清理失敗只印 log，不讓整個刪除請求回錯誤
+        # （避免呼叫端誤以為公司沒刪成功而重試，造成後續 accounts_store.delete_company 再次回 404 的困惑）。
+        print(f"[Company Delete Error] purge_company {company_id} failed: {e}")
+    accounts_store.record_audit(
+        account["id"], action="delete_company", target_type="company", target_id=company_id,
+    )
+    return {"status": "deleted", "company_id": company_id}
+
+
+# ---- 帳號管理：/api/admin/accounts（主帳號/主開發者新增次帳號/次開發者） ----
+
+
+def _can_manage_account_for(actor: dict, req: AccountCreateRequest) -> bool:
+    """
+    新增/移除帳號的權限判斷：
+    - 新增 platform_secondary：僅限 platform_primary。
+    - 新增 tenant_*（綁定某 company）：呼叫者對該 company 要有存取權
+      （platform 角色，或 tenant_primary/tenant_secondary 且已綁定該公司——見實作計畫，
+      次帳號權限跟主帳號相同，差別只在誰能新增/移除誰，這裡不特別區分 primary/secondary）。
+    """
+    if req.role == "platform_primary":
+        return False  # 不開放透過 API 新增第二個 platform_primary，避免權限模型混亂
+    if req.role == "platform_secondary":
+        return actor["role"] == "platform_primary"
+    # tenant_primary / tenant_secondary
+    if not req.company_id:
+        return False
+    return accounts_store.account_has_company_access(actor, req.company_id)
+
+
+@app.post("/api/admin/accounts", response_model=AccountInfo)
+def create_account(req: AccountCreateRequest, actor: dict = Depends(auth.require_session)):
+    if not _can_manage_account_for(actor, req):
+        raise HTTPException(status_code=403, detail="沒有權限新增這個角色的帳號。")
+    if accounts_store.get_account_by_email(req.email) is not None:
+        raise HTTPException(status_code=400, detail="這個 email 已經是系統帳號了。")
+    account = accounts_store.create_account(req.email, req.role, actor["id"])
+    if req.role in accounts_store.TENANT_ROLES and req.company_id:
+        accounts_store.bind_company(account["id"], req.company_id)
+    accounts_store.record_audit(
+        actor["id"], action="create_account", target_type="account", target_id=account["id"],
+        detail={"email": req.email, "role": req.role, "company_id": req.company_id},
+    )
+    return AccountInfo(**account)
+
+
+@app.get("/api/admin/accounts", response_model=AccountListResponse)
+def list_accounts(actor: dict = Depends(auth.require_session)):
+    accounts = accounts_store.list_accounts_visible_to(actor)
+    return AccountListResponse(accounts=[AccountInfo(**a) for a in accounts])
+
+
+@app.delete("/api/admin/accounts/{account_id}")
+def delete_account(account_id: str, actor: dict = Depends(auth.require_session)):
+    """
+    刪除帳號：權限比照新增（platform_primary 能刪 platform_secondary；對某公司有存取權的帳號
+    能刪同公司的 tenant 帳號）。刪除後連帶清掉該帳號所有 sessions（ON DELETE CASCADE），
+    達成「移除次帳號時立刻讓對方 session 失效」。
+    """
+    target = accounts_store.get_account_by_id(account_id)
+    if target is None:
+        raise HTTPException(status_code=404, detail="查無這個帳號。")
+    if target["role"] == "platform_primary":
+        raise HTTPException(status_code=403, detail="不能透過 API 刪除 platform_primary 帳號。")
+    if target["role"] == "platform_secondary":
+        if actor["role"] != "platform_primary":
+            raise HTTPException(status_code=403, detail="沒有權限刪除這個帳號。")
+    else:
+        # tenant_* 帳號：呼叫者要對這個帳號目前綁定的任一家公司有存取權才能刪
+        companies = accounts_store.list_companies_visible_to(target)
+        if actor["role"] not in accounts_store.PLATFORM_ROLES and not any(
+            accounts_store.account_has_company_access(actor, c["id"]) for c in companies
+        ):
+            raise HTTPException(status_code=403, detail="沒有權限刪除這個帳號。")
+    accounts_store.delete_account(account_id)
+    accounts_store.record_audit(
+        actor["id"], action="delete_account", target_type="account", target_id=account_id,
+    )
+    return {"status": "deleted", "account_id": account_id}
 
 
 @app.post("/api/chat", response_model=ChatResponse)
@@ -317,7 +560,11 @@ async def chat(req: ChatRequest, request: Request, _client_id: str = Depends(_re
     history = [{"role": h.role, "content": h.content} for h in req.history]
     history = history[-(settings.MAX_HISTORY_TURNS * 2):]
     try:
-        response = await _handle_chat(text, history, req.provider)
+        # Phase 1 過渡設計：company_id 直接借用現有的 X-Client-ID（_client_id，值不變、
+        # header 不變）——Phase 2 widget 改送真的 company UUID 時，這條呼叫鏈不用再改。
+        # 現階段 companies 表通常還沒有對應資料，檢索合理地回傳空結果（不是錯誤），
+        # 不影響其他訂單分流邏輯。
+        response = await _handle_chat(text, history, req.provider, company_id=_client_id)
     except Exception as e:
         # 任何未預期的例外（金鑰失效、首次建索引逾時等）都要回傳正常的 200 回應，
         # 讓 FastAPI/CORSMiddleware 有機會處理，避免請求整個掛掉變成 Cloud Run
@@ -327,7 +574,10 @@ async def chat(req: ChatRequest, request: Request, _client_id: str = Depends(_re
 
     try:
         log_text = response.text if response.text is not None else f"[訂單 {response.code}]"
-        log_chat(message=text, response_type=response.type, response_text=log_text, client_ip=client_ip)
+        log_chat(
+            message=text, response_type=response.type, response_text=log_text, client_ip=client_ip,
+            company_id=_client_id,
+        )
     except Exception:
         # 對話紀錄失敗不該讓使用者的聊天請求跟著失敗
         pass
@@ -335,7 +585,24 @@ async def chat(req: ChatRequest, request: Request, _client_id: str = Depends(_re
     return response
 
 
-async def _handle_chat(text: str, history: list, provider: str) -> ChatResponse:
+def _lookup_company(company_id: str | None) -> dict | None:
+    """
+    company_id 來自未經驗證的 X-Client-ID header，可能是 None、空字串，或格式不合法的
+    UUID；accounts_store.get_company() 底層是 Postgres 查詢，帶入不合法 UUID 會直接拋
+    例外，這裡統一包一層防呆，查不到／格式不對都當作「查無公司」，不能讓呼叫端的請求
+    跟著炸掉。widget_config() 與 _handle_chat() 的訂單查詢分流都靠這個函式取得公司資料。
+    """
+    if not company_id:
+        return None
+    try:
+        return accounts_store.get_company(company_id)
+    except Exception:
+        return None
+
+
+async def _handle_chat(
+    text: str, history: list, provider: str, company_id: str | None = None
+) -> ChatResponse:
     if not text:
         return ChatResponse(type="text", text="請輸入您的問題。")
 
@@ -347,7 +614,15 @@ async def _handle_chat(text: str, history: list, provider: str) -> ChatResponse:
                 text="請提供訂單編號（例如 A12345 或 ORD-500001）以便查詢。",
             )
         code = match.group(0)
-        order = await get_order(code)
+        company = _lookup_company(company_id)
+        if not company or not company.get("mcp_url"):
+            # 沒有對應公司，或公司沒填 mcp_url：這家服務沒開訂單查詢功能，不落到 SQLite
+            # fallback（那是全域 demo 資料，跟任何一家真的公司無關，不該冒充出現）。
+            return ChatResponse(
+                type="text",
+                text="此服務目前尚未提供訂單查詢功能，如需協助請聯繫客服（0800-123-456）。",
+            )
+        order = await get_order(code, company["mcp_url"])
         if order is None:
             return ChatResponse(
                 type="text",
@@ -362,7 +637,7 @@ async def _handle_chat(text: str, history: list, provider: str) -> ChatResponse:
         )
 
     agent = get_agent()
-    answer, retrieved = agent.generate_answer(text, history=history, provider=provider)
+    answer, retrieved = agent.generate_answer(text, history=history, provider=provider, company_id=company_id)
     if not retrieved:
         # 沒有實際檢索結果（查無資訊、provider 未設定或呼叫失敗）：這是提示/錯誤訊息，不是
         # 根據知識庫生成的產品/政策回答，依 contracts.md 的分類該用 type: text，且不該帶無關的 source。

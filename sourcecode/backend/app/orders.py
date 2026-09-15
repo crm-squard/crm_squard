@@ -24,6 +24,10 @@ from app.config import settings
 
 logger = logging.getLogger("backend.orders")
 
+# mcp_url 改成每家公司各自在 companies.mcp_url 設定（見 app/accounts_store.py），
+# 呼叫端（app/main.py）要先查出公司有沒有設定，沒設定就不該呼叫這裡——
+# 這個模組不再讀取任何全域的 MCP URL 設定值。
+
 # corp-backend（Firestore）的 Status 是任意字串，這裡對應回前端時間軸用的 0-3 階段索引。
 # 目前 corp-backend 測試資料觀察到的值先列在這，corp-backend 之後若擴充狀態值要一併補進來；
 # 對應不到的狀態預設當作「已下單」，不擋住查詢結果。
@@ -88,7 +92,7 @@ def _get_order_from_sqlite(code: str):
     return {"status": status, "eta": eta, "items": items}
 
 
-async def _get_order_via_mcp(code: str):
+async def _get_order_via_mcp(code: str, mcp_url: str):
     """
     透過 MCP Streamable HTTP 呼叫 corp-backend 的 get_order tool。
     stateless_http 模式下不用維護長連線，每次查詢開一段短連線，函式結束就自動關閉。
@@ -102,12 +106,12 @@ async def _get_order_via_mcp(code: str):
 
     `create_mcp_http_client()` 是 SDK 提供的 httpx2.AsyncClient 便利建構函式，預設開啟
     follow_redirects=True；corp-backend 把 MCP app mount 在 "/mcp"（見 app/main.py），
-    Starlette 對到子路徑 "/" 的請求（也就是 CORP_BACKEND_MCP_URL 不帶結尾斜線時）
+    Starlette 對到子路徑 "/" 的請求（也就是 mcp_url 不帶結尾斜線時）
     會先回 307 導到 "/mcp/"，沒有 follow_redirects 的話 POST 會直接失敗
     （實測驗證過，並非理論推測）。若改用手動建立的 httpx2.AsyncClient 記得也要開這個選項。
     """
     http_client = create_mcp_http_client()
-    async with streamable_http_client(settings.CORP_BACKEND_MCP_URL, http_client=http_client) as (read, write):
+    async with streamable_http_client(mcp_url, http_client=http_client) as (read, write):
         async with ClientSession(read, write) as session:
             await session.initialize()
             result = await session.call_tool("get_order", {"order_id": code.upper()})
@@ -135,9 +139,9 @@ async def _get_order_via_mcp(code: str):
     return {"status": stage, "eta": order.get("OrderDate"), "items": order.get("ProductName")}
 
 
-async def get_order(code: str):
+async def get_order(code: str, mcp_url: str):
     try:
-        return await _get_order_via_mcp(code)
+        return await _get_order_via_mcp(code, mcp_url)
     except MCPError as e:
         # 工具執行失敗（業務錯誤，例如 corp-backend 讀取 Firestore 失敗）：
         # corp-backend 端的工具會 raise MCPError，這裡明確接住並 fallback。

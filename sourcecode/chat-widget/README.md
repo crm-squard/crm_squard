@@ -40,4 +40,6 @@ npm run inject:target
 ></script>
 ```
 
-`data-client-id` 是公開的企業客戶識別碼，不是登入或授權憑證。正式資料隔離仍須由後端驗證客戶狀態並限制資料範圍。
+`data-client-id` 是公開的企業客戶識別碼，不是登入或授權憑證。此值現在對應後端 `companies` 表的
+company_id（透過 `/api/admin/companies` 建立/查詢），沒有對應公司時聊天功能仍可用，但訂單查詢／RAG
+檢索會查不到任何資料。正式資料隔離仍須由後端驗證客戶狀態並限制資料範圍。
