@@ -155,10 +155,15 @@ def health():
 @app.post("/api/auth/google", response_model=LoginResponse)
 def login_with_google(req: GoogleLoginRequest):
     """
-    驗證前端拿到的 Google ID token，查帳號表；帳號不存在時自動建立一個 tenant_primary 帳號
-    （商家自助註冊，不用平台方手動加入），但不會自動幫他建立任何企業服務（company），
-    商家登入後要自己在後台新增第一個企業服務。驗證成功建立 session，回傳明文 token
-    （僅此一次，之後的請求都帶 Authorization: Bearer <token>）。
+    驗證前端拿到的 Google ID token，查帳號表；帳號不存在時自動建立帳號（自助註冊，不用平台方
+    手動加入）。email 在 settings.INITIAL_PLATFORM_ADMIN_EMAILS 名單裡的固定建成
+    platform_primary（管理者帳號，看得到所有商家服務），不在名單裡的一律建成 tenant_primary
+    （商家帳號），不會自動幫他建立任何企業服務（company），商家登入後要自己在後台新增第一個
+    企業服務。這條規則跟 accounts_store.bootstrap_initial_platform_admins() 是兩層保障：
+    bootstrap 只在 accounts 表整個是空的時候跑一次，這裡則是每次「這個 email 第一次登入」都
+    會判斷，就算名單裡的管理者帳號之後被刪除，下次用同一個 email 登入也會直接復原成
+    platform_primary，不會被一般規則自動降級成 tenant_primary。驗證成功建立 session，
+    回傳明文 token（僅此一次，之後的請求都帶 Authorization: Bearer <token>）。
     """
     try:
         email = auth.verify_google_id_token(req.id_token)
@@ -166,8 +171,9 @@ def login_with_google(req: GoogleLoginRequest):
         raise HTTPException(status_code=401, detail=str(e))
     account = accounts_store.get_account_by_email(email)
     if account is None:
+        role = "platform_primary" if email in settings.INITIAL_PLATFORM_ADMIN_EMAILS else "tenant_primary"
         try:
-            account = accounts_store.create_account(email, "tenant_primary", created_by=None)
+            account = accounts_store.create_account(email, role, created_by=None)
         except IntegrityError:
             # 同一個新 email 在極短時間內併發登入兩次，兩者都查到 None 才會撞到這裡；
             # email 欄位有 UNIQUE 限制，其中一次 insert 會失敗，改查已經插入成功的那筆即可。
