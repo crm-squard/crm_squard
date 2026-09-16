@@ -27,7 +27,7 @@ steps:
     args:
       - 'run'
       - 'deploy'
-      - 'crm-backend'
+      - '$_SERVICE_NAME-backend'
       - '--image=europe-west1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/crm-backend:latest'
       - '--region=europe-west1'
       - '--platform=managed'
@@ -86,7 +86,7 @@ steps:
     args:
       - 'run'
       - 'deploy'
-      - 'crm-chat-widget'
+      - '$_SERVICE_NAME-chat-widget'
       - '--image=europe-west1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/crm-chat-widget:latest'
       - '--region=europe-west1'
       - '--platform=managed'
@@ -131,7 +131,7 @@ steps:
     args:
       - 'run'
       - 'deploy'
-      - 'corp-backend'
+      - '$_SERVICE_NAME-corp-backend'
       - '--image=europe-west1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/corp-backend:latest'
       - '--region=europe-west1'
       - '--platform=managed'
@@ -186,7 +186,7 @@ steps:
     args:
       - 'run'
       - 'deploy'
-      - 'crm-frontend'
+      - '$_SERVICE_NAME-frontend'
       - '--image=europe-west1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/crm-frontend:latest'
       - '--region=europe-west1'
       - '--platform=managed'
@@ -228,7 +228,7 @@ steps:
     args:
       - 'run'
       - 'deploy'
-      - 'crm-admin-frontend'
+      - '$_SERVICE_NAME-admin-frontend'
       - '--image=europe-west1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/crm-admin-frontend:latest'
       - '--region=europe-west1'
       - '--platform=managed'
