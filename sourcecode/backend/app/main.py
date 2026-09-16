@@ -18,6 +18,7 @@ from typing import Literal
 
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy.exc import IntegrityError
 
 from app import accounts_store, auth
 from app.config import settings
@@ -25,6 +26,8 @@ from app.schemas import (
     AccountCreateRequest,
     AccountInfo,
     AccountListResponse,
+    AuditLogEntry,
+    AuditLogListResponse,
     ChatRequest,
     ChatResponse,
     CompanyCreateRequest,
@@ -102,6 +105,14 @@ RATE_LIMIT_WINDOW_SECONDS = 60
 RATE_LIMIT_MAX_REQUESTS = 20
 _request_log: dict[str, deque] = defaultdict(deque)
 
+# company_id（X-Client-ID）額外的限流：company_id 是公開識別碼，會出現在客戶網站的
+# widget 原始碼裡，不是密鑰，任何人都拿得到；只靠上面的 per-IP 限流擋不住「換 IP／用多台
+# 機器打同一個 company_id」的濫用，所以另外對 company_id 本身也做一組更寬鬆的總量限制
+# （一家商家的真實流量本來就會來自很多不同顧客的 IP，門檻要比單一 IP 高很多）。
+COMPANY_RATE_LIMIT_WINDOW_SECONDS = 60
+COMPANY_RATE_LIMIT_MAX_REQUESTS = 120
+_company_request_log: dict[str, deque] = defaultdict(deque)
+
 
 def _check_rate_limit(client_ip: str):
     now = time.time()
@@ -110,6 +121,16 @@ def _check_rate_limit(client_ip: str):
         timestamps.popleft()
     if len(timestamps) >= RATE_LIMIT_MAX_REQUESTS:
         raise HTTPException(status_code=429, detail="請求過於頻繁，請稍後再試。")
+    timestamps.append(now)
+
+
+def _check_company_rate_limit(company_id: str):
+    now = time.time()
+    timestamps = _company_request_log[company_id]
+    while timestamps and now - timestamps[0] > COMPANY_RATE_LIMIT_WINDOW_SECONDS:
+        timestamps.popleft()
+    if len(timestamps) >= COMPANY_RATE_LIMIT_MAX_REQUESTS:
+        raise HTTPException(status_code=429, detail="這家商家的聊天機器人請求量過大，請稍後再試。")
     timestamps.append(now)
 
 
@@ -134,8 +155,9 @@ def health():
 @app.post("/api/auth/google", response_model=LoginResponse)
 def login_with_google(req: GoogleLoginRequest):
     """
-    驗證前端拿到的 Google ID token，查帳號表；帳號不存在回 403（帳號需要平台/商家主帳號
-    手動加入，不是隨便一個 Google 帳號登入就能用）。驗證成功建立 session，回傳明文 token
+    驗證前端拿到的 Google ID token，查帳號表；帳號不存在時自動建立一個 tenant_primary 帳號
+    （商家自助註冊，不用平台方手動加入），但不會自動幫他建立任何企業服務（company），
+    商家登入後要自己在後台新增第一個企業服務。驗證成功建立 session，回傳明文 token
     （僅此一次，之後的請求都帶 Authorization: Bearer <token>）。
     """
     try:
@@ -144,7 +166,16 @@ def login_with_google(req: GoogleLoginRequest):
         raise HTTPException(status_code=401, detail=str(e))
     account = accounts_store.get_account_by_email(email)
     if account is None:
-        raise HTTPException(status_code=403, detail="這個帳號尚未被加入系統，請聯繫管理者。")
+        try:
+            account = accounts_store.create_account(email, "tenant_primary", created_by=None)
+        except IntegrityError:
+            # 同一個新 email 在極短時間內併發登入兩次，兩者都查到 None 才會撞到這裡；
+            # email 欄位有 UNIQUE 限制，其中一次 insert 會失敗，改查已經插入成功的那筆即可。
+            account = accounts_store.get_account_by_email(email)
+        accounts_store.record_audit(
+            account["id"], action="self_register", target_type="account", target_id=account["id"],
+            detail={"email": email},
+        )
     token = accounts_store.create_session(account["id"])
     return LoginResponse(token=token, account=AccountInfo(**account))
 
@@ -192,8 +223,8 @@ DEFAULT_QUICK_REPLIES = ["無線滑鼠支援多少 DPI？", "查詢訂單 A12345
 @app.get("/api/widget/config", response_model=WidgetConfig)
 def widget_config(_client_id: str = Depends(_require_client_id)):
     """
-    開頭語（welcome_message）、開場快速提問（quick_replies）依 _client_id（過渡性地當
-    company_id 用，見 _lookup_company）讀取公司自訂的值；查無公司或公司沒填就退回
+    開頭語（welcome_message）、開場快速提問（quick_replies）依 _client_id（就是
+    company_id，見 _lookup_company）讀取公司自訂的值；查無公司或公司沒填就退回
     DEFAULT_WELCOME_MESSAGE／DEFAULT_QUICK_REPLIES（原本 chat-widget 端寫死的內容搬過來
     當預設值），不讓 widget 掛掉。其餘品牌樣式 MVP 先共用，之後可以一併搬進公司資訊頁面。
     """
@@ -414,9 +445,15 @@ def delete_document(
 
 
 @app.post("/api/admin/companies", response_model=CompanyInfo)
-def create_company(req: CompanyCreateRequest, account: dict = Depends(auth.require_platform_role)):
-    """建立公司僅限平台維運帳號（商家沒辦法自己開一家新公司進系統）。"""
+def create_company(req: CompanyCreateRequest, account: dict = Depends(auth.require_session)):
+    """
+    任何已登入帳號都能新增企業服務（商家自助開通，不用平台方手動加入）：platform 角色建立的
+    公司不綁定任何帳號（沿用原本「看得到全部」的權限）；tenant 角色建立後自動綁定自己，
+    成為這家公司的主帳號，讓一個商家帳號可以自己開多個 company_id。
+    """
     company = accounts_store.create_company(req.name, req.mcp_url, req.welcome_message, req.quick_replies)
+    if account["role"] in accounts_store.TENANT_ROLES:
+        accounts_store.bind_company(account["id"], company["id"])
     accounts_store.record_audit(
         account["id"], action="create_company", target_type="company", target_id=company["id"],
         detail={"name": req.name},
@@ -456,10 +493,12 @@ def update_company(
 
 
 @app.delete("/api/admin/companies/{company_id}")
-def delete_company(company_id: str, account: dict = Depends(auth.require_platform_role)):
+def delete_company(company_id: str, account: dict = Depends(auth.require_company_access)):
     """
-    硬刪除公司：僅限平台維運帳號。連同該公司的 RAG 文件記錄與向量 chunk 一起清掉
-    （見 documents_store.purge_company()），company_accounts 綁定靠 ON DELETE CASCADE 自動清。
+    硬刪除公司：platform 角色或綁定這家公司的商家帳號都能刪除（比照 update_company 的權限
+    模型）——商家自助建立公司後，理當也能自己刪除，不用另外找平台方。連同該公司的 RAG
+    文件記錄與向量 chunk 一起清掉（見 documents_store.purge_company()），company_accounts
+    綁定靠 ON DELETE CASCADE 自動清。
     """
     from app.rag.documents_store import purge_company
 
@@ -544,26 +583,46 @@ def delete_account(account_id: str, actor: dict = Depends(auth.require_session))
             accounts_store.account_has_company_access(actor, c["id"]) for c in companies
         ):
             raise HTTPException(status_code=403, detail="沒有權限刪除這個帳號。")
+    target_companies = accounts_store.list_companies_visible_to(target) if target["role"] in accounts_store.TENANT_ROLES else []
     accounts_store.delete_account(account_id)
     accounts_store.record_audit(
         actor["id"], action="delete_account", target_type="account", target_id=account_id,
+        detail={
+            "email": target["email"],
+            # 只記第一家，稽核頁面用這個欄位做 company_id 過濾；帳號同時綁多家公司是少數情況，
+            # 這裡不為了這個邊角案例把 detail 改成陣列、多寫一套查詢邏輯。
+            "company_id": target_companies[0]["id"] if target_companies else None,
+        },
     )
     return {"status": "deleted", "account_id": account_id}
+
+
+# ---- 稽核紀錄：/api/admin/audit-log（依 company_id 查這家公司相關的異動紀錄） ----
+
+
+@app.get("/api/admin/audit-log", response_model=AuditLogListResponse)
+def get_audit_log(company_id: str = Query(...), _account: dict = Depends(auth.require_company_access)):
+    """
+    查一家公司的稽核紀錄：權限比照 /api/admin/summary，只有 platform 帳號或綁定這家公司的
+    帳號才能看。內容涵蓋公司異動、RAG 文件上傳/刪除、這家公司協作帳號的新增/移除。
+    """
+    entries = accounts_store.list_audit_log_for_company(company_id)
+    return AuditLogListResponse(entries=[AuditLogEntry(**e) for e in entries])
 
 
 @app.post("/api/chat", response_model=ChatResponse)
 async def chat(req: ChatRequest, request: Request, _client_id: str = Depends(_require_client_id)):
     client_ip = request.client.host if request.client else "unknown"
     _check_rate_limit(client_ip)
+    _check_company_rate_limit(_client_id)
 
     text = req.message.strip()
     history = [{"role": h.role, "content": h.content} for h in req.history]
     history = history[-(settings.MAX_HISTORY_TURNS * 2):]
     try:
-        # Phase 1 過渡設計：company_id 直接借用現有的 X-Client-ID（_client_id，值不變、
-        # header 不變）——Phase 2 widget 改送真的 company UUID 時，這條呼叫鏈不用再改。
-        # 現階段 companies 表通常還沒有對應資料，檢索合理地回傳空結果（不是錯誤），
-        # 不影響其他訂單分流邏輯。
+        # X-Client-ID（_client_id）現在就是 companies 表的 company_id（見
+        # sourcecode/chat-widget/README.md 的 data-client-id 說明）；沒對應到任何公司時
+        # 檢索合理地回傳空結果（不是錯誤），不影響其他訂單分流邏輯。
         response = await _handle_chat(text, history, req.provider, company_id=_client_id)
     except Exception as e:
         # 任何未預期的例外（金鑰失效、首次建索引逾時等）都要回傳正常的 200 回應，

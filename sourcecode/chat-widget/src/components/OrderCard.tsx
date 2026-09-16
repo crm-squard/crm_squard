@@ -1,4 +1,12 @@
-import { Package, Truck, CheckCircle2, Clock, type LucideIcon } from "lucide-react";
+import {
+  Package,
+  Truck,
+  CheckCircle2,
+  Clock,
+  type LucideIcon,
+} from "lucide-react";
+import { tw } from "../utils/tw";
+import { widgetUi } from "../widgetStyles";
 
 interface OrderStage {
   key: string;
@@ -20,27 +28,63 @@ const ORDER_STAGES: OrderStage[] = [
   { key: "done", label: "已送達", icon: CheckCircle2 },
 ];
 
-export default function OrderCard({ code, status, eta, items }: OrderCardProps) {
+const nodeStateStyles = {
+  done: widgetUi.nodeDone,
+  active: widgetUi.nodeActive,
+  pending: widgetUi.nodePending,
+} as const;
+
+const labelStateStyles = {
+  done: widgetUi.labelDone,
+  active: widgetUi.labelActive,
+  pending: "",
+} as const;
+
+export default function OrderCard({
+  code,
+  status,
+  eta,
+  items,
+}: OrderCardProps) {
   return (
-    <div className="ccw-row ccw-row-bot">
-      <div className="ccw-order-card">
-        <div className="ccw-order-head">
-          <span className="ccw-order-code">訂單 #{code}</span>
-          <span className="ccw-order-eta">預計 {eta} 送達</span>
+    <div className={tw(widgetUi.row, widgetUi.rowBot)}>
+      <div className={widgetUi.orderCard}>
+        <div className={widgetUi.orderHead}>
+          <span className={widgetUi.orderCode}>訂單 #{code}</span>
+          <span className={widgetUi.orderEta}>預計 {eta} 送達</span>
         </div>
-        <p className="ccw-order-items">{items}</p>
-        <div className="ccw-timeline">
+        <p className={widgetUi.orderItems}>{items}</p>
+        <div className={widgetUi.timeline}>
           {ORDER_STAGES.map((stage, stageIndex) => {
             const Icon = stage.icon;
-            const state = stageIndex < status ? "done" : stageIndex === status ? "active" : "pending";
+            const state =
+              stageIndex < status
+                ? "done"
+                : stageIndex === status
+                  ? "active"
+                  : "pending";
             return (
-              <div className="ccw-timeline-step" key={stage.key}>
-                <div className={`ccw-timeline-node ccw-node-${state}`}>
+              <div className={widgetUi.timelineStep} key={stage.key}>
+                <div
+                  className={tw(widgetUi.timelineNode, nodeStateStyles[state])}
+                >
                   <Icon size={14} strokeWidth={2.4} />
                 </div>
-                <span className={`ccw-timeline-label ccw-label-${state}`}>{stage.label}</span>
+                <span
+                  className={tw(
+                    widgetUi.timelineLabel,
+                    labelStateStyles[state],
+                  )}
+                >
+                  {stage.label}
+                </span>
                 {stageIndex < ORDER_STAGES.length - 1 && (
-                  <div className={`ccw-timeline-bar ${stageIndex < status ? "ccw-bar-done" : ""}`} />
+                  <div
+                    className={tw(
+                      widgetUi.timelineBar,
+                      stageIndex < status && widgetUi.timelineBarDone,
+                    )}
+                  />
                 )}
               </div>
             );

@@ -21,7 +21,9 @@ await access(targetIndexPath).catch(() => {
   throw new Error(`找不到注入目標：${targetIndexPath}`);
 });
 await access(bundlePath).catch(() => {
-  throw new Error(`找不到 Widget 建置檔案，請先執行 npm run build：${bundlePath}`);
+  throw new Error(
+    `找不到 Widget 建置檔案，請先執行 npm run build：${bundlePath}`,
+  );
 });
 
 await mkdir(targetAssetDirectory, { recursive: true });

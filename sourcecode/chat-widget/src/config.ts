@@ -17,7 +17,8 @@ export interface WidgetConfig {
 
 export const DEFAULT_WIDGET_CONFIG: WidgetConfig = {
   brandName: "線上客服",
-  welcomeMessage: "您好，我是線上客服，可以問我任何產品的規格、特色，或是輸入訂單編號查詢配送狀態喔。",
+  welcomeMessage:
+    "您好，我是線上客服，可以問我任何產品的規格、特色，或是輸入訂單編號查詢配送狀態喔。",
   logoUrl: null,
   theme: {
     primaryColor: "#315b7d",
@@ -25,7 +26,11 @@ export const DEFAULT_WIDGET_CONFIG: WidgetConfig = {
     textColor: "#17212b",
     borderRadius: 20,
   },
-  quickReplies: ["無線滑鼠支援多少 DPI？", "查詢訂單 A12345", "退貨要幾天內申請？"],
+  quickReplies: [
+    "無線滑鼠支援多少 DPI？",
+    "查詢訂單 A12345",
+    "退貨要幾天內申請？",
+  ],
 };
 
 type ThemeStyle = CSSProperties & Record<`--ccw-${string}`, string>;

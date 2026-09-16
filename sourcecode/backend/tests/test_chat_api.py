@@ -17,7 +17,7 @@ from fastapi.testclient import TestClient
 
 from app import accounts_store
 from app.config import settings
-from app.main import app, _request_log
+from app.main import app, _company_request_log, _request_log
 from tests.conftest import SEED_ORDERS, NON_EXISTENT_ORDER_CODE
 
 CLIENT_HEADERS = {"X-Client-ID": "client_test"}
@@ -43,8 +43,10 @@ def _client_headers(company_id: str) -> dict:
 def _reset_rate_limit():
     """避免同一支測試檔案內多次呼叫 /api/chat 時，被 main.py 的簡易 rate limit 誤擋。"""
     _request_log.clear()
+    _company_request_log.clear()
     yield
     _request_log.clear()
+    _company_request_log.clear()
 
 
 @pytest.fixture
@@ -165,6 +167,32 @@ def test_widget_get_endpoints_require_client_id(client, path):
 
     assert resp.status_code == 422
     assert "X-Client-ID" in resp.json()["detail"]
+
+
+def test_chat_rate_limits_per_company_id(client, monkeypatch):
+    """
+    company_id 是公開識別碼（widget 原始碼裡看得到），單靠 per-IP 限流擋不住換 IP／多台機器
+    打同一個 company_id 的濫用，所以要另外對 company_id 本身也有總量限制。
+    """
+    from app import main as main_module
+
+    monkeypatch.setattr(main_module, "COMPANY_RATE_LIMIT_MAX_REQUESTS", 3)
+    company_id = "client_company_rate_limit_test"
+
+    for _ in range(3):
+        resp = client.post(
+            "/api/chat",
+            json={"message": "哈囉", "history": [], "provider": "google"},
+            headers={"X-Client-ID": company_id},
+        )
+        assert resp.status_code == 200
+
+    resp = client.post(
+        "/api/chat",
+        json={"message": "哈囉", "history": [], "provider": "google"},
+        headers={"X-Client-ID": company_id},
+    )
+    assert resp.status_code == 429
 
 
 def test_chat_rejects_too_long_client_id(client):

@@ -458,6 +458,45 @@ def _to_jsonb(detail: Optional[dict]):
     return json.dumps(detail) if detail is not None else None
 
 
+def _row_to_audit_entry(row) -> dict:
+    return {
+        "id": row.id,
+        "actor_email": row.actor_email,
+        "action": row.action,
+        "target_type": row.target_type,
+        "target_id": row.target_id,
+        "detail": row.detail,
+        "created_at": row.created_at.isoformat() if row.created_at is not None else None,
+    }
+
+
+def list_audit_log_for_company(company_id: str, limit: int = 100) -> list[dict]:
+    """
+    查一家公司相關的稽核紀錄：target_type='company' 時 target_id 本身就是 company_id；
+    'kb_document' 跟部分 'account' 動作（新增/刪除次帳號）則是把 company_id 存在 detail
+    這個 JSONB 欄位裡（見 main.py 各個 record_audit() 呼叫點），所以兩種都要比對，才不會漏掉
+    「新增/刪除這家公司的協作帳號」這類紀錄。
+    """
+    _ensure_schema()
+    engine = get_engine()
+    with engine.connect() as conn:
+        rows = conn.execute(
+            sql_text(
+                """
+                SELECT al.id, a.email AS actor_email, al.action, al.target_type, al.target_id,
+                       al.detail, al.created_at
+                FROM audit_log al
+                LEFT JOIN accounts a ON a.id = al.actor_account_id
+                WHERE al.target_id = :company_id OR al.detail->>'company_id' = :company_id
+                ORDER BY al.created_at DESC
+                LIMIT :limit
+                """
+            ),
+            {"company_id": company_id, "limit": limit},
+        ).fetchall()
+    return [_row_to_audit_entry(r) for r in rows]
+
+
 def bootstrap_initial_platform_admins() -> None:
     """
     解決「雞生蛋」的 bootstrap 問題：一開始 accounts 表沒有任何帳號，沒人能登入。

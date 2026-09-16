@@ -1,6 +1,7 @@
 import type { Product, ProductListResponse } from "./types";
 
-const PRODUCT_API_BASE_URL = import.meta.env.VITE_API_CORP_URL || "http://localhost:8001";
+const PRODUCT_API_BASE_URL =
+  import.meta.env.VITE_API_CORP_URL || "http://localhost:8001";
 
 interface ProductApiItem {
   ProductID: string;
@@ -32,7 +33,10 @@ function toPrice(value: string | number | null | undefined): number | null {
   if (value === null || value === undefined) return null;
   const normalizedValue = typeof value === "string" ? value.trim() : value;
   if (normalizedValue === "") return null;
-  const price = typeof normalizedValue === "number" ? normalizedValue : Number(normalizedValue);
+  const price =
+    typeof normalizedValue === "number"
+      ? normalizedValue
+      : Number(normalizedValue);
   return Number.isFinite(price) && price >= 0 ? price : null;
 }
 
@@ -66,10 +70,12 @@ export async function fetchProductPage(
   );
 
   if (!response.ok) {
-    throw new ProductCatalogError(`商品列表載入失敗（${response.status}）。請稍後重試。`);
+    throw new ProductCatalogError(
+      `商品列表載入失敗（${response.status}）。請稍後重試。`,
+    );
   }
 
-  const payload = await response.json() as ProductApiResponse;
+  const payload = (await response.json()) as ProductApiResponse;
   const products = payload.products.flatMap((product) => {
     const storefrontProduct = toStorefrontProduct(product);
     return storefrontProduct === null ? [] : [storefrontProduct];
@@ -84,13 +90,17 @@ export async function fetchProductPage(
 }
 
 export async function fetchProductCount(signal?: AbortSignal): Promise<number> {
-  const response = await fetch(`${PRODUCT_API_BASE_URL}/api/v1/Product/count`, { signal });
+  const response = await fetch(`${PRODUCT_API_BASE_URL}/api/v1/Product/count`, {
+    signal,
+  });
 
   if (!response.ok) {
-    throw new ProductCatalogError(`商品總數載入失敗（${response.status}）。請稍後重試。`);
+    throw new ProductCatalogError(
+      `商品總數載入失敗（${response.status}）。請稍後重試。`,
+    );
   }
 
-  const payload = await response.json() as ProductCountApiResponse;
+  const payload = (await response.json()) as ProductCountApiResponse;
   if (!Number.isSafeInteger(payload.count) || payload.count < 0) {
     throw new ProductCatalogError("商品總數資料格式錯誤。請稍後重試。");
   }

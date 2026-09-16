@@ -8,20 +8,18 @@ import Typography from "antd/es/typography";
 import { useEffect, useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import BrandMark from "../components/BrandMark";
+import { ui } from "../uiStyles";
 import { useAuth } from "../auth/AuthContext";
 import { createCompany } from "../api/companies";
 import type { CompanyInfo } from "../api/auth";
 
 const { Text } = Typography;
 
-function isPlatformRole(role: string | undefined): boolean {
-  return role === "platform_primary" || role === "platform_secondary";
-}
-
 export default function CompanySelectPage() {
   const navigate = useNavigate();
   const [messageApi, contextHolder] = message.useMessage();
-  const { token, account, companies, selectedCompanyId, selectCompany, refreshMe } = useAuth();
+  const { token, companies, selectedCompanyId, selectCompany, refreshMe } =
+    useAuth();
   const [creating, setCreating] = useState(false);
   const [companyList, setCompanyList] = useState<CompanyInfo[]>(companies);
   const [form] = Form.useForm<{ name: string }>();
@@ -50,7 +48,9 @@ export default function CompanySelectPage() {
       await createCompany(token, { name: values.name });
       await refreshMe();
       form.resetFields();
-      messageApi.success("已新增商家服務，MCP URL／開頭語可以到「公司設定」頁面填寫");
+      messageApi.success(
+        "已新增商家服務，MCP URL／開頭語可以到「公司設定」頁面填寫",
+      );
     } catch (err) {
       messageApi.error(err instanceof Error ? err.message : "新增失敗");
     } finally {
@@ -73,9 +73,9 @@ export default function CompanySelectPage() {
   }
 
   return (
-    <main className="company-select-page">
+    <main className={ui.centeredPage}>
       {contextHolder}
-      <div className="company-select-card">
+      <div className={ui.companySelectCard}>
         <BrandMark />
         <h1>選擇要管理的商家</h1>
         {companyList.length === 0 ? (
@@ -84,17 +84,29 @@ export default function CompanySelectPage() {
           <List
             dataSource={companyList}
             renderItem={(company) => {
-              const canManage = isPlatformRole(account?.role);
+              // companyList 本來就是「這個帳號看得到的公司」（platform 看全部、tenant 看自己
+              // 綁定的），能看到就代表 update_company 的權限檢查（require_company_access）
+              // 也會過，所以不用再依角色隱藏「設定」按鈕。
               return (
                 <List.Item
                   actions={[
-                    canManage ? (
-                      <Button key="settings" onClick={() => goToSettings(company.id)}>設定</Button>
-                    ) : null,
-                    <Button key="select" type="primary" onClick={() => { selectCompany(company.id); navigate("/", { replace: true }); }}>
+                    <Button
+                      key="settings"
+                      onClick={() => goToSettings(company.id)}
+                    >
+                      設定
+                    </Button>,
+                    <Button
+                      key="select"
+                      type="primary"
+                      onClick={() => {
+                        selectCompany(company.id);
+                        navigate("/", { replace: true });
+                      }}
+                    >
                       選擇
                     </Button>,
-                  ].filter(Boolean)}
+                  ]}
                 >
                   <List.Item.Meta
                     title={company.name}
@@ -102,7 +114,10 @@ export default function CompanySelectPage() {
                       <Text
                         type="secondary"
                         code
-                        copyable={{ text: company.id, onCopy: () => handleCopyId(company.id) }}
+                        copyable={{
+                          text: company.id,
+                          onCopy: () => handleCopyId(company.id),
+                        }}
                       >
                         商家識別碼：{company.id}
                       </Text>
@@ -114,18 +129,21 @@ export default function CompanySelectPage() {
           />
         )}
 
-        {isPlatformRole(account?.role) ? (
-          <Card size="small" title="新增商家服務" className="company-create-card">
-            <Form form={form} layout="inline" onFinish={handleCreate}>
-              <Form.Item name="name" rules={[{ required: true, message: "請輸入商家名稱" }]}>
-                <Input placeholder="商家名稱" />
-              </Form.Item>
-              <Form.Item>
-                <Button type="primary" htmlType="submit" loading={creating}>新增</Button>
-              </Form.Item>
-            </Form>
-          </Card>
-        ) : null}
+        <Card size="small" title="新增商家服務" className="mt-2">
+          <Form form={form} layout="inline" onFinish={handleCreate}>
+            <Form.Item
+              name="name"
+              rules={[{ required: true, message: "請輸入商家名稱" }]}
+            >
+              <Input placeholder="商家名稱" />
+            </Form.Item>
+            <Form.Item>
+              <Button type="primary" htmlType="submit" loading={creating}>
+                新增
+              </Button>
+            </Form.Item>
+          </Form>
+        </Card>
       </div>
     </main>
   );
