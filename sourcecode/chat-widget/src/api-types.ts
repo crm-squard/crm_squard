@@ -48,7 +48,8 @@ export interface OrderChatResponse extends ChatResponseFields {
   items: string;
 }
 
-export type ChatResponse = TextChatResponse | ProductChatResponse | OrderChatResponse;
+export type ChatResponse =
+  TextChatResponse | ProductChatResponse | OrderChatResponse;
 
 export interface ProviderInfo {
   id: ProviderId;

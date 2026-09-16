@@ -1,5 +1,6 @@
 import { defineConfig, loadEnv, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
+import tailwindcss from "@tailwindcss/vite";
 
 function widgetEmbedPlugin(widgetUrl: string, clientId: string): Plugin {
   return {
@@ -21,7 +22,7 @@ export default defineConfig(({ mode }) => {
   const clientId = env.VITE_CHAT_WIDGET_CLIENT_ID || "client_demo";
 
   return {
-    plugins: [widgetEmbedPlugin(widgetUrl, clientId), react()],
+    plugins: [widgetEmbedPlugin(widgetUrl, clientId), tailwindcss(), react()],
     server: {
       port: 5173,
     },

@@ -8,7 +8,8 @@ export interface DocumentInfo {
   content_hash?: string | null;
 }
 
-export type PrecheckStatus = "new" | "unchanged" | "content_changed" | "tags_only_changed" | "linked";
+export type PrecheckStatus =
+  "new" | "unchanged" | "content_changed" | "tags_only_changed" | "linked";
 
 export interface PrecheckRequestItem {
   path: string;

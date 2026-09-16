@@ -1,6 +1,8 @@
 import { useEffect } from "react";
 
-const WIDGET_SRC = import.meta.env.VITE_CHAT_WIDGET_URL || "http://localhost:5175/chat-widget.js";
+const WIDGET_SRC =
+  import.meta.env.VITE_CHAT_WIDGET_URL ||
+  "http://localhost:5175/chat-widget.js";
 
 declare global {
   interface Window {
@@ -15,13 +17,21 @@ declare global {
  * 的聊天/RAG 回答；因為 SPA 換公司不會整頁重新整理，所以換公司時要手動清掉舊的 widget
  * DOM 節點跟 script 標籤、重置掛載旗標，才能重新掛載成新公司的 client id。
  */
-export default function ChatWidgetPreview({ companyId }: { companyId: string | null }) {
+export default function ChatWidgetPreview({
+  companyId,
+}: {
+  companyId: string | null;
+}) {
   useEffect(() => {
     if (!companyId) return;
 
     function cleanup() {
-      document.querySelectorAll("[data-crm-chat-widget-host]").forEach((el) => el.remove());
-      document.querySelectorAll("script[data-crm-chat-widget-loader]").forEach((el) => el.remove());
+      document
+        .querySelectorAll("[data-crm-chat-widget-host]")
+        .forEach((el) => el.remove());
+      document
+        .querySelectorAll("script[data-crm-chat-widget-loader]")
+        .forEach((el) => el.remove());
       window.__CRM_CHAT_WIDGET_MOUNTED__ = false;
     }
 

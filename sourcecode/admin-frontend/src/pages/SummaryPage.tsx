@@ -9,6 +9,7 @@ import dayjs, { type Dayjs } from "dayjs";
 import { useEffect, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
 import { getDailySummary, type DailySummary } from "../api/summary";
+import { ui } from "../uiStyles";
 
 const { Paragraph } = Typography;
 
@@ -34,7 +35,8 @@ export default function SummaryPage() {
         if (!cancelled) setData(result);
       })
       .catch((err) => {
-        if (!cancelled) setError(err instanceof Error ? err.message : "讀取摘要失敗");
+        if (!cancelled)
+          setError(err instanceof Error ? err.message : "讀取摘要失敗");
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -45,8 +47,8 @@ export default function SummaryPage() {
   }, [token, selectedCompanyId, date]);
 
   return (
-    <main className="summary-page">
-      <div className="page-heading">
+    <main>
+      <div className={ui.pageHeading}>
         <div>
           <h1>客服機器人</h1>
           <p>查看指定日期使用者向聊天機器人提問的主題摘要。</p>
@@ -70,7 +72,7 @@ export default function SummaryPage() {
           ) : (
             <>
               <Tag color="blue">{data.question_count} 則提問</Tag>
-              <Paragraph style={{ marginTop: 16, whiteSpace: "pre-wrap" }}>{data.summary}</Paragraph>
+              <Paragraph className={ui.preWrap}>{data.summary}</Paragraph>
             </>
           )
         ) : null}

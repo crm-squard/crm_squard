@@ -1,6 +1,15 @@
 # Admin 設計規範
 
-本文件定義 Admin 新增頁面時應延續的視覺語言、版型與互動原則。實際樣式以 [src/styles.css](./src/styles.css) 與現有共用元件為準；本文件不作為執行階段依賴。
+本文件定義 Admin 新增頁面時應延續的視覺語言、版型與互動原則。實際樣式以 [src/styles.css](./src/styles.css) 的 Tailwind theme、[src/uiStyles.ts](./src/uiStyles.ts) 的 utility mapping 與現有共用元件為準；本文件不作為執行階段依賴。
+
+## Tailwind CSS v4 規則
+
+- `src/styles.css` 不載入 Preflight，只保留 Tailwind imports、`@theme` token 與共用動畫；不得新增專案 selector class。
+- 元件樣式集中於 `src/uiStyles.ts`，TSX 以 `ui.*` 套用完整、可靜態掃描的 utility 字串。
+- 保留 Ant Design；優先透過 `className`、`rootClassName`、`classNames` 與 arbitrary descendant variants 覆寫內部節點。
+- Ant 未分層樣式或一般 utility 覆蓋狀態樣式時，只對必要屬性加入 important modifier，不全面提高 specificity。
+- 單邊框 utility 不可與 `border-solid` 併用；完整四邊框才使用 `border border-solid`。
+- 新增 token、utility 或 TSX 後執行 `npm run format`，由 `prettier-plugin-tailwindcss` 依官方順序排序。
 
 ## 視覺原則
 
@@ -20,15 +29,15 @@
 
 ### 色彩
 
-| 用途 | 色彩 |
-| --- | --- |
-| 頁面背景 | `#f5f8fc` |
-| 主要文字 | `#16213e` |
-| 標題文字 | `#0f2148`、`#152750` |
-| 次要文字 | `#71809a`、`#7b889d` |
-| 主要操作 | `#1769e0` |
-| 品牌藍綠 | `#11b9af`、`#1878ed` |
-| 邊框 | `#e2e8f0`、`#e6ebf2` |
+| 用途     | 色彩                       |
+| -------- | -------------------------- |
+| 頁面背景 | `#f5f8fc`                  |
+| 主要文字 | `#16213e`                  |
+| 標題文字 | `#0f2148`、`#152750`       |
+| 次要文字 | `#71809a`、`#7b889d`       |
+| 主要操作 | `#1769e0`                  |
+| 品牌藍綠 | `#11b9af`、`#1878ed`       |
+| 邊框     | `#e2e8f0`、`#e6ebf2`       |
 | 內容表面 | `rgba(255, 255, 255, .92)` |
 
 狀態色應優先使用 Ant Design 語意色：`success`、`processing`、`warning`、`error` 與 `default`。訂單狀態的文字與色彩映射集中於 [src/components/StatusTag.tsx](./src/components/StatusTag.tsx)，新頁面不可另建重複映射。
@@ -57,50 +66,50 @@ Ant Design 全域 theme 設定集中於 [src/main.tsx](./src/main.tsx)，新增�
 
 ### Page Heading
 
-- 使用 `.page-heading`，左側放置單一 `h1` 與一句頁面目的說明。
+- 使用 `ui.pageHeading`，左側放置單一 `h1` 與一句頁面目的說明。
 - 右側只放與整頁相關的日期、主要操作或篩選條件。
-- 詳情頁使用 `.detail-heading`，返回操作放在標題前方。
+- 詳情頁組合 `ui.pageHeading` 與 `ui.detailHeading`，返回操作放在標題前方。
 
 ### Surface 與 Section Heading
 
-- 主要內容容器使用 `.surface`，維持一致的邊框、背景與圓角。
-- 區塊標題使用 `.section-heading`，左側為 `h2` 與說明，右側為單一主要連結或控制項。
+- 主要內容容器使用 `ui.surface`，維持一致的邊框、背景與圓角。
+- 區塊標題使用 `ui.sectionHeading`，左側為 `h2` 與說明，右側為單一主要連結或控制項。
 - 不在相鄰區塊使用不同的卡片陰影、圓角或背景語言。
 
 ### Metric Card
 
-- 指標區使用 `.metric-grid` 與 `.metric-card`。
+- 指標區使用 `ui.metricGrid` 與 `ui.metricCard`。
 - 每張卡片只呈現一個指標、簡短標籤及一行補充資訊。
-- 圖示容器使用 `.metric-icon`；顏色變體限於 `is-teal`、`is-blue`、`is-indigo`、`is-orange`。
+- 圖示容器使用 `ui.metricIcon`；顏色變體限於 `ui.metricTeal`、`ui.metricBlue`、`ui.metricIndigo`、`ui.metricOrange`。
 - 尚未串接的數值應顯示明確文字，不使用看似真實的假資料。
 
 ### Table
 
 - 訂單類表格優先重用 [src/components/OrderTable.tsx](./src/components/OrderTable.tsx)。
-- 工具列使用 `.table-tools`，搜尋置左，筆數或次要操作置右。
+- 工具列使用 `ui.tableTools`，搜尋置左，筆數或次要操作置右。
 - 表頭、字級、狀態標籤與操作連結應沿用既有樣式。
 - 寬表格需提供水平捲動；行動版不得壓縮到無法辨識欄位。
 
 ### Detail
 
-- 詳情內容使用 `.detail-surface`。
+- 詳情內容使用 `ui.detailSurface`。
 - 資訊依主題拆成多個 `h2` 區段，使用 Ant Design `Descriptions` 呈現欄位。
 - 狀態標籤放在頁面標題區，避免在內容中重複顯示同一狀態。
 
 ### Loading、Empty 與 Error
 
-- 路由載入使用 `.route-loading`，並提供 `role="status"`。
+- 路由載入使用 `ui.routeLoading`，並提供 `role="status"`。
 - 頁面資料載入使用 Skeleton 或 Table loading，避免顯示空白頁。
 - 尚無內容或功能尚未開放時使用 Ant Design Empty，說明下一步或限制。
 - API 失敗時使用 Alert 或 Result，提供可理解的訊息；可重試情境需提供重新載入操作。
 
 ## 響應式規則
 
-| 斷點 | 行為 |
-| --- | --- |
-| `≤1180px` | 指標卡片由四欄改為兩欄 |
-| `≤899px` | Sidebar 改為 Drawer、縮小內容內距、隱藏標題區日期 |
-| `≤620px` | 指標卡片改為單欄、工具列垂直排列、縮小內容表面內距 |
+| 斷點      | 行為                                               |
+| --------- | -------------------------------------------------- |
+| `≤1180px` | 指標卡片由四欄改為兩欄                             |
+| `≤899px`  | Sidebar 改為 Drawer、縮小內容內距、隱藏標題區日期  |
+| `≤620px`  | 指標卡片改為單欄、工具列垂直排列、縮小內容表面內距 |
 
 新增元件時應在三個既有斷點內處理，不建立只為單一頁面服務的相近斷點。
 
@@ -117,6 +126,8 @@ Ant Design 全域 theme 設定集中於 [src/main.tsx](./src/main.tsx)，新增�
 
 - [ ] 使用既有 AdminLayout、Page Heading、Surface 與 Section Heading 結構。
 - [ ] 優先重用現有共用元件與 Ant Design 元件，不建立相同用途的頁面專屬版本。
+- [ ] 元件樣式使用 `ui.*` utility mapping，未新增 selector class 或可由 token 取代的重複 arbitrary value。
+- [ ] `className` 已由官方 Tailwind Prettier plugin 排序，且必要的 Ant 覆寫已確認 computed style。
 - [ ] 使用既有色彩、字體、圓角、間距及狀態語意。
 - [ ] 已處理 loading、empty、error 與資料不足狀態。
 - [ ] 已確認 `1180px`、`899px`、`620px` 三個斷點。
