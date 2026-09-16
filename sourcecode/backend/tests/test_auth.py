@@ -9,14 +9,16 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app import accounts_store
-from app.main import app, _request_log
+from app.main import app, _company_request_log, _request_log
 
 
 @pytest.fixture(autouse=True)
 def _reset_rate_limit():
     _request_log.clear()
+    _company_request_log.clear()
     yield
     _request_log.clear()
+    _company_request_log.clear()
 
 
 @pytest.fixture

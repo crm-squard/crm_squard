@@ -105,6 +105,14 @@ RATE_LIMIT_WINDOW_SECONDS = 60
 RATE_LIMIT_MAX_REQUESTS = 20
 _request_log: dict[str, deque] = defaultdict(deque)
 
+# company_id（X-Client-ID）額外的限流：company_id 是公開識別碼，會出現在客戶網站的
+# widget 原始碼裡，不是密鑰，任何人都拿得到；只靠上面的 per-IP 限流擋不住「換 IP／用多台
+# 機器打同一個 company_id」的濫用，所以另外對 company_id 本身也做一組更寬鬆的總量限制
+# （一家商家的真實流量本來就會來自很多不同顧客的 IP，門檻要比單一 IP 高很多）。
+COMPANY_RATE_LIMIT_WINDOW_SECONDS = 60
+COMPANY_RATE_LIMIT_MAX_REQUESTS = 120
+_company_request_log: dict[str, deque] = defaultdict(deque)
+
 
 def _check_rate_limit(client_ip: str):
     now = time.time()
@@ -113,6 +121,16 @@ def _check_rate_limit(client_ip: str):
         timestamps.popleft()
     if len(timestamps) >= RATE_LIMIT_MAX_REQUESTS:
         raise HTTPException(status_code=429, detail="請求過於頻繁，請稍後再試。")
+    timestamps.append(now)
+
+
+def _check_company_rate_limit(company_id: str):
+    now = time.time()
+    timestamps = _company_request_log[company_id]
+    while timestamps and now - timestamps[0] > COMPANY_RATE_LIMIT_WINDOW_SECONDS:
+        timestamps.popleft()
+    if len(timestamps) >= COMPANY_RATE_LIMIT_MAX_REQUESTS:
+        raise HTTPException(status_code=429, detail="這家商家的聊天機器人請求量過大，請稍後再試。")
     timestamps.append(now)
 
 
@@ -596,6 +614,7 @@ def get_audit_log(company_id: str = Query(...), _account: dict = Depends(auth.re
 async def chat(req: ChatRequest, request: Request, _client_id: str = Depends(_require_client_id)):
     client_ip = request.client.host if request.client else "unknown"
     _check_rate_limit(client_ip)
+    _check_company_rate_limit(_client_id)
 
     text = req.message.strip()
     history = [{"role": h.role, "content": h.content} for h in req.history]
