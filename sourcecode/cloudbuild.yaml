@@ -196,17 +196,19 @@ steps:
   # 13. 建置 Admin Frontend 容器鏡像（注入訂單與 RAG 各自的 Backend 網址）
   - id: 'admin-frontend-build'
     name: 'gcr.io/cloud-builders/docker'
-    waitFor: ['backend-url', 'corp-backend-url']
+    waitFor: ['backend-url', 'corp-backend-url', 'chat-widget-url']
     entrypoint: bash
     args:
       - '-c'
       - |
         BACKEND_URL=$$(cat /workspace/backend_url.txt)
         CORP_URL=$$(cat /workspace/corp_backend_url.txt)
+        WIDGET_URL=$$(cat /workspace/widget_url.txt)
         docker build \
           --build-arg VITE_ADMIN_API_URL=$$CORP_URL \
           --build-arg VITE_RAG_API_URL=$$BACKEND_URL \
           --build-arg VITE_GOOGLE_CLIENT_ID=${_GOOGLE_CLIENT_ID} \
+          --build-arg VITE_CHAT_WIDGET_URL=$$WIDGET_URL/chat-widget.js \
           -t europe-west1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/crm-admin-frontend:latest \
           ./sourcecode/admin-frontend
 
