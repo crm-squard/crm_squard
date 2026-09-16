@@ -223,8 +223,8 @@ DEFAULT_QUICK_REPLIES = ["無線滑鼠支援多少 DPI？", "查詢訂單 A12345
 @app.get("/api/widget/config", response_model=WidgetConfig)
 def widget_config(_client_id: str = Depends(_require_client_id)):
     """
-    開頭語（welcome_message）、開場快速提問（quick_replies）依 _client_id（過渡性地當
-    company_id 用，見 _lookup_company）讀取公司自訂的值；查無公司或公司沒填就退回
+    開頭語（welcome_message）、開場快速提問（quick_replies）依 _client_id（就是
+    company_id，見 _lookup_company）讀取公司自訂的值；查無公司或公司沒填就退回
     DEFAULT_WELCOME_MESSAGE／DEFAULT_QUICK_REPLIES（原本 chat-widget 端寫死的內容搬過來
     當預設值），不讓 widget 掛掉。其餘品牌樣式 MVP 先共用，之後可以一併搬進公司資訊頁面。
     """
@@ -620,10 +620,9 @@ async def chat(req: ChatRequest, request: Request, _client_id: str = Depends(_re
     history = [{"role": h.role, "content": h.content} for h in req.history]
     history = history[-(settings.MAX_HISTORY_TURNS * 2):]
     try:
-        # Phase 1 過渡設計：company_id 直接借用現有的 X-Client-ID（_client_id，值不變、
-        # header 不變）——Phase 2 widget 改送真的 company UUID 時，這條呼叫鏈不用再改。
-        # 現階段 companies 表通常還沒有對應資料，檢索合理地回傳空結果（不是錯誤），
-        # 不影響其他訂單分流邏輯。
+        # X-Client-ID（_client_id）現在就是 companies 表的 company_id（見
+        # sourcecode/chat-widget/README.md 的 data-client-id 說明）；沒對應到任何公司時
+        # 檢索合理地回傳空結果（不是錯誤），不影響其他訂單分流邏輯。
         response = await _handle_chat(text, history, req.provider, company_id=_client_id)
     except Exception as e:
         # 任何未預期的例外（金鑰失效、首次建索引逾時等）都要回傳正常的 200 回應，
