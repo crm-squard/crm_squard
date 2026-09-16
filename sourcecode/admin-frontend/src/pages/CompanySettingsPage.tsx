@@ -2,12 +2,16 @@ import Button from "antd/es/button";
 import Card from "antd/es/card";
 import Form from "antd/es/form";
 import Input from "antd/es/input";
+import List from "antd/es/list";
 import message from "antd/es/message";
+import Popconfirm from "antd/es/popconfirm";
 import Typography from "antd/es/typography";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Navigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { updateCompany } from "../api/companies";
+import { createAccount, deleteAccount, listAccounts } from "../api/accounts";
+import type { Account } from "../api/auth";
 
 const { Text, Paragraph } = Typography;
 const { TextArea } = Input;
@@ -27,10 +31,28 @@ const DEFAULT_QUICK_REPLIES = ["無線滑鼠支援多少 DPI？", "查詢訂單 
  * AuthContext 目前選定的公司（跟 RagPage 一樣的模式，不用另外帶 company_id 路由參數）。
  */
 export default function CompanySettingsPage() {
-  const { token, companies, selectedCompanyId, refreshMe } = useAuth();
+  const { token, account: currentAccount, companies, selectedCompanyId, refreshMe } = useAuth();
   const [messageApi, contextHolder] = message.useMessage();
   const [form] = Form.useForm<CompanySettingsForm>();
+  const [accountForm] = Form.useForm<{ email: string }>();
   const [saving, setSaving] = useState(false);
+  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [addingAccount, setAddingAccount] = useState(false);
+
+  // list_accounts_visible_to 對商家帳號回傳的是「跟自己綁定同一家公司」的帳號，不是嚴格
+  // 依 company_id 過濾（後端目前沒有 per-company 的帳號查詢 API）；商家大多只管理一家公司，
+  // 這裡先用這份清單顯示「協作管理這家商家服務的帳號」，符合最小可行修改的原則。
+  const loadAccounts = useCallback(() => {
+    if (!token) return;
+    listAccounts(token)
+      .then(setAccounts)
+      .catch((err) => messageApi.error(err instanceof Error ? err.message : "帳號清單載入失敗"));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token]);
+
+  useEffect(() => {
+    loadAccounts();
+  }, [loadAccounts]);
 
   // companies 本來就是 /api/auth/me 依權限回傳的清單（平台角色回全部、商家帳號只回自己
   // 綁定的），能在這個清單裡找到，後端的 require_company_access 就一定會放行，不用在
@@ -71,6 +93,36 @@ export default function CompanySettingsPage() {
       messageApi.error(err instanceof Error ? err.message : "儲存失敗");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleAddAccount(values: { email: string }) {
+    if (!token || !selectedCompanyId) return;
+    setAddingAccount(true);
+    try {
+      await createAccount(token, {
+        email: values.email,
+        role: "tenant_secondary",
+        company_id: selectedCompanyId,
+      });
+      accountForm.resetFields();
+      loadAccounts();
+      messageApi.success("已新增管理帳號，該 gmail 登入後即可管理這家商家服務");
+    } catch (err) {
+      messageApi.error(err instanceof Error ? err.message : "新增失敗");
+    } finally {
+      setAddingAccount(false);
+    }
+  }
+
+  async function handleRemoveAccount(accountId: string) {
+    if (!token) return;
+    try {
+      await deleteAccount(token, accountId);
+      loadAccounts();
+      messageApi.success("已移除帳號");
+    } catch (err) {
+      messageApi.error(err instanceof Error ? err.message : "移除失敗");
     }
   }
 
@@ -121,6 +173,47 @@ export default function CompanySettingsPage() {
         ) : (
           <Text type="secondary">查無這家公司的資料。</Text>
         )}
+      </Card>
+
+      <Card title="管理帳號" style={{ marginTop: 16 }}>
+        <Paragraph type="secondary">
+          新增的 gmail 帳號用該帳號登入即可管理這家商家服務（跟你權限相同，差別只在誰能新增/移除誰）。
+        </Paragraph>
+        <List
+          dataSource={accounts}
+          locale={{ emptyText: "目前只有你自己在管理這家商家服務。" }}
+          renderItem={(acc) => (
+            <List.Item
+              actions={
+                acc.id === currentAccount?.id
+                  ? []
+                  : [
+                      <Popconfirm
+                        key="remove"
+                        title="確定要移除這個帳號嗎？"
+                        description="移除後該帳號會立刻無法登入。"
+                        onConfirm={() => handleRemoveAccount(acc.id)}
+                      >
+                        <Button danger size="small">移除</Button>
+                      </Popconfirm>,
+                    ]
+              }
+            >
+              <List.Item.Meta title={acc.email} description={acc.role} />
+            </List.Item>
+          )}
+        />
+        <Form form={accountForm} layout="inline" onFinish={handleAddAccount} style={{ marginTop: 16 }}>
+          <Form.Item
+            name="email"
+            rules={[{ required: true, type: "email", message: "請輸入有效的 gmail 地址" }]}
+          >
+            <Input placeholder="要新增的 gmail 地址" />
+          </Form.Item>
+          <Form.Item>
+            <Button type="primary" htmlType="submit" loading={addingAccount}>新增帳號</Button>
+          </Form.Item>
+        </Form>
       </Card>
     </main>
   );

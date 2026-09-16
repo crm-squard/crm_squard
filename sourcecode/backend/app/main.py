@@ -18,6 +18,7 @@ from typing import Literal
 
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy.exc import IntegrityError
 
 from app import accounts_store, auth
 from app.config import settings
@@ -134,8 +135,9 @@ def health():
 @app.post("/api/auth/google", response_model=LoginResponse)
 def login_with_google(req: GoogleLoginRequest):
     """
-    驗證前端拿到的 Google ID token，查帳號表；帳號不存在回 403（帳號需要平台/商家主帳號
-    手動加入，不是隨便一個 Google 帳號登入就能用）。驗證成功建立 session，回傳明文 token
+    驗證前端拿到的 Google ID token，查帳號表；帳號不存在時自動建立一個 tenant_primary 帳號
+    （商家自助註冊，不用平台方手動加入），但不會自動幫他建立任何企業服務（company），
+    商家登入後要自己在後台新增第一個企業服務。驗證成功建立 session，回傳明文 token
     （僅此一次，之後的請求都帶 Authorization: Bearer <token>）。
     """
     try:
@@ -144,7 +146,16 @@ def login_with_google(req: GoogleLoginRequest):
         raise HTTPException(status_code=401, detail=str(e))
     account = accounts_store.get_account_by_email(email)
     if account is None:
-        raise HTTPException(status_code=403, detail="這個帳號尚未被加入系統，請聯繫管理者。")
+        try:
+            account = accounts_store.create_account(email, "tenant_primary", created_by=None)
+        except IntegrityError:
+            # 同一個新 email 在極短時間內併發登入兩次，兩者都查到 None 才會撞到這裡；
+            # email 欄位有 UNIQUE 限制，其中一次 insert 會失敗，改查已經插入成功的那筆即可。
+            account = accounts_store.get_account_by_email(email)
+        accounts_store.record_audit(
+            account["id"], action="self_register", target_type="account", target_id=account["id"],
+            detail={"email": email},
+        )
     token = accounts_store.create_session(account["id"])
     return LoginResponse(token=token, account=AccountInfo(**account))
 
@@ -414,9 +425,15 @@ def delete_document(
 
 
 @app.post("/api/admin/companies", response_model=CompanyInfo)
-def create_company(req: CompanyCreateRequest, account: dict = Depends(auth.require_platform_role)):
-    """建立公司僅限平台維運帳號（商家沒辦法自己開一家新公司進系統）。"""
+def create_company(req: CompanyCreateRequest, account: dict = Depends(auth.require_session)):
+    """
+    任何已登入帳號都能新增企業服務（商家自助開通，不用平台方手動加入）：platform 角色建立的
+    公司不綁定任何帳號（沿用原本「看得到全部」的權限）；tenant 角色建立後自動綁定自己，
+    成為這家公司的主帳號，讓一個商家帳號可以自己開多個 company_id。
+    """
     company = accounts_store.create_company(req.name, req.mcp_url, req.welcome_message, req.quick_replies)
+    if account["role"] in accounts_store.TENANT_ROLES:
+        accounts_store.bind_company(account["id"], company["id"])
     accounts_store.record_audit(
         account["id"], action="create_company", target_type="company", target_id=company["id"],
         detail={"name": req.name},

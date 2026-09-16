@@ -25,13 +25,22 @@ def client():
         yield c
 
 
-def test_google_login_unknown_email_returns_403(client, monkeypatch):
-    """帳號沒有被手動加入系統時，登入要回 403（不是自動建立帳號）。"""
-    monkeypatch.setattr("app.auth.verify_google_id_token", lambda token: "nobody_pytest@example.com")
+def test_google_login_unknown_email_self_registers_as_tenant_primary(client, monkeypatch):
+    """未知 email 首次登入要自動建立 tenant_primary 帳號（商家自助註冊），不是回 403。"""
+    email = "nobody_pytest@example.com"
+    monkeypatch.setattr("app.auth.verify_google_id_token", lambda token: email)
 
     resp = client.post("/api/auth/google", json={"id_token": "fake-token"})
 
-    assert resp.status_code == 403
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["account"]["email"] == email
+    assert body["account"]["role"] == "tenant_primary"
+    assert body["token"]
+
+    account = accounts_store.get_account_by_email(email)
+    assert account is not None
+    accounts_store.delete_account(account["id"])
 
 
 def test_google_login_known_email_returns_session_token(client, monkeypatch, platform_account):
@@ -128,18 +137,22 @@ class TestCompanyAccess:
 
 
 class TestCompaniesApi:
-    def test_create_company_requires_platform_role(self, client, test_company):
+    def test_tenant_account_can_self_create_company_and_gets_bound(self, client, test_company):
+        """商家帳號自助新增企業服務：建立成功、且自動綁定成為這家新公司的帳號。"""
         tenant = accounts_store.create_account("pytest_tenant_create@example.com", "tenant_primary", None)
         accounts_store.bind_company(tenant["id"], test_company["id"])
         token = accounts_store.create_session(tenant["id"])
         try:
             resp = client.post(
                 "/api/admin/companies",
-                json={"name": "應該被拒絕的公司"},
+                json={"name": "商家自建的公司"},
                 headers={"Authorization": f"Bearer {token}"},
             )
-            assert resp.status_code == 403
+            assert resp.status_code == 200
+            new_company_id = resp.json()["id"]
+            assert accounts_store.account_has_company_access(tenant, new_company_id)
         finally:
+            accounts_store.delete_company(resp.json()["id"])
             accounts_store.delete_account(tenant["id"])
 
     def test_platform_account_creates_company_and_lists_it(self, client, platform_token):
