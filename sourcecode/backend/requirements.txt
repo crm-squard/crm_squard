@@ -11,8 +11,10 @@ anthropic==0.34.2
 openai==1.51.0
 google-generativeai==0.8.3
 
-# 多租戶帳號：Google 登入用來驗證前端拿到的 ID token（app/auth.py）
+# 多租戶帳號與資料庫（PostgreSQL / Supabase）：Google 登入與 accounts_store (app/db.py) 必需
 google-auth==2.57.1
+psycopg2-binary==2.9.12
+sqlalchemy[asyncio]>=1.4.49,<2.1
 
 # RAG 檢索（llamaindex 引擎，唯一支援的引擎）與本地模型（provider=local）用不到這份基礎
 # 依賴，須另外安裝 requirements-local-llm.txt，見 backend/README.md。
