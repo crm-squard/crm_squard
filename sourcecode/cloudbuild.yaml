@@ -52,7 +52,7 @@ steps:
     args:
       - '-c'
       - |
-        URL=$$(gcloud run services describe crm-backend --region=europe-west1 --format='value(status.url)')
+        URL=$$(gcloud run services describe $_SERVICE_NAME-backend --region=europe-west1 --format='value(status.url)')
         echo "Backend URL is $$URL"
         echo "$$URL" > /workspace/backend_url.txt
 
@@ -101,7 +101,7 @@ steps:
     args:
       - '-c'
       - |
-        WIDGET_URL=$$(gcloud run services describe crm-chat-widget --region=europe-west1 --format='value(status.url)')
+        WIDGET_URL=$$(gcloud run services describe $_SERVICE_NAME-chat-widget --region=europe-west1 --format='value(status.url)')
         echo "Chat Widget URL is $$WIDGET_URL"
         echo "$$WIDGET_URL" > /workspace/widget_url.txt
 
@@ -147,7 +147,7 @@ steps:
     args:
       - '-c'
       - |
-        CORP_URL=$$(gcloud run services describe corp-backend --region=europe-west1 --format='value(status.url)')
+        CORP_URL=$$(gcloud run services describe $_SERVICE_NAME-corp-backend --region=europe-west1 --format='value(status.url)')
         echo "Corp Backend URL is $$CORP_URL"
         echo "$$CORP_URL" > /workspace/corp_backend_url.txt
 
