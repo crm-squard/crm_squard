@@ -36,7 +36,7 @@ steps:
       # （見 sourcecode/backend/README.md「pgvector（Supabase）」一節）；GEMINI_API_KEY
       # 仍保留給 provider=google 的 LLM 回答用；RAG_PG_PASSWORD 需先在 Secret Manager
       # 建立同名 secret，不要用 --set-env-vars 明碼帶密碼
-      - '--set-env-vars=USE_SMALL_MODEL=true,CORS_ORIGINS=*,RAG_PG_HOST=aws-0-ap-northeast-2.pooler.supabase.com,RAG_PG_PORT=6543,RAG_PG_DATABASE=postgres,RAG_PG_USER=postgres.zsshivonwqppffcanujj,GOOGLE_CLIENT_ID=${_GOOGLE_CLIENT_ID}'
+      - '--set-env-vars=USE_SMALL_MODEL=true,CORS_ORIGINS=*,RAG_PG_HOST=aws-0-ap-northeast-2.pooler.supabase.com,RAG_PG_PORT=6543,RAG_PG_DATABASE=postgres,RAG_PG_USER=postgres.fcakryozwznuhdaucatm,GOOGLE_CLIENT_ID=${_GOOGLE_CLIENT_ID}'
       - '--set-secrets=GEMINI_API_KEY=GEMINI_API_KEY:latest,RAG_PG_PASSWORD=RAG_PG_PASSWORD:latest'
       # llamaindex 引擎第一次被呼叫時會 import torch/transformers（llama_index.embeddings
       # .huggingface，即使 EMBEDDING_BACKEND=onnx_int8 也一樣），實測光 import 就吃掉
