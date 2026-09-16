@@ -240,8 +240,11 @@ options:
   substitutionOption: 'ALLOW_LOOSE'
 
 substitutions:
-  # MVP 預設值僅供測試；正式環境應由 Cloud Build Trigger 覆寫為已核發的唯一 ID。
-  _CHAT_WIDGET_CLIENT_ID: 'client_demo'
+  # 正式站 corp-frontend 固定顯示 CRMsquard 這家商家的聊天機器人／RAG 知識庫
+  # （companies 表的 company_id，非隨意字串；見 admin-frontend 的公司設定頁）。
+  # 之後要換成別家商家，或要多商家並存時改用 corp-frontend/index.html 支援的
+  # ?company_id=xxx 網址參數（見 sourcecode/corp-frontend/index.html 的說明）。
+  _CHAT_WIDGET_CLIENT_ID: '663cfdab-5063-497a-b4e6-47993a0e8524'
   # 多租戶帳號（Google 登入）的 OAuth Client ID；backend 用來驗證 ID token 的簽發對象
   # （GOOGLE_CLIENT_ID），admin-frontend 用來顯示登入按鈕（VITE_GOOGLE_CLIENT_ID），
   # 兩邊必須是同一組值。留空的話 admin-frontend 會顯示「尚未設定」提示、無法登入，

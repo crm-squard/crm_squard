@@ -7,11 +7,23 @@ import message from "antd/es/message";
 import Popconfirm from "antd/es/popconfirm";
 import Typography from "antd/es/typography";
 import { useCallback, useEffect, useState } from "react";
-import { Navigate } from "react-router-dom";
+import { Navigate, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
-import { updateCompany } from "../api/companies";
+import { deleteCompany, updateCompany } from "../api/companies";
 import { createAccount, deleteAccount, listAccounts } from "../api/accounts";
+import { listAuditLog, type AuditLogEntry } from "../api/auditLog";
 import type { Account } from "../api/auth";
+
+const ACTION_LABELS: Record<string, string> = {
+  create_company: "建立商家服務",
+  update_company: "更新商家設定",
+  delete_company: "刪除商家服務",
+  create_account: "新增帳號",
+  delete_account: "移除帳號",
+  self_register: "帳號自助註冊",
+  upsert_document: "上傳/更新知識庫文件",
+  delete_document: "刪除知識庫文件",
+};
 
 const { Text, Paragraph } = Typography;
 const { TextArea } = Input;
@@ -31,13 +43,16 @@ const DEFAULT_QUICK_REPLIES = ["無線滑鼠支援多少 DPI？", "查詢訂單 
  * AuthContext 目前選定的公司（跟 RagPage 一樣的模式，不用另外帶 company_id 路由參數）。
  */
 export default function CompanySettingsPage() {
-  const { token, account: currentAccount, companies, selectedCompanyId, refreshMe } = useAuth();
+  const navigate = useNavigate();
+  const { token, account: currentAccount, companies, selectedCompanyId, selectCompany, refreshMe } = useAuth();
   const [messageApi, contextHolder] = message.useMessage();
   const [form] = Form.useForm<CompanySettingsForm>();
   const [accountForm] = Form.useForm<{ email: string }>();
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [addingAccount, setAddingAccount] = useState(false);
+  const [auditEntries, setAuditEntries] = useState<AuditLogEntry[]>([]);
 
   // list_accounts_visible_to 對商家帳號回傳的是「跟自己綁定同一家公司」的帳號，不是嚴格
   // 依 company_id 過濾（後端目前沒有 per-company 的帳號查詢 API）；商家大多只管理一家公司，
@@ -53,6 +68,14 @@ export default function CompanySettingsPage() {
   useEffect(() => {
     loadAccounts();
   }, [loadAccounts]);
+
+  useEffect(() => {
+    if (!token || !selectedCompanyId) return;
+    listAuditLog(token, selectedCompanyId)
+      .then(setAuditEntries)
+      .catch((err) => messageApi.error(err instanceof Error ? err.message : "稽核紀錄載入失敗"));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, selectedCompanyId]);
 
   // companies 本來就是 /api/auth/me 依權限回傳的清單（平台角色回全部、商家帳號只回自己
   // 綁定的），能在這個清單裡找到，後端的 require_company_access 就一定會放行，不用在
@@ -115,6 +138,22 @@ export default function CompanySettingsPage() {
     }
   }
 
+  async function handleDeleteCompany() {
+    if (!token || !selectedCompanyId) return;
+    setDeleting(true);
+    try {
+      await deleteCompany(token, selectedCompanyId);
+      selectCompany(null);
+      await refreshMe();
+      messageApi.success("已刪除商家服務");
+      navigate("/select-company", { replace: true });
+    } catch (err) {
+      messageApi.error(err instanceof Error ? err.message : "刪除失敗");
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   async function handleRemoveAccount(accountId: string) {
     if (!token) return;
     try {
@@ -169,6 +208,14 @@ export default function CompanySettingsPage() {
               </Form.Item>
               <Button type="primary" htmlType="submit" loading={saving}>儲存</Button>
             </Form>
+            <Popconfirm
+              title="確定要刪除這家商家服務嗎？"
+              description="會連同這家商家的 RAG 知識庫文件、向量資料一起硬刪除，無法復原。"
+              onConfirm={handleDeleteCompany}
+              okButtonProps={{ danger: true }}
+            >
+              <Button danger style={{ marginTop: 16 }} loading={deleting}>刪除這家商家服務</Button>
+            </Popconfirm>
           </>
         ) : (
           <Text type="secondary">查無這家公司的資料。</Text>
@@ -214,6 +261,22 @@ export default function CompanySettingsPage() {
             <Button type="primary" htmlType="submit" loading={addingAccount}>新增帳號</Button>
           </Form.Item>
         </Form>
+      </Card>
+
+      <Card title="稽核紀錄" style={{ marginTop: 16 }}>
+        <Paragraph type="secondary">這家商家服務最近的異動紀錄：建立/刪除、設定變更、知識庫文件、協作帳號新增移除。</Paragraph>
+        <List
+          dataSource={auditEntries}
+          locale={{ emptyText: "目前沒有紀錄。" }}
+          renderItem={(entry) => (
+            <List.Item>
+              <List.Item.Meta
+                title={ACTION_LABELS[entry.action] ?? entry.action}
+                description={`${entry.actor_email ?? "未知帳號"} · ${entry.created_at ?? ""}`}
+              />
+            </List.Item>
+          )}
+        />
       </Card>
     </main>
   );

@@ -31,6 +31,14 @@ export async function createCompany(
   return (await response.json()) as CompanyInfo;
 }
 
+export async function deleteCompany(token: string, companyId: string): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/api/admin/companies/${encodeURIComponent(companyId)}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  await throwIfNotOk(response);
+}
+
 export async function updateCompany(
   token: string,
   companyId: string,

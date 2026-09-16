@@ -9,14 +9,16 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app import accounts_store
-from app.main import app, _request_log
+from app.main import app, _company_request_log, _request_log
 
 
 @pytest.fixture(autouse=True)
 def _reset_rate_limit():
     _request_log.clear()
+    _company_request_log.clear()
     yield
     _request_log.clear()
+    _company_request_log.clear()
 
 
 @pytest.fixture
@@ -191,13 +193,60 @@ class TestCompaniesApi:
             accounts_store.delete_account(tenant["id"])
             accounts_store.delete_company(other["id"])
 
-    def test_delete_company_requires_platform_role(self, client, test_company):
+    def test_bound_tenant_can_delete_own_company(self, client, test_company):
+        """商家帳號能刪除自己綁定的公司（自助建立公司後也要能自助刪除）。"""
         tenant = accounts_store.create_account("pytest_tenant_delete@example.com", "tenant_primary", None)
         accounts_store.bind_company(tenant["id"], test_company["id"])
         token = accounts_store.create_session(tenant["id"])
         try:
             resp = client.delete(
                 f"/api/admin/companies/{test_company['id']}",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            assert resp.status_code == 200
+            assert accounts_store.get_company(test_company["id"]) is None
+        finally:
+            accounts_store.delete_account(tenant["id"])
+
+    def test_unbound_tenant_cannot_delete_company(self, client, test_company):
+        tenant = accounts_store.create_account("pytest_tenant_delete_denied@example.com", "tenant_primary", None)
+        token = accounts_store.create_session(tenant["id"])
+        try:
+            resp = client.delete(
+                f"/api/admin/companies/{test_company['id']}",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            assert resp.status_code == 403
+        finally:
+            accounts_store.delete_account(tenant["id"])
+
+
+class TestAuditLogApi:
+    def test_bound_tenant_sees_company_audit_entries(self, client, test_company):
+        tenant = accounts_store.create_account("pytest_tenant_audit@example.com", "tenant_primary", None)
+        accounts_store.bind_company(tenant["id"], test_company["id"])
+        token = accounts_store.create_session(tenant["id"])
+        accounts_store.record_audit(
+            tenant["id"], action="update_company", target_type="company", target_id=test_company["id"],
+            detail={"name": "改名測試"},
+        )
+        try:
+            resp = client.get(
+                f"/api/admin/audit-log?company_id={test_company['id']}",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            assert resp.status_code == 200
+            entries = resp.json()["entries"]
+            assert any(e["action"] == "update_company" for e in entries)
+        finally:
+            accounts_store.delete_account(tenant["id"])
+
+    def test_unbound_tenant_cannot_see_company_audit_entries(self, client, test_company):
+        tenant = accounts_store.create_account("pytest_tenant_audit_denied@example.com", "tenant_primary", None)
+        token = accounts_store.create_session(tenant["id"])
+        try:
+            resp = client.get(
+                f"/api/admin/audit-log?company_id={test_company['id']}",
                 headers={"Authorization": f"Bearer {token}"},
             )
             assert resp.status_code == 403
