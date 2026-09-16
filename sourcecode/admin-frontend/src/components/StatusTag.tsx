@@ -11,6 +11,9 @@ const STATUS_MAP: Record<string, { color: string; label: string }> = {
 
 export default function StatusTag({ status }: { status: string }) {
   const normalized = status.trim().toLowerCase();
-  const display = STATUS_MAP[normalized] ?? { color: "default", label: status || "未知" };
+  const display = STATUS_MAP[normalized] ?? {
+    color: "default",
+    label: status || "未知",
+  };
   return <Tag color={display.color}>{display.label}</Tag>;
 }

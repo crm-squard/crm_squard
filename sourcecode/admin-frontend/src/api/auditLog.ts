@@ -1,4 +1,5 @@
-const API_BASE_URL = import.meta.env.VITE_RAG_API_URL || "http://localhost:8000";
+const API_BASE_URL =
+  import.meta.env.VITE_RAG_API_URL || "http://localhost:8000";
 
 export interface AuditLogEntry {
   id: number;
@@ -17,10 +18,13 @@ async function throwIfNotOk(response: Response): Promise<void> {
   }
 }
 
-export async function listAuditLog(token: string, companyId: string): Promise<AuditLogEntry[]> {
+export async function listAuditLog(
+  token: string,
+  companyId: string,
+): Promise<AuditLogEntry[]> {
   const response = await fetch(
     `${API_BASE_URL}/api/admin/audit-log?company_id=${encodeURIComponent(companyId)}`,
-    { headers: { Authorization: `Bearer ${token}` } }
+    { headers: { Authorization: `Bearer ${token}` } },
   );
   await throwIfNotOk(response);
   const data = (await response.json()) as { entries: AuditLogEntry[] };

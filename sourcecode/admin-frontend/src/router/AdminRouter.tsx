@@ -1,7 +1,12 @@
-import { Navigate, RouterProvider, createBrowserRouter } from "react-router-dom";
+import {
+  Navigate,
+  RouterProvider,
+  createBrowserRouter,
+} from "react-router-dom";
 import { lazy, Suspense, type ReactNode } from "react";
 import AdminLayout from "../components/AdminLayout";
 import RequireAuth from "../components/RequireAuth";
+import { ui } from "../uiStyles";
 
 const DashboardPage = lazy(() => import("../pages/DashboardPage"));
 const OrderDetailPage = lazy(() => import("../pages/OrderDetailPage"));
@@ -13,7 +18,11 @@ const CompanySettingsPage = lazy(() => import("../pages/CompanySettingsPage"));
 const SummaryPage = lazy(() => import("../pages/SummaryPage"));
 
 function PageLoading() {
-  return <div className="route-loading" role="status">頁面載入中…</div>;
+  return (
+    <div className={ui.routeLoading} role="status">
+      頁面載入中…
+    </div>
+  );
 }
 
 function loadPage(page: ReactNode) {

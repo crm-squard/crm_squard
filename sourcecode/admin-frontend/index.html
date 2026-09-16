@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-Hant">
+<html class="min-h-full" lang="zh-Hant">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -7,8 +7,10 @@
     <title>CRM Console</title>
     <script src="https://accounts.google.com/gsi/client" async defer></script>
   </head>
-  <body>
-    <div id="root"></div>
+  <body
+    class="m-0 min-w-80 bg-admin-canvas bg-[radial-gradient(circle_at_76%_0%,rgb(23_105_224/.045),transparent_32%)] font-admin text-admin-text [font-synthesis:none] [text-rendering:optimizeLegibility] [&_*]:box-border [&_*::after]:box-border [&_*::before]:box-border [&_button]:font-[inherit] [&_input]:font-[inherit]"
+  >
+    <div class="min-h-full" id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
