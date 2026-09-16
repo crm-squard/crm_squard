@@ -185,29 +185,43 @@ def delete_account(account_id: str) -> bool:
     return row is not None
 
 
-def list_accounts_visible_to(account: dict) -> list[dict]:
-    """platform 角色看得到全部帳號；tenant 角色只看得到跟自己綁定同一家 company 的帳號
-    （含自己）——比照「商家主帳號能管理自己商家底下的次帳號」的權限模型。"""
+def list_platform_accounts() -> list[dict]:
+    """給「管理者帳號」頁籤用：只回傳 platform_primary／platform_secondary 這兩種角色，
+    不含任何商家帳號（商家帳號一定是透過 company_accounts 綁定，跟這裡完全分開查詢）。"""
     _ensure_schema()
     engine = get_engine()
-    if account["role"] in PLATFORM_ROLES:
-        sql = sql_text("SELECT id, email, role, created_by, created_at FROM accounts ORDER BY created_at")
-        params = {}
-    else:
-        sql = sql_text(
-            """
-            SELECT DISTINCT a.id, a.email, a.role, a.created_by, a.created_at
-            FROM accounts a
-            JOIN company_accounts ca ON ca.account_id = a.id
-            WHERE ca.company_id IN (
-                SELECT company_id FROM company_accounts WHERE account_id = :account_id
-            )
-            ORDER BY a.created_at
-            """
-        )
-        params = {"account_id": account["id"]}
     with engine.connect() as conn:
-        rows = conn.execute(sql, params).fetchall()
+        rows = conn.execute(
+            sql_text(
+                "SELECT id, email, role, created_by, created_at FROM accounts "
+                "WHERE role IN ('platform_primary', 'platform_secondary') ORDER BY created_at"
+            )
+        ).fetchall()
+    return [_row_to_account(r) for r in rows]
+
+
+def list_accounts_for_company(company_id: str) -> list[dict]:
+    """給「公司設定→管理帳號」用：回傳綁定這一家 company_id 的帳號（不含其他公司的協作
+    帳號）——修正原本 list_accounts_visible_to() 對 platform 角色回傳「全部帳號」，導致
+    公司設定頁看到其他公司帳號混在一起的問題。不特別排除管理者角色：管理者帳號預設不會被
+    綁定任何公司（一般管理者天生就不會出現在這份清單），但如果是管理者自己建立了這家公司
+    （見 main.py create_company()），或被明確加為協作帳號，就應該正常顯示、正常能被增減，
+    不該被角色濾掉。"""
+    _ensure_schema()
+    engine = get_engine()
+    with engine.connect() as conn:
+        rows = conn.execute(
+            sql_text(
+                """
+                SELECT a.id, a.email, a.role, a.created_by, a.created_at
+                FROM accounts a
+                JOIN company_accounts ca ON ca.account_id = a.id
+                WHERE ca.company_id = :company_id
+                ORDER BY a.created_at
+                """
+            ),
+            {"company_id": company_id},
+        ).fetchall()
     return [_row_to_account(r) for r in rows]
 
 

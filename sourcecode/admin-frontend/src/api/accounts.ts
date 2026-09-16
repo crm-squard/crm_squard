@@ -10,8 +10,16 @@ async function throwIfNotOk(response: Response): Promise<void> {
   }
 }
 
-export async function listAccounts(token: string): Promise<Account[]> {
-  const response = await fetch(`${API_BASE_URL}/api/admin/accounts`, {
+// 帶 companyId：查這家公司綁定的商家帳號（公司設定頁「管理帳號」用，不含管理者帳號）。
+// 不帶：查全部管理者帳號（「管理者帳號」頁籤用，僅限 platform 角色）。
+export async function listAccounts(
+  token: string,
+  companyId?: string,
+): Promise<Account[]> {
+  const url = companyId
+    ? `${API_BASE_URL}/api/admin/accounts?company_id=${encodeURIComponent(companyId)}`
+    : `${API_BASE_URL}/api/admin/accounts`;
+  const response = await fetch(url, {
     headers: { Authorization: `Bearer ${token}` },
   });
   await throwIfNotOk(response);

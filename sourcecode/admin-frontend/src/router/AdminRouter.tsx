@@ -16,6 +16,7 @@ const LoginPage = lazy(() => import("../pages/LoginPage"));
 const CompanySelectPage = lazy(() => import("../pages/CompanySelectPage"));
 const CompanySettingsPage = lazy(() => import("../pages/CompanySettingsPage"));
 const SummaryPage = lazy(() => import("../pages/SummaryPage"));
+const AdminAccountsPage = lazy(() => import("../pages/AdminAccountsPage"));
 
 function PageLoading() {
   return (
@@ -45,6 +46,7 @@ const router = createBrowserRouter([
       { path: "rag", element: loadPage(<RagPage />) },
       { path: "company-settings", element: loadPage(<CompanySettingsPage />) },
       { path: "summary", element: loadPage(<SummaryPage />) },
+      { path: "admin-accounts", element: loadPage(<AdminAccountsPage />) },
       { path: "*", element: <Navigate to="/" replace /> },
     ],
   },

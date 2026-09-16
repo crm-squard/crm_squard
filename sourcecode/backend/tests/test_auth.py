@@ -252,3 +252,107 @@ class TestAuditLogApi:
             assert resp.status_code == 403
         finally:
             accounts_store.delete_account(tenant["id"])
+
+
+class TestListAccountsApi:
+    """GET /api/admin/accounts：帶 company_id 查這家公司的協作帳號（不含管理者帳號），
+    不帶則查全部管理者帳號（僅限 platform 角色）。"""
+
+    def test_company_scoped_list_excludes_unbound_platform_accounts(
+        self, client, test_company, platform_account
+    ):
+        """一般管理者帳號沒被綁定這家公司時，天生不會出現在協作帳號清單裡。"""
+        tenant = accounts_store.create_account("pytest_accounts_company_scope@example.com", "tenant_primary", None)
+        accounts_store.bind_company(tenant["id"], test_company["id"])
+        token = accounts_store.create_session(tenant["id"])
+        try:
+            resp = client.get(
+                f"/api/admin/accounts?company_id={test_company['id']}",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            assert resp.status_code == 200
+            emails = [a["email"] for a in resp.json()["accounts"]]
+            assert tenant["email"] in emails
+            assert platform_account["email"] not in emails
+        finally:
+            accounts_store.delete_account(tenant["id"])
+
+    def test_platform_account_that_created_company_appears_in_its_account_list(
+        self, client, platform_token, platform_account
+    ):
+        """管理者帳號自己建立公司時要自動綁定，讓這家公司的協作帳號清單能正常顯示、
+        正常增減這個「創建者」（不受一般管理者帳號不綁定公司的預設行為影響）。"""
+        create_resp = client.post(
+            "/api/admin/companies",
+            json={"name": "Pytest 管理者建立的公司"},
+            headers={"Authorization": f"Bearer {platform_token}"},
+        )
+        assert create_resp.status_code == 200
+        company_id = create_resp.json()["id"]
+        try:
+            resp = client.get(
+                f"/api/admin/accounts?company_id={company_id}",
+                headers={"Authorization": f"Bearer {platform_token}"},
+            )
+            assert resp.status_code == 200
+            emails = [a["email"] for a in resp.json()["accounts"]]
+            assert platform_account["email"] in emails
+        finally:
+            accounts_store.delete_company(company_id)
+
+    def test_company_scoped_list_excludes_other_companies_accounts(self, client, test_company):
+        other_company = accounts_store.create_company("Pytest 其他公司", None)
+        tenant_a = accounts_store.create_account("pytest_accounts_a@example.com", "tenant_primary", None)
+        tenant_b = accounts_store.create_account("pytest_accounts_b@example.com", "tenant_primary", None)
+        accounts_store.bind_company(tenant_a["id"], test_company["id"])
+        accounts_store.bind_company(tenant_b["id"], other_company["id"])
+        token_a = accounts_store.create_session(tenant_a["id"])
+        try:
+            resp = client.get(
+                f"/api/admin/accounts?company_id={test_company['id']}",
+                headers={"Authorization": f"Bearer {token_a}"},
+            )
+            assert resp.status_code == 200
+            emails = [a["email"] for a in resp.json()["accounts"]]
+            assert tenant_a["email"] in emails
+            assert tenant_b["email"] not in emails
+        finally:
+            accounts_store.delete_account(tenant_a["id"])
+            accounts_store.delete_account(tenant_b["id"])
+            accounts_store.delete_company(other_company["id"])
+
+    def test_unbound_tenant_cannot_list_company_accounts(self, client, test_company):
+        tenant = accounts_store.create_account("pytest_accounts_unbound@example.com", "tenant_primary", None)
+        token = accounts_store.create_session(tenant["id"])
+        try:
+            resp = client.get(
+                f"/api/admin/accounts?company_id={test_company['id']}",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            assert resp.status_code == 403
+        finally:
+            accounts_store.delete_account(tenant["id"])
+
+    def test_no_company_id_lists_platform_accounts_only(self, client, platform_token, platform_account, test_company):
+        tenant = accounts_store.create_account("pytest_accounts_platform_list@example.com", "tenant_primary", None)
+        accounts_store.bind_company(tenant["id"], test_company["id"])
+        try:
+            resp = client.get(
+                "/api/admin/accounts", headers={"Authorization": f"Bearer {platform_token}"}
+            )
+            assert resp.status_code == 200
+            accounts = resp.json()["accounts"]
+            assert all(a["role"] in ["platform_primary", "platform_secondary"] for a in accounts)
+            assert any(a["email"] == platform_account["email"] for a in accounts)
+            assert tenant["email"] not in [a["email"] for a in accounts]
+        finally:
+            accounts_store.delete_account(tenant["id"])
+
+    def test_no_company_id_requires_platform_role(self, client):
+        tenant = accounts_store.create_account("pytest_accounts_tenant_no_scope@example.com", "tenant_primary", None)
+        token = accounts_store.create_session(tenant["id"])
+        try:
+            resp = client.get("/api/admin/accounts", headers={"Authorization": f"Bearer {token}"})
+            assert resp.status_code == 403
+        finally:
+            accounts_store.delete_account(tenant["id"])

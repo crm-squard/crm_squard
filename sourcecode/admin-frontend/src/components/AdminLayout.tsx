@@ -6,6 +6,7 @@ import LogoutOutlined from "@ant-design/icons/LogoutOutlined";
 import MenuOutlined from "@ant-design/icons/MenuOutlined";
 import SettingOutlined from "@ant-design/icons/SettingOutlined";
 import ShoppingOutlined from "@ant-design/icons/ShoppingOutlined";
+import TeamOutlined from "@ant-design/icons/TeamOutlined";
 import UserOutlined from "@ant-design/icons/UserOutlined";
 import Avatar from "antd/es/avatar";
 import Button from "antd/es/button";
@@ -31,11 +32,19 @@ const navigationItems = [
   { key: "/summary", icon: <CustomerServiceOutlined />, label: "客服機器人" },
 ];
 
+// 「管理者帳號」頁籤只給 platform_primary／platform_secondary 看，商家帳號完全看不到這個入口。
+const ADMIN_ACCOUNTS_ITEM = {
+  key: "/admin-accounts",
+  icon: <TeamOutlined />,
+  label: "管理者帳號",
+};
+
 function resolveSelectedKey(pathname: string) {
   if (pathname.startsWith("/orders")) return "/orders";
   if (pathname.startsWith("/rag")) return "/rag";
   if (pathname.startsWith("/company-settings")) return "/company-settings";
   if (pathname.startsWith("/summary")) return "/summary";
+  if (pathname.startsWith("/admin-accounts")) return "/admin-accounts";
   return "/";
 }
 
@@ -51,6 +60,11 @@ export default function AdminLayout() {
   const selectedCompany = companies.find(
     (company) => company.id === selectedCompanyId,
   );
+  const isPlatformRole =
+    account?.role === "platform_primary" || account?.role === "platform_secondary";
+  const menuItems = isPlatformRole
+    ? [...navigationItems, ADMIN_ACCOUNTS_ITEM]
+    : navigationItems;
 
   async function handleLogout() {
     await logout();
@@ -104,7 +118,7 @@ export default function AdminLayout() {
       <Menu
         mode="inline"
         selectedKeys={[selectedKey]}
-        items={navigationItems}
+        items={menuItems}
         inlineCollapsed={collapsed && !isMobile}
         onClick={({ key }) => {
           navigate(key);

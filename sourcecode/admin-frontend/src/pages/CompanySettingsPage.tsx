@@ -66,12 +66,10 @@ export default function CompanySettingsPage() {
   const [addingAccount, setAddingAccount] = useState(false);
   const [auditEntries, setAuditEntries] = useState<AuditLogEntry[]>([]);
 
-  // list_accounts_visible_to 對商家帳號回傳的是「跟自己綁定同一家公司」的帳號，不是嚴格
-  // 依 company_id 過濾（後端目前沒有 per-company 的帳號查詢 API）；商家大多只管理一家公司，
-  // 這裡先用這份清單顯示「協作管理這家商家服務的帳號」，符合最小可行修改的原則。
+  // 帶 selectedCompanyId：只查這家公司綁定的商家帳號，不含管理者帳號、也不含其他公司的協作帳號。
   const loadAccounts = useCallback(() => {
-    if (!token) return;
-    listAccounts(token)
+    if (!token || !selectedCompanyId) return;
+    listAccounts(token, selectedCompanyId)
       .then(setAccounts)
       .catch((err) =>
         messageApi.error(
@@ -79,7 +77,7 @@ export default function CompanySettingsPage() {
         ),
       );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token]);
+  }, [token, selectedCompanyId]);
 
   useEffect(() => {
     loadAccounts();

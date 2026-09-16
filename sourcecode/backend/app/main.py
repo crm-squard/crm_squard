@@ -447,13 +447,14 @@ def delete_document(
 @app.post("/api/admin/companies", response_model=CompanyInfo)
 def create_company(req: CompanyCreateRequest, account: dict = Depends(auth.require_session)):
     """
-    任何已登入帳號都能新增企業服務（商家自助開通，不用平台方手動加入）：platform 角色建立的
-    公司不綁定任何帳號（沿用原本「看得到全部」的權限）；tenant 角色建立後自動綁定自己，
-    成為這家公司的主帳號，讓一個商家帳號可以自己開多個 company_id。
+    任何已登入帳號都能新增企業服務（商家自助開通，不用平台方手動加入），建立後一律自動綁定
+    建立者（不分 tenant／platform 角色）：讓一個商家帳號可以自己開多個 company_id；
+    管理者帳號建立公司時也綁定，讓「管理者帳號本來就是這家公司的創建者」這件事在公司設定頁
+    的協作帳號清單裡看得到、也能正常增減——管理者角色本來就對所有公司有存取權（不靠這個
+    綁定），這裡綁定純粹是為了在「這家公司」的視角下如實記錄跟顯示創建者。
     """
     company = accounts_store.create_company(req.name, req.mcp_url, req.welcome_message, req.quick_replies)
-    if account["role"] in accounts_store.TENANT_ROLES:
-        accounts_store.bind_company(account["id"], company["id"])
+    accounts_store.bind_company(account["id"], company["id"])
     accounts_store.record_audit(
         account["id"], action="create_company", target_type="company", target_id=company["id"],
         detail={"name": req.name},
@@ -556,8 +557,22 @@ def create_account(req: AccountCreateRequest, actor: dict = Depends(auth.require
 
 
 @app.get("/api/admin/accounts", response_model=AccountListResponse)
-def list_accounts(actor: dict = Depends(auth.require_session)):
-    accounts = accounts_store.list_accounts_visible_to(actor)
+def list_accounts(company_id: str | None = Query(default=None), actor: dict = Depends(auth.require_session)):
+    """
+    帶 company_id：回傳這家公司綁定的商家帳號（公司設定頁「管理帳號」用），呼叫者要對這家
+    公司有存取權，比照 update_company／audit-log 的權限模式；不含管理者帳號，天生就不會
+    混進其他公司的協作帳號。
+    不帶 company_id：回傳所有管理者帳號（platform_primary／platform_secondary，「管理者
+    帳號」頁籤用），僅限 platform 角色呼叫，商家帳號沒有理由要看到管理者帳號清單。
+    """
+    if company_id:
+        if not accounts_store.account_has_company_access(actor, company_id):
+            raise HTTPException(status_code=403, detail="沒有這家公司的存取權限。")
+        accounts = accounts_store.list_accounts_for_company(company_id)
+    else:
+        if actor["role"] not in accounts_store.PLATFORM_ROLES:
+            raise HTTPException(status_code=403, detail="此操作僅限平台維運帳號。")
+        accounts = accounts_store.list_platform_accounts()
     return AccountListResponse(accounts=[AccountInfo(**a) for a in accounts])
 
 
