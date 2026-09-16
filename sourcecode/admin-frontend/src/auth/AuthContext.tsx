@@ -46,7 +46,7 @@ interface AuthContextValue {
   selectedCompanyId: string | null;
   loginWithIdToken: (idToken: string) => Promise<void>;
   logout: () => Promise<void>;
-  selectCompany: (companyId: string) => void;
+  selectCompany: (companyId: string | null) => void;
   refreshMe: () => Promise<void>;
 }
 
@@ -82,7 +82,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [state.token, updateState]);
 
   const selectCompany = useCallback(
-    (companyId: string) => {
+    (companyId: string | null) => {
       updateState({ ...state, selectedCompanyId: companyId });
     },
     [state, updateState]

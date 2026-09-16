@@ -26,6 +26,8 @@ from app.schemas import (
     AccountCreateRequest,
     AccountInfo,
     AccountListResponse,
+    AuditLogEntry,
+    AuditLogListResponse,
     ChatRequest,
     ChatResponse,
     CompanyCreateRequest,
@@ -473,10 +475,12 @@ def update_company(
 
 
 @app.delete("/api/admin/companies/{company_id}")
-def delete_company(company_id: str, account: dict = Depends(auth.require_platform_role)):
+def delete_company(company_id: str, account: dict = Depends(auth.require_company_access)):
     """
-    硬刪除公司：僅限平台維運帳號。連同該公司的 RAG 文件記錄與向量 chunk 一起清掉
-    （見 documents_store.purge_company()），company_accounts 綁定靠 ON DELETE CASCADE 自動清。
+    硬刪除公司：platform 角色或綁定這家公司的商家帳號都能刪除（比照 update_company 的權限
+    模型）——商家自助建立公司後，理當也能自己刪除，不用另外找平台方。連同該公司的 RAG
+    文件記錄與向量 chunk 一起清掉（見 documents_store.purge_company()），company_accounts
+    綁定靠 ON DELETE CASCADE 自動清。
     """
     from app.rag.documents_store import purge_company
 
@@ -561,11 +565,31 @@ def delete_account(account_id: str, actor: dict = Depends(auth.require_session))
             accounts_store.account_has_company_access(actor, c["id"]) for c in companies
         ):
             raise HTTPException(status_code=403, detail="沒有權限刪除這個帳號。")
+    target_companies = accounts_store.list_companies_visible_to(target) if target["role"] in accounts_store.TENANT_ROLES else []
     accounts_store.delete_account(account_id)
     accounts_store.record_audit(
         actor["id"], action="delete_account", target_type="account", target_id=account_id,
+        detail={
+            "email": target["email"],
+            # 只記第一家，稽核頁面用這個欄位做 company_id 過濾；帳號同時綁多家公司是少數情況，
+            # 這裡不為了這個邊角案例把 detail 改成陣列、多寫一套查詢邏輯。
+            "company_id": target_companies[0]["id"] if target_companies else None,
+        },
     )
     return {"status": "deleted", "account_id": account_id}
+
+
+# ---- 稽核紀錄：/api/admin/audit-log（依 company_id 查這家公司相關的異動紀錄） ----
+
+
+@app.get("/api/admin/audit-log", response_model=AuditLogListResponse)
+def get_audit_log(company_id: str = Query(...), _account: dict = Depends(auth.require_company_access)):
+    """
+    查一家公司的稽核紀錄：權限比照 /api/admin/summary，只有 platform 帳號或綁定這家公司的
+    帳號才能看。內容涵蓋公司異動、RAG 文件上傳/刪除、這家公司協作帳號的新增/移除。
+    """
+    entries = accounts_store.list_audit_log_for_company(company_id)
+    return AuditLogListResponse(entries=[AuditLogEntry(**e) for e in entries])
 
 
 @app.post("/api/chat", response_model=ChatResponse)

@@ -1,5 +1,5 @@
 """FastAPI 請求/回應格式。前端依 type 欄位決定要 render 哪一種訊息元件。"""
-from typing import List, Literal, Optional
+from typing import Any, List, Literal, Optional
 from pydantic import BaseModel, Field
 
 
@@ -177,3 +177,17 @@ class AccountCreateRequest(BaseModel):
 
 class AccountListResponse(BaseModel):
     accounts: List[AccountInfo]
+
+
+class AuditLogEntry(BaseModel):
+    id: int
+    actor_email: Optional[str] = None
+    action: str
+    target_type: str
+    target_id: Optional[str] = None
+    detail: Optional[Any] = None
+    created_at: Optional[str] = None
+
+
+class AuditLogListResponse(BaseModel):
+    entries: List[AuditLogEntry]
