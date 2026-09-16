@@ -86,6 +86,30 @@ def _ensure_schema() -> None:
             )
             """
         ))
+        # role（'primary' / 'secondary'）：同一個帳號可以是 A 公司的主帳號、同時是 B 公司的
+        # 協作帳號，這種「依公司而變」的身分沒辦法存在 accounts.role（那是帳號的全域屬性），
+        # 只能存在這張綁定關係表上。舊資料（這個欄位還沒存在前建立的綁定）用該帳號當時的
+        # 全域角色回填一次：tenant_primary → primary，其餘（含 platform 帳號、tenant_secondary）
+        # → secondary，是「猜」不是精確還原，回填後可以再手動調整。
+        conn.execute(sql_text(
+            "ALTER TABLE company_accounts ADD COLUMN IF NOT EXISTS role TEXT"
+        ))
+        conn.execute(sql_text(
+            """
+            UPDATE company_accounts ca SET role = COALESCE(
+                (SELECT CASE WHEN a.role = 'tenant_primary' THEN 'primary' ELSE 'secondary' END
+                 FROM accounts a WHERE a.id = ca.account_id),
+                'secondary'
+            )
+            WHERE ca.role IS NULL
+            """
+        ))
+        conn.execute(sql_text(
+            "ALTER TABLE company_accounts ALTER COLUMN role SET DEFAULT 'secondary'"
+        ))
+        conn.execute(sql_text(
+            "ALTER TABLE company_accounts ALTER COLUMN role SET NOT NULL"
+        ))
         conn.execute(sql_text(
             """
             CREATE TABLE IF NOT EXISTS sessions (
@@ -130,6 +154,11 @@ def _row_to_account(row) -> dict:
         "role": row.role,
         "created_by": str(row.created_by) if row.created_by is not None else None,
         "created_at": row.created_at.isoformat() if row.created_at is not None else None,
+        # 只有 list_accounts_for_company() 這種帶了 company_accounts.role 的查詢才有值；
+        # role 是帳號的全域角色，company_role 是「在這家公司」的身分（primary／secondary），
+        # 兩者可能不一樣（例如管理者帳號建立了這家公司，全域 role 是 platform_primary，
+        # company_role 卻是 primary）。
+        "company_role": getattr(row, "company_role", None),
     }
 
 
@@ -213,7 +242,7 @@ def list_accounts_for_company(company_id: str) -> list[dict]:
         rows = conn.execute(
             sql_text(
                 """
-                SELECT a.id, a.email, a.role, a.created_by, a.created_at
+                SELECT a.id, a.email, a.role, a.created_by, a.created_at, ca.role AS company_role
                 FROM accounts a
                 JOIN company_accounts ca ON ca.account_id = a.id
                 WHERE ca.company_id = :company_id
@@ -225,19 +254,23 @@ def list_accounts_for_company(company_id: str) -> list[dict]:
     return [_row_to_account(r) for r in rows]
 
 
-def bind_company(account_id: str, company_id: str) -> None:
+def bind_company(account_id: str, company_id: str, role: str = "secondary") -> None:
+    """role：這個帳號在**這家公司**的身分（'primary' 或 'secondary'），跟帳號的全域
+    accounts.role 是分開的兩件事——同一個帳號可以是 A 公司的 primary、同時是 B 公司的
+    secondary。已經綁定過時用新值覆蓋 role（例如把協作帳號升成共同主帳號），不是單純忽略。
+    """
     _ensure_schema()
     engine = get_engine()
     with engine.begin() as conn:
         conn.execute(
             sql_text(
                 """
-                INSERT INTO company_accounts (account_id, company_id)
-                VALUES (:account_id, :company_id)
-                ON CONFLICT (account_id, company_id) DO NOTHING
+                INSERT INTO company_accounts (account_id, company_id, role)
+                VALUES (:account_id, :company_id, :role)
+                ON CONFLICT (account_id, company_id) DO UPDATE SET role = EXCLUDED.role
                 """
             ),
-            {"account_id": account_id, "company_id": company_id},
+            {"account_id": account_id, "company_id": company_id, "role": role},
         )
 
 
@@ -269,6 +302,30 @@ def account_has_company_access(account: dict, company_id: str) -> bool:
     return row is not None
 
 
+def get_company_role(account_id: str, company_id: str) -> Optional[str]:
+    """查這個帳號在這家公司的身分（'primary'／'secondary'），沒綁定回 None。只回答「這家
+    公司」的身分，不管帳號的全域角色——呼叫端如果是 platform 帳號，通常不用查這個
+    （platform 對任何公司本來就有完整存取權，見 account_has_company_access）。"""
+    _ensure_schema()
+    engine = get_engine()
+    with engine.connect() as conn:
+        row = conn.execute(
+            sql_text(
+                "SELECT role FROM company_accounts WHERE account_id = :account_id AND company_id = :company_id"
+            ),
+            {"account_id": account_id, "company_id": company_id},
+        ).fetchone()
+    return row.role if row is not None else None
+
+
+def is_company_primary(account: dict, company_id: str) -> bool:
+    """這個帳號能不能管理（新增/移除）這家公司的其他協作帳號：platform 角色永遠可以；
+    tenant 角色要是這家公司的 primary 才行（secondary 看得到協作帳號清單，但不能增減）。"""
+    if account["role"] in PLATFORM_ROLES:
+        return True
+    return get_company_role(account["id"], company_id) == "primary"
+
+
 def _row_to_company(row) -> dict:
     return {
         "id": str(row.id),
@@ -277,6 +334,10 @@ def _row_to_company(row) -> dict:
         "welcome_message": row.welcome_message,
         "quick_replies": json.loads(row.quick_replies) if row.quick_replies else None,
         "created_at": row.created_at.isoformat() if row.created_at is not None else None,
+        # 只有透過 list_companies_visible_to() 查出來的公司才有這個欄位（SELECT 裡有多帶
+        # your_role）；get_company()／create_company()／update_company() 回傳的公司資訊
+        # 沒有「查詢者身分」這個概念，getattr 拿不到就是 None，不是每個呼叫端都要改。
+        "your_role": getattr(row, "your_role", None),
     }
 
 
@@ -366,19 +427,23 @@ def delete_company(company_id: str) -> bool:
 
 
 def list_companies_visible_to(account: dict) -> list[dict]:
-    """platform 角色回全部；tenant 角色經 company_accounts join 回自己綁定的。"""
+    """platform 角色回全部（沒有「這家公司的身分」這個概念，your_role 固定 None）；
+    tenant 角色經 company_accounts join 回自己綁定的，附帶 your_role（'primary'／
+    'secondary'）讓前端可以依公司分別顯示「主帳號」還是「協作帳號」，不是看帳號的
+    全域角色（accounts.role）——同一個帳號在不同公司的 your_role 可能不一樣。"""
     _ensure_schema()
     engine = get_engine()
     if account["role"] in PLATFORM_ROLES:
         sql = sql_text(
-            "SELECT id, name, mcp_url, welcome_message, quick_replies, created_at "
-            "FROM companies ORDER BY created_at"
+            "SELECT id, name, mcp_url, welcome_message, quick_replies, created_at, "
+            "NULL AS your_role FROM companies ORDER BY created_at"
         )
         params = {}
     else:
         sql = sql_text(
             """
-            SELECT c.id, c.name, c.mcp_url, c.welcome_message, c.quick_replies, c.created_at
+            SELECT c.id, c.name, c.mcp_url, c.welcome_message, c.quick_replies, c.created_at,
+                   ca.role AS your_role
             FROM companies c
             JOIN company_accounts ca ON ca.company_id = c.id
             WHERE ca.account_id = :account_id
