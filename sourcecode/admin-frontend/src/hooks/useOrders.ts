@@ -18,8 +18,11 @@ export function useOrders() {
     getOrders(controller.signal)
       .then((response) => setOrders(response.orders))
       .catch((reason: unknown) => {
-        if (reason instanceof DOMException && reason.name === "AbortError") return;
-        setError(reason instanceof Error ? reason.message : "無法取得訂單資料。");
+        if (reason instanceof DOMException && reason.name === "AbortError")
+          return;
+        setError(
+          reason instanceof Error ? reason.message : "無法取得訂單資料。",
+        );
       })
       .finally(() => {
         if (!controller.signal.aborted) setIsLoading(false);

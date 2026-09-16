@@ -4,7 +4,8 @@ export interface DailySummary {
   summary: string;
 }
 
-const API_BASE_URL = import.meta.env.VITE_RAG_API_URL || "http://localhost:8000";
+const API_BASE_URL =
+  import.meta.env.VITE_RAG_API_URL || "http://localhost:8000";
 
 async function throwIfNotOk(response: Response): Promise<void> {
   if (!response.ok) {
@@ -13,7 +14,11 @@ async function throwIfNotOk(response: Response): Promise<void> {
   }
 }
 
-export async function getDailySummary(token: string, companyId: string, date?: string): Promise<DailySummary> {
+export async function getDailySummary(
+  token: string,
+  companyId: string,
+  date?: string,
+): Promise<DailySummary> {
   const url = new URL(`${API_BASE_URL}/api/admin/summary`);
   url.searchParams.set("company_id", companyId);
   if (date) url.searchParams.set("date", date);

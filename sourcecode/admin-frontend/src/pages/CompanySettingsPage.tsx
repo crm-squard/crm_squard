@@ -9,6 +9,7 @@ import Typography from "antd/es/typography";
 import { useCallback, useEffect, useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
+import { ui } from "../uiStyles";
 import { deleteCompany, updateCompany } from "../api/companies";
 import { createAccount, deleteAccount, listAccounts } from "../api/accounts";
 import { listAuditLog, type AuditLogEntry } from "../api/auditLog";
@@ -35,7 +36,11 @@ interface CompanySettingsForm {
   quick_replies?: string;
 }
 
-const DEFAULT_QUICK_REPLIES = ["無線滑鼠支援多少 DPI？", "查詢訂單 A12345", "退貨要幾天內申請？"];
+const DEFAULT_QUICK_REPLIES = [
+  "無線滑鼠支援多少 DPI？",
+  "查詢訂單 A12345",
+  "退貨要幾天內申請？",
+];
 
 /**
  * 公司資訊設定頁面：MCP URL（訂單查詢用）跟聊天機器人開頭語從原本 select-company 頁面
@@ -44,7 +49,14 @@ const DEFAULT_QUICK_REPLIES = ["無線滑鼠支援多少 DPI？", "查詢訂單 
  */
 export default function CompanySettingsPage() {
   const navigate = useNavigate();
-  const { token, account: currentAccount, companies, selectedCompanyId, selectCompany, refreshMe } = useAuth();
+  const {
+    token,
+    account: currentAccount,
+    companies,
+    selectedCompanyId,
+    selectCompany,
+    refreshMe,
+  } = useAuth();
   const [messageApi, contextHolder] = message.useMessage();
   const [form] = Form.useForm<CompanySettingsForm>();
   const [accountForm] = Form.useForm<{ email: string }>();
@@ -61,7 +73,11 @@ export default function CompanySettingsPage() {
     if (!token) return;
     listAccounts(token)
       .then(setAccounts)
-      .catch((err) => messageApi.error(err instanceof Error ? err.message : "帳號清單載入失敗"));
+      .catch((err) =>
+        messageApi.error(
+          err instanceof Error ? err.message : "帳號清單載入失敗",
+        ),
+      );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
@@ -73,7 +89,11 @@ export default function CompanySettingsPage() {
     if (!token || !selectedCompanyId) return;
     listAuditLog(token, selectedCompanyId)
       .then(setAuditEntries)
-      .catch((err) => messageApi.error(err instanceof Error ? err.message : "稽核紀錄載入失敗"));
+      .catch((err) =>
+        messageApi.error(
+          err instanceof Error ? err.message : "稽核紀錄載入失敗",
+        ),
+      );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, selectedCompanyId]);
 
@@ -88,7 +108,9 @@ export default function CompanySettingsPage() {
         name: company.name,
         mcp_url: company.mcp_url ?? "",
         welcome_message: company.welcome_message ?? "",
-        quick_replies: (company.quick_replies ?? DEFAULT_QUICK_REPLIES).join("\n"),
+        quick_replies: (company.quick_replies ?? DEFAULT_QUICK_REPLIES).join(
+          "\n",
+        ),
       });
     }
   }, [company, form]);
@@ -166,12 +188,15 @@ export default function CompanySettingsPage() {
   }
 
   return (
-    <main className="company-settings-page">
+    <main>
       {contextHolder}
-      <div className="page-heading">
+      <div className={ui.pageHeading}>
         <div>
           <h1>公司設定</h1>
-          <p>管理目前選定商家的基本資訊、訂單查詢 MCP URL、聊天機器人開頭語與開場快速提問。</p>
+          <p>
+            管理目前選定商家的基本資訊、訂單查詢 MCP
+            URL、聊天機器人開頭語與開場快速提問。
+          </p>
         </div>
       </div>
 
@@ -179,10 +204,17 @@ export default function CompanySettingsPage() {
         {company ? (
           <>
             <Paragraph type="secondary">
-              商家識別碼：<Text code copyable>{company.id}</Text>
+              商家識別碼：
+              <Text code copyable>
+                {company.id}
+              </Text>
             </Paragraph>
             <Form form={form} layout="vertical" onFinish={handleSave}>
-              <Form.Item name="name" label="商家名稱" rules={[{ required: true, message: "請輸入商家名稱" }]}>
+              <Form.Item
+                name="name"
+                label="商家名稱"
+                rules={[{ required: true, message: "請輸入商家名稱" }]}
+              >
                 <Input />
               </Form.Item>
               <Form.Item
@@ -197,16 +229,26 @@ export default function CompanySettingsPage() {
                 label="聊天機器人開頭語"
                 extra="留空時使用系統預設的開頭語。"
               >
-                <TextArea rows={3} placeholder="您好，我是線上客服，可以問我任何產品的規格、特色，或是輸入訂單編號查詢配送狀態喔。" />
+                <TextArea
+                  rows={3}
+                  placeholder="您好，我是線上客服，可以問我任何產品的規格、特色，或是輸入訂單編號查詢配送狀態喔。"
+                />
               </Form.Item>
               <Form.Item
                 name="quick_replies"
                 label="開場快速提問"
                 extra="一行一個，顯示在聊天視窗剛打開時的快速提問按鈕；全部清空時使用系統預設的三個問題。"
               >
-                <TextArea rows={3} placeholder={"無線滑鼠支援多少 DPI？\n查詢訂單 A12345\n退貨要幾天內申請？"} />
+                <TextArea
+                  rows={3}
+                  placeholder={
+                    "無線滑鼠支援多少 DPI？\n查詢訂單 A12345\n退貨要幾天內申請？"
+                  }
+                />
               </Form.Item>
-              <Button type="primary" htmlType="submit" loading={saving}>儲存</Button>
+              <Button type="primary" htmlType="submit" loading={saving}>
+                儲存
+              </Button>
             </Form>
             <Popconfirm
               title="確定要刪除這家商家服務嗎？"
@@ -214,7 +256,9 @@ export default function CompanySettingsPage() {
               onConfirm={handleDeleteCompany}
               okButtonProps={{ danger: true }}
             >
-              <Button danger style={{ marginTop: 16 }} loading={deleting}>刪除這家商家服務</Button>
+              <Button className={ui.marginTop4} danger loading={deleting}>
+                刪除這家商家服務
+              </Button>
             </Popconfirm>
           </>
         ) : (
@@ -222,9 +266,10 @@ export default function CompanySettingsPage() {
         )}
       </Card>
 
-      <Card title="管理帳號" style={{ marginTop: 16 }}>
+      <Card className={ui.marginTop4} title="管理帳號">
         <Paragraph type="secondary">
-          新增的 gmail 帳號用該帳號登入即可管理這家商家服務（跟你權限相同，差別只在誰能新增/移除誰）。
+          新增的 gmail
+          帳號用該帳號登入即可管理這家商家服務（跟你權限相同，差別只在誰能新增/移除誰）。
         </Paragraph>
         <List
           dataSource={accounts}
@@ -241,7 +286,9 @@ export default function CompanySettingsPage() {
                         description="移除後該帳號會立刻無法登入。"
                         onConfirm={() => handleRemoveAccount(acc.id)}
                       >
-                        <Button danger size="small">移除</Button>
+                        <Button danger size="small">
+                          移除
+                        </Button>
                       </Popconfirm>,
                     ]
               }
@@ -250,21 +297,36 @@ export default function CompanySettingsPage() {
             </List.Item>
           )}
         />
-        <Form form={accountForm} layout="inline" onFinish={handleAddAccount} style={{ marginTop: 16 }}>
+        <Form
+          className={ui.marginTop4}
+          form={accountForm}
+          layout="inline"
+          onFinish={handleAddAccount}
+        >
           <Form.Item
             name="email"
-            rules={[{ required: true, type: "email", message: "請輸入有效的 gmail 地址" }]}
+            rules={[
+              {
+                required: true,
+                type: "email",
+                message: "請輸入有效的 gmail 地址",
+              },
+            ]}
           >
             <Input placeholder="要新增的 gmail 地址" />
           </Form.Item>
           <Form.Item>
-            <Button type="primary" htmlType="submit" loading={addingAccount}>新增帳號</Button>
+            <Button type="primary" htmlType="submit" loading={addingAccount}>
+              新增帳號
+            </Button>
           </Form.Item>
         </Form>
       </Card>
 
-      <Card title="稽核紀錄" style={{ marginTop: 16 }}>
-        <Paragraph type="secondary">這家商家服務最近的異動紀錄：建立/刪除、設定變更、知識庫文件、協作帳號新增移除。</Paragraph>
+      <Card className={ui.marginTop4} title="稽核紀錄">
+        <Paragraph type="secondary">
+          這家商家服務最近的異動紀錄：建立/刪除、設定變更、知識庫文件、協作帳號新增移除。
+        </Paragraph>
         <List
           dataSource={auditEntries}
           locale={{ emptyText: "目前沒有紀錄。" }}

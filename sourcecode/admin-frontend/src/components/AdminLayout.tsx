@@ -18,6 +18,7 @@ import { useEffect, useState } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import BrandMark from "./BrandMark";
 import { useAuth } from "../auth/AuthContext";
+import { ui } from "../uiStyles";
 
 const { Header, Sider, Content } = Layout;
 
@@ -41,12 +42,15 @@ function resolveSelectedKey(pathname: string) {
 export default function AdminLayout() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { account, companies, selectedCompanyId, selectCompany, logout } = useAuth();
+  const { account, companies, selectedCompanyId, selectCompany, logout } =
+    useAuth();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(() => window.innerWidth < 900);
   const selectedKey = resolveSelectedKey(location.pathname);
-  const selectedCompany = companies.find((company) => company.id === selectedCompanyId);
+  const selectedCompany = companies.find(
+    (company) => company.id === selectedCompanyId,
+  );
 
   async function handleLogout() {
     await logout();
@@ -63,18 +67,25 @@ export default function AdminLayout() {
 
   const navigation = (
     <>
-      <div className="sider-brand"><BrandMark compact={collapsed && !isMobile} /></div>
+      <div className={ui.siderBrand}>
+        <BrandMark compact={collapsed && !isMobile} />
+      </div>
       {(!collapsed || isMobile) && (
-        <div className="tenant-block">
+        <div className={ui.tenantBlock}>
           <span>目前商家</span>
           {companies.length > 1 ? (
             <Dropdown
               menu={{
-                items: companies.map((company) => ({ key: company.id, label: company.name })),
+                items: companies.map((company) => ({
+                  key: company.id,
+                  label: company.name,
+                })),
                 onClick: ({ key }) => selectCompany(key),
               }}
             >
-              <strong className="tenant-switcher">{selectedCompany?.name ?? "選擇商家"} <DownOutlined /></strong>
+              <strong className={ui.tenantSwitcher}>
+                {selectedCompany?.name ?? "選擇商家"} <DownOutlined />
+              </strong>
             </Dropdown>
           ) : (
             <strong>{selectedCompany?.name ?? "-"}</strong>
@@ -83,7 +94,7 @@ export default function AdminLayout() {
               就永遠回不到選公司頁面了（選了一家之後 CompanySelectPage 不會再自動出現）。 */}
           <button
             type="button"
-            className="tenant-manage-link"
+            className={ui.tenantManageLink}
             onClick={() => navigate("/select-company")}
           >
             管理商家服務
@@ -100,44 +111,78 @@ export default function AdminLayout() {
           setMobileOpen(false);
         }}
       />
-      {(!collapsed || isMobile) && <div className="sider-caption">CRM Console<br />v0.1.0</div>}
+      {(!collapsed || isMobile) && (
+        <div className={ui.siderCaption}>
+          CRM Console
+          <br />
+          v0.1.0
+        </div>
+      )}
     </>
   );
 
   return (
-    <Layout className="admin-shell">
+    <Layout className={ui.adminShell}>
       {!isMobile && (
-        <Sider width={224} collapsedWidth={76} collapsed={collapsed} theme="light" className="desktop-sider">
+        <Sider
+          width={224}
+          collapsedWidth={76}
+          collapsed={collapsed}
+          theme="light"
+          className={ui.desktopSider}
+        >
           {navigation}
         </Sider>
       )}
-      <Drawer placement="left" width={260} open={isMobile && mobileOpen} onClose={() => setMobileOpen(false)} closable={false} styles={{ body: { padding: 0 } }}>
-        <div className="mobile-navigation">{navigation}</div>
+      <Drawer
+        placement="left"
+        width={260}
+        open={isMobile && mobileOpen}
+        onClose={() => setMobileOpen(false)}
+        closable={false}
+        classNames={{ body: "p-0!" }}
+      >
+        <div className={ui.mobileNavigation}>{navigation}</div>
       </Drawer>
       <Layout>
-        <Header className="admin-header">
-          <Tooltip title={isMobile ? "開啟選單" : collapsed ? "展開選單" : "收合選單"}>
+        <Header className={ui.adminHeader}>
+          <Tooltip
+            title={isMobile ? "開啟選單" : collapsed ? "展開選單" : "收合選單"}
+          >
             <Button
-              className="menu-toggle"
+              className={ui.menuToggle}
               type="text"
               icon={<MenuOutlined />}
-              aria-label={isMobile ? "開啟選單" : collapsed ? "展開選單" : "收合選單"}
-              onClick={() => isMobile ? setMobileOpen(true) : setCollapsed((value) => !value)}
+              aria-label={
+                isMobile ? "開啟選單" : collapsed ? "展開選單" : "收合選單"
+              }
+              onClick={() =>
+                isMobile ? setMobileOpen(true) : setCollapsed((value) => !value)
+              }
             />
           </Tooltip>
           <Dropdown
             menu={{
-              items: [{ key: "logout", icon: <LogoutOutlined />, label: "登出" }],
-              onClick: ({ key }) => { if (key === "logout") handleLogout(); },
+              items: [
+                { key: "logout", icon: <LogoutOutlined />, label: "登出" },
+              ],
+              onClick: ({ key }) => {
+                if (key === "logout") handleLogout();
+              },
             }}
           >
-            <div className="account-placeholder" aria-label="帳號選單">
+            <div className={ui.account} aria-label="帳號選單">
               <Avatar icon={<UserOutlined />} />
-              <span><strong>{account?.email ?? "-"}</strong><small>{account?.role ?? ""}</small></span>
+              <span>
+                <strong>{account?.email ?? "-"}</strong>
+                <small>{account?.role ?? ""}</small>
+              </span>
             </div>
           </Dropdown>
         </Header>
-        <Content className="admin-content"><Outlet /></Content>
+        <Content className={ui.adminContent}>
+          <Outlet />
+        </Content>
       </Layout>
     </Layout>
   );
