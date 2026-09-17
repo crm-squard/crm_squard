@@ -25,6 +25,7 @@ import Typography from "antd/es/typography";
 import Upload from "antd/es/upload";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useBeforeUnload, useBlocker } from "react-router-dom";
+import AdminPageLayout from "../components/AdminPageLayout";
 import {
   deleteDocument,
   fetchDocuments,
@@ -528,480 +529,475 @@ export default function AdminDocumentsPage() {
   }
 
   return (
-    <main>
-      {messageContextHolder}
-      {modalContextHolder}
-      {/* 讓管理者可以直接在這頁測試「目前選定公司」的聊天機器人回答，不用切去 corp-frontend。 */}
-      <ChatWidgetPreview companyId={selectedCompanyId} />
-      {isDraggingFiles ? (
-        <div className={ui.ragDragOverlay} aria-hidden="true" />
-      ) : null}
-      <div className={ui.pageHeading}>
-        <div>
-          <h1>RAG 知識庫</h1>
-          <p>管理聊天機器人檢索使用的 Markdown 文件與分類標籤。</p>
-        </div>
+    <AdminPageLayout
+      title="RAG 知識庫"
+      description="管理聊天機器人檢索使用的 Markdown 文件與分類標籤。"
+      beforeHeader={
+        <>
+          {messageContextHolder}
+          {modalContextHolder}
+          {/* 讓管理者可以直接在這頁測試「目前選定公司」的聊天機器人回答，不用切去 corp-frontend。 */}
+          <ChatWidgetPreview companyId={selectedCompanyId} />
+          {isDraggingFiles ? (
+            <div className={ui.ragDragOverlay} aria-hidden="true" />
+          ) : null}
+        </>
+      }
+      headerExtra={
         <Tag className={ui.headingTag} color="blue">
           {documents.length} 份文件
         </Tag>
-      </div>
+      }
+    >
+      {notice ? (
+        <Alert
+          type="success"
+          showIcon
+          message={notice}
+          closable
+          onClose={() => setNotice(null)}
+        />
+      ) : null}
 
-      <Space className={ui.fullWidth} direction="vertical" size={16}>
-        {notice ? (
-          <Alert
-            type="success"
-            showIcon
-            message={notice}
-            closable
-            onClose={() => setNotice(null)}
-          />
-        ) : null}
-
-        <Collapse
-          className={ui.ragUploadCollapse}
-          defaultActiveKey={["upload"]}
-          expandIconPosition="end"
-          expandIcon={({ isActive }) =>
-            isActive ? <UpOutlined /> : <DownOutlined />
-          }
-          items={[
-            {
-              key: "upload",
-              label: "新增或更新文件",
-              children: (
-                <>
-                  <Dragger
-                    className={tw(
-                      ui.ragDragger,
-                      isDraggingFiles && ui.ragDragging,
-                    )}
-                    directory
-                    multiple
-                    openFileDialogOnClick
-                    showUploadList={false}
-                    beforeUpload={(file) => {
-                      addSelectedFiles([file]);
-                      return false;
-                    }}
-                  >
-                    <p className="ant-upload-drag-icon">
-                      <InboxOutlined />
-                    </p>
-                    <p className="ant-upload-text">
-                      拖曳 Markdown 檔案或整個資料夾至此
-                    </p>
-                    <p className="ant-upload-hint">
-                      支援單一檔案、多檔案與資料夾；只會加入 .md
-                      檔案，不會立即上傳。
-                    </p>
-                    <Space className={ui.ragPickerActions} wrap>
-                      <Button
-                        icon={<FileOutlined />}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          filesInputRef.current?.click();
-                        }}
-                      >
-                        選擇檔案
-                      </Button>
-                      <Button
-                        icon={<FolderOpenOutlined />}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          folderInputRef.current?.click();
-                        }}
-                      >
-                        選擇資料夾
-                      </Button>
-                    </Space>
-                  </Dragger>
-
-                  <input
-                    ref={filesInputRef}
-                    className={ui.visuallyHidden}
-                    type="file"
-                    accept={ACCEPTED_EXTENSION}
-                    multiple
-                    onChange={handleFilesInputChange}
-                  />
-                  <input
-                    ref={folderInputRef}
-                    className={ui.visuallyHidden}
-                    type="file"
-                    multiple
-                    onChange={handleFilesInputChange}
-                    {...({ webkitdirectory: "true" } as Record<string, string>)}
-                  />
-
-                  <div className={ui.ragUploadOptions}>
-                    <div className={ui.ragField}>
-                      <Text type="secondary">散落檔案標籤</Text>
-                      <TagChipsInput
-                        id="rag-manual-tags"
-                        tags={manualTags}
-                        onChange={(tags) => {
-                          setManualTags(tags);
-                          invalidatePrecheck();
-                        }}
-                        placeholder="輸入標籤後按 Enter"
-                      />
-                    </div>
-                    <div className={ui.ragField}>
-                      <Text type="secondary">資料夾上層路徑（選填）</Text>
-                      <Input
-                        value={upperPath}
-                        onChange={(event) => {
-                          setUpperPath(event.target.value);
-                          invalidatePrecheck();
-                        }}
-                        placeholder="例如 policy/knowledge"
-                      />
-                    </div>
-                  </div>
-
-                  {selectedFiles.length > 0 ? (
-                    <div
-                      className={ui.ragSelectedFiles}
-                      aria-label="已選取檔案"
-                    >
-                      {selectedFiles.map((file) => (
-                        <div
-                          className={ui.ragSelectedFile}
-                          key={getSelectionKey(file)}
-                        >
-                          <FileOutlined />
-                          <div>
-                            <Text>{getSelectionKey(file)}</Text>
-                            <Text type="secondary">
-                              {formatBytes(file.size)}
-                            </Text>
-                          </div>
-                          <Button
-                            type="text"
-                            danger
-                            icon={<DeleteOutlined />}
-                            aria-label={`移除 ${getSelectionKey(file)}`}
-                            onClick={() => removeSelectedFile(file)}
-                          />
-                        </div>
-                      ))}
-                    </div>
-                  ) : null}
-
-                  <div className={ui.ragSelectionSummary}>
-                    <Text type="secondary">
-                      {selectedFiles.length > 0
-                        ? `已選取 ${selectedFiles.length} 個 .md 檔案`
-                        : "尚未選取檔案"}
-                      {skippedCount > 0
-                        ? `，已略過 ${skippedCount} 個非 .md 檔案`
-                        : ""}
-                    </Text>
+      <Collapse
+        className={ui.ragUploadCollapse}
+        defaultActiveKey={["upload"]}
+        expandIconPosition="end"
+        expandIcon={({ isActive }) =>
+          isActive ? <UpOutlined /> : <DownOutlined />
+        }
+        items={[
+          {
+            key: "upload",
+            label: "新增或更新文件",
+            children: (
+              <>
+                <Dragger
+                  className={tw(
+                    ui.ragDragger,
+                    isDraggingFiles && ui.ragDragging,
+                  )}
+                  directory
+                  multiple
+                  openFileDialogOnClick
+                  showUploadList={false}
+                  beforeUpload={(file) => {
+                    addSelectedFiles([file]);
+                    return false;
+                  }}
+                >
+                  <p className="ant-upload-drag-icon">
+                    <InboxOutlined />
+                  </p>
+                  <p className="ant-upload-text">
+                    拖曳 Markdown 檔案或整個資料夾至此
+                  </p>
+                  <p className="ant-upload-hint">
+                    支援單一檔案、多檔案與資料夾；只會加入 .md
+                    檔案，不會立即上傳。
+                  </p>
+                  <Space className={ui.ragPickerActions} wrap>
                     <Button
-                      type="primary"
-                      loading={analyzing}
-                      disabled={selectedFiles.length === 0}
-                      onClick={analyzeSelection}
+                      icon={<FileOutlined />}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        filesInputRef.current?.click();
+                      }}
                     >
-                      上傳分析檔案
+                      選擇檔案
                     </Button>
+                    <Button
+                      icon={<FolderOpenOutlined />}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        folderInputRef.current?.click();
+                      }}
+                    >
+                      選擇資料夾
+                    </Button>
+                  </Space>
+                </Dragger>
+
+                <input
+                  ref={filesInputRef}
+                  className={ui.visuallyHidden}
+                  type="file"
+                  accept={ACCEPTED_EXTENSION}
+                  multiple
+                  onChange={handleFilesInputChange}
+                />
+                <input
+                  ref={folderInputRef}
+                  className={ui.visuallyHidden}
+                  type="file"
+                  multiple
+                  onChange={handleFilesInputChange}
+                  {...({ webkitdirectory: "true" } as Record<string, string>)}
+                />
+
+                <div className={ui.ragUploadOptions}>
+                  <div className={ui.ragField}>
+                    <Text type="secondary">散落檔案標籤</Text>
+                    <TagChipsInput
+                      id="rag-manual-tags"
+                      tags={manualTags}
+                      onChange={(tags) => {
+                        setManualTags(tags);
+                        invalidatePrecheck();
+                      }}
+                      placeholder="輸入標籤後按 Enter"
+                    />
                   </div>
+                  <div className={ui.ragField}>
+                    <Text type="secondary">資料夾上層路徑（選填）</Text>
+                    <Input
+                      value={upperPath}
+                      onChange={(event) => {
+                        setUpperPath(event.target.value);
+                        invalidatePrecheck();
+                      }}
+                      placeholder="例如 policy/knowledge"
+                    />
+                  </div>
+                </div>
 
-                  {precheckDone ? (
-                    <div className={ui.ragReview}>
-                      {duplicatePaths.length > 0 ? (
-                        <div className={ui.ragReviewSection}>
-                          <Alert
-                            type="warning"
-                            showIcon
-                            message={`發現 ${duplicatePaths.length} 份重複文件`}
-                            description={
-                              <ul className={ui.ragDuplicateList}>
-                                {duplicatePaths.map((path) => (
-                                  <li key={path}>
-                                    <strong>{path}</strong>{" "}
-                                    檔案已重複，內容與標籤皆無變更。
-                                  </li>
-                                ))}
-                              </ul>
-                            }
-                          />
+                {selectedFiles.length > 0 ? (
+                  <div className={ui.ragSelectedFiles} aria-label="已選取檔案">
+                    {selectedFiles.map((file) => (
+                      <div
+                        className={ui.ragSelectedFile}
+                        key={getSelectionKey(file)}
+                      >
+                        <FileOutlined />
+                        <div>
+                          <Text>{getSelectionKey(file)}</Text>
+                          <Text type="secondary">{formatBytes(file.size)}</Text>
                         </div>
-                      ) : null}
+                        <Button
+                          type="text"
+                          danger
+                          icon={<DeleteOutlined />}
+                          aria-label={`移除 ${getSelectionKey(file)}`}
+                          onClick={() => removeSelectedFile(file)}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
 
-                      {staleRows.length > 0 ? (
-                        <div className={ui.ragReviewSection}>
-                          <div className={ui.ragSubheading}>
-                            <div>
-                              <h3>待刪除的舊文件</h3>
-                              <p>
-                                此範圍內未包含於本次選取的文件，請確認後勾選。
-                              </p>
-                            </div>
+                <div className={ui.ragSelectionSummary}>
+                  <Text type="secondary">
+                    {selectedFiles.length > 0
+                      ? `已選取 ${selectedFiles.length} 個 .md 檔案`
+                      : "尚未選取檔案"}
+                    {skippedCount > 0
+                      ? `，已略過 ${skippedCount} 個非 .md 檔案`
+                      : ""}
+                  </Text>
+                  <Button
+                    type="primary"
+                    loading={analyzing}
+                    disabled={selectedFiles.length === 0}
+                    onClick={analyzeSelection}
+                  >
+                    上傳分析檔案
+                  </Button>
+                </div>
+
+                {precheckDone ? (
+                  <div className={ui.ragReview}>
+                    {duplicatePaths.length > 0 ? (
+                      <div className={ui.ragReviewSection}>
+                        <Alert
+                          type="warning"
+                          showIcon
+                          message={`發現 ${duplicatePaths.length} 份重複文件`}
+                          description={
+                            <ul className={ui.ragDuplicateList}>
+                              {duplicatePaths.map((path) => (
+                                <li key={path}>
+                                  <strong>{path}</strong>{" "}
+                                  檔案已重複，內容與標籤皆無變更。
+                                </li>
+                              ))}
+                            </ul>
+                          }
+                        />
+                      </div>
+                    ) : null}
+
+                    {staleRows.length > 0 ? (
+                      <div className={ui.ragReviewSection}>
+                        <div className={ui.ragSubheading}>
+                          <div>
+                            <h3>待刪除的舊文件</h3>
+                            <p>
+                              此範圍內未包含於本次選取的文件，請確認後勾選。
+                            </p>
                           </div>
-                          <div className={ui.ragStaleList}>
-                            {staleRows.map((row) => (
-                              <div className={ui.ragStaleRow} key={row.path}>
-                                <Checkbox
-                                  checked={row.checked}
-                                  onChange={(event) =>
-                                    updateStaleRow(row.path, {
-                                      checked: event.target.checked,
-                                    })
-                                  }
+                        </div>
+                        <div className={ui.ragStaleList}>
+                          {staleRows.map((row) => (
+                            <div className={ui.ragStaleRow} key={row.path}>
+                              <Checkbox
+                                checked={row.checked}
+                                onChange={(event) =>
+                                  updateStaleRow(row.path, {
+                                    checked: event.target.checked,
+                                  })
+                                }
+                              >
+                                {row.path}
+                              </Checkbox>
+                              <Tag
+                                color={
+                                  row.progress === "error"
+                                    ? "error"
+                                    : row.progress === "success"
+                                      ? "success"
+                                      : row.progress === "processing"
+                                        ? "processing"
+                                        : "default"
+                                }
+                              >
+                                {PROGRESS_LABEL[row.progress]}
+                              </Tag>
+                              {row.progress === "error" ? (
+                                <Button
+                                  size="small"
+                                  onClick={() => processOneDelete(row)}
                                 >
-                                  {row.path}
-                                </Checkbox>
+                                  重試
+                                </Button>
+                              ) : null}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {processRows.length > 0 ? (
+                      <div className={ui.ragReviewSection}>
+                        <div className={ui.ragSubheading}>
+                          <div>
+                            <h3>要處理的文件</h3>
+                            <p>預檢會略過內容與標籤皆未變更的文件。</p>
+                          </div>
+                        </div>
+                        <Table<ProcessRow>
+                          rowKey="path"
+                          size="small"
+                          pagination={false}
+                          dataSource={processRows}
+                          scroll={{ x: 760 }}
+                          columns={[
+                            {
+                              title: "路徑",
+                              dataIndex: "path",
+                              key: "path",
+                              ellipsis: true,
+                            },
+                            {
+                              title: "標籤",
+                              dataIndex: "tags",
+                              key: "tags",
+                              render: (tags: string[]) => (
+                                <Space size={[4, 4]} wrap>
+                                  {uniqueTags(tags).map((tag) => (
+                                    <Tag key={tag}>{tag}</Tag>
+                                  ))}
+                                </Space>
+                              ),
+                            },
+                            {
+                              title: "動作",
+                              dataIndex: "status",
+                              key: "status",
+                              width: 110,
+                              render: (status: PrecheckStatus) =>
+                                STATUS_LABEL[status],
+                            },
+                            {
+                              title: "狀態",
+                              dataIndex: "progress",
+                              key: "progress",
+                              width: 150,
+                              render: (progress: RowProgress) => (
                                 <Tag
                                   color={
-                                    row.progress === "error"
+                                    progress === "error"
                                       ? "error"
-                                      : row.progress === "success"
+                                      : progress === "success"
                                         ? "success"
-                                        : row.progress === "processing"
+                                        : progress === "processing"
                                           ? "processing"
                                           : "default"
                                   }
                                 >
-                                  {PROGRESS_LABEL[row.progress]}
+                                  {PROGRESS_LABEL[progress]}
                                 </Tag>
-                                {row.progress === "error" ? (
+                              ),
+                            },
+                            {
+                              title: "操作",
+                              key: "action",
+                              width: 80,
+                              render: (_, row) =>
+                                row.progress === "error" ? (
                                   <Button
                                     size="small"
-                                    onClick={() => processOneDelete(row)}
+                                    onClick={() => processOneRow(row)}
                                   >
                                     重試
                                   </Button>
-                                ) : null}
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      ) : null}
+                                ) : null,
+                            },
+                          ]}
+                        />
+                      </div>
+                    ) : null}
 
-                      {processRows.length > 0 ? (
-                        <div className={ui.ragReviewSection}>
-                          <div className={ui.ragSubheading}>
-                            <div>
-                              <h3>要處理的文件</h3>
-                              <p>預檢會略過內容與標籤皆未變更的文件。</p>
-                            </div>
-                          </div>
-                          <Table<ProcessRow>
-                            rowKey="path"
-                            size="small"
-                            pagination={false}
-                            dataSource={processRows}
-                            scroll={{ x: 760 }}
-                            columns={[
-                              {
-                                title: "路徑",
-                                dataIndex: "path",
-                                key: "path",
-                                ellipsis: true,
-                              },
-                              {
-                                title: "標籤",
-                                dataIndex: "tags",
-                                key: "tags",
-                                render: (tags: string[]) => (
-                                  <Space size={[4, 4]} wrap>
-                                    {uniqueTags(tags).map((tag) => (
-                                      <Tag key={tag}>{tag}</Tag>
-                                    ))}
-                                  </Space>
-                                ),
-                              },
-                              {
-                                title: "動作",
-                                dataIndex: "status",
-                                key: "status",
-                                width: 110,
-                                render: (status: PrecheckStatus) =>
-                                  STATUS_LABEL[status],
-                              },
-                              {
-                                title: "狀態",
-                                dataIndex: "progress",
-                                key: "progress",
-                                width: 150,
-                                render: (progress: RowProgress) => (
-                                  <Tag
-                                    color={
-                                      progress === "error"
-                                        ? "error"
-                                        : progress === "success"
-                                          ? "success"
-                                          : progress === "processing"
-                                            ? "processing"
-                                            : "default"
-                                    }
-                                  >
-                                    {PROGRESS_LABEL[progress]}
-                                  </Tag>
-                                ),
-                              },
-                              {
-                                title: "操作",
-                                key: "action",
-                                width: 80,
-                                render: (_, row) =>
-                                  row.progress === "error" ? (
-                                    <Button
-                                      size="small"
-                                      onClick={() => processOneRow(row)}
-                                    >
-                                      重試
-                                    </Button>
-                                  ) : null,
-                              },
-                            ]}
-                          />
-                        </div>
-                      ) : null}
-
-                      <Space>
-                        <Button
-                          type="primary"
-                          loading={processing}
-                          onClick={handleStartProcessing}
-                        >
-                          開始處理
-                        </Button>
-                        <Button
-                          icon={<ReloadOutlined />}
-                          disabled={processing}
-                          onClick={resetSelection}
-                        >
-                          清空選取
-                        </Button>
-                      </Space>
-                    </div>
-                  ) : null}
-                </>
-              ),
-            },
-          ]}
-        />
-
-        <Card
-          className={ui.ragDocumentsCard}
-          title="文件列表"
-          extra={
-            <Text type="secondary">
-              顯示 {filteredDocuments.length} / {documents.length}
-            </Text>
-          }
-        >
-          <div className={ui.ragTableTools}>
-            <Input
-              allowClear
-              prefix={<SearchOutlined />}
-              value={searchText}
-              onChange={(event) => setSearchText(event.target.value)}
-              placeholder="搜尋文件路徑"
-            />
-            <Select
-              mode="multiple"
-              allowClear
-              value={tagFilters}
-              onChange={setTagFilters}
-              options={allTags.map((tag) => ({ label: tag, value: tag }))}
-              placeholder="依標籤篩選"
-              maxTagCount="responsive"
-            />
-            <Button
-              icon={<ReloadOutlined />}
-              loading={loading}
-              onClick={loadDocuments}
-            >
-              重新整理
-            </Button>
-          </div>
-
-          <Spin spinning={loading}>
-            <Table<DocumentInfo>
-              rowKey="path"
-              dataSource={filteredDocuments}
-              pagination={{
-                pageSize: 10,
-                showSizeChanger: false,
-                showTotal: (total) => `共 ${total} 份文件`,
-              }}
-              locale={{
-                emptyText: (
-                  <Empty
-                    image={Empty.PRESENTED_IMAGE_SIMPLE}
-                    description="目前沒有符合條件的文件"
-                  />
-                ),
-              }}
-              scroll={{ x: 920 }}
-              columns={[
-                {
-                  title: "路徑",
-                  dataIndex: "path",
-                  key: "path",
-                  ellipsis: true,
-                },
-                {
-                  title: "標籤",
-                  dataIndex: "tags",
-                  key: "tags",
-                  render: (tags: string[]) => (
-                    <Space size={[4, 4]} wrap>
-                      {uniqueTags(tags).map((tag) => (
-                        <Tag key={tag}>{tag}</Tag>
-                      ))}
-                    </Space>
-                  ),
-                },
-                {
-                  title: "Chunks",
-                  dataIndex: "chunk_count",
-                  key: "chunk_count",
-                  width: 90,
-                  align: "right",
-                },
-                {
-                  title: "檔案大小",
-                  dataIndex: "file_size_bytes",
-                  key: "file_size_bytes",
-                  width: 110,
-                  render: formatBytes,
-                },
-                {
-                  title: "更新時間",
-                  dataIndex: "uploaded_at",
-                  key: "uploaded_at",
-                  width: 190,
-                  render: formatUploadedAt,
-                },
-                {
-                  title: "操作",
-                  key: "action",
-                  width: 86,
-                  fixed: "right",
-                  render: (_, doc) => (
-                    <Popconfirm
-                      title="刪除文件"
-                      description={`確定要刪除「${doc.path}」嗎？此操作無法復原。`}
-                      okText="刪除"
-                      cancelText="取消"
-                      okButtonProps={{ danger: true }}
-                      onConfirm={() => handleDelete(doc.path)}
-                    >
-                      <Button type="text" danger icon={<DeleteOutlined />}>
-                        刪除
+                    <Space>
+                      <Button
+                        type="primary"
+                        loading={processing}
+                        onClick={handleStartProcessing}
+                      >
+                        開始處理
                       </Button>
-                    </Popconfirm>
-                  ),
-                },
-              ]}
-            />
-          </Spin>
-        </Card>
-      </Space>
-    </main>
+                      <Button
+                        icon={<ReloadOutlined />}
+                        disabled={processing}
+                        onClick={resetSelection}
+                      >
+                        清空選取
+                      </Button>
+                    </Space>
+                  </div>
+                ) : null}
+              </>
+            ),
+          },
+        ]}
+      />
+
+      <Card
+        className={ui.ragDocumentsCard}
+        title="文件列表"
+        extra={
+          <Text type="secondary">
+            顯示 {filteredDocuments.length} / {documents.length}
+          </Text>
+        }
+      >
+        <div className={ui.ragTableTools}>
+          <Input
+            allowClear
+            prefix={<SearchOutlined />}
+            value={searchText}
+            onChange={(event) => setSearchText(event.target.value)}
+            placeholder="搜尋文件路徑"
+          />
+          <Select
+            mode="multiple"
+            allowClear
+            value={tagFilters}
+            onChange={setTagFilters}
+            options={allTags.map((tag) => ({ label: tag, value: tag }))}
+            placeholder="依標籤篩選"
+            maxTagCount="responsive"
+          />
+          <Button
+            icon={<ReloadOutlined />}
+            loading={loading}
+            onClick={loadDocuments}
+          >
+            重新整理
+          </Button>
+        </div>
+
+        <Spin spinning={loading}>
+          <Table<DocumentInfo>
+            rowKey="path"
+            dataSource={filteredDocuments}
+            pagination={{
+              pageSize: 10,
+              showSizeChanger: false,
+              showTotal: (total) => `共 ${total} 份文件`,
+            }}
+            locale={{
+              emptyText: (
+                <Empty
+                  image={Empty.PRESENTED_IMAGE_SIMPLE}
+                  description="目前沒有符合條件的文件"
+                />
+              ),
+            }}
+            scroll={{ x: 920 }}
+            columns={[
+              {
+                title: "路徑",
+                dataIndex: "path",
+                key: "path",
+                ellipsis: true,
+              },
+              {
+                title: "標籤",
+                dataIndex: "tags",
+                key: "tags",
+                render: (tags: string[]) => (
+                  <Space size={[4, 4]} wrap>
+                    {uniqueTags(tags).map((tag) => (
+                      <Tag key={tag}>{tag}</Tag>
+                    ))}
+                  </Space>
+                ),
+              },
+              {
+                title: "Chunks",
+                dataIndex: "chunk_count",
+                key: "chunk_count",
+                width: 90,
+                align: "right",
+              },
+              {
+                title: "檔案大小",
+                dataIndex: "file_size_bytes",
+                key: "file_size_bytes",
+                width: 110,
+                render: formatBytes,
+              },
+              {
+                title: "更新時間",
+                dataIndex: "uploaded_at",
+                key: "uploaded_at",
+                width: 190,
+                render: formatUploadedAt,
+              },
+              {
+                title: "操作",
+                key: "action",
+                width: 86,
+                fixed: "right",
+                render: (_, doc) => (
+                  <Popconfirm
+                    title="刪除文件"
+                    description={`確定要刪除「${doc.path}」嗎？此操作無法復原。`}
+                    okText="刪除"
+                    cancelText="取消"
+                    okButtonProps={{ danger: true }}
+                    onConfirm={() => handleDelete(doc.path)}
+                  >
+                    <Button type="text" danger icon={<DeleteOutlined />}>
+                      刪除
+                    </Button>
+                  </Popconfirm>
+                ),
+              },
+            ]}
+          />
+        </Spin>
+      </Card>
+    </AdminPageLayout>
   );
 }

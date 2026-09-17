@@ -8,6 +8,7 @@ import Popconfirm from "antd/es/popconfirm";
 import Typography from "antd/es/typography";
 import { useCallback, useEffect, useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
+import AdminPageLayout from "../components/AdminPageLayout";
 import { useAuth } from "../auth/AuthContext";
 import { ui } from "../uiStyles";
 import { deleteCompany, updateCompany } from "../api/companies";
@@ -192,18 +193,11 @@ export default function CompanySettingsPage() {
   const canManageAccounts = isPlatformRole || company?.your_role === "primary";
 
   return (
-    <main>
-      {contextHolder}
-      <div className={ui.pageHeading}>
-        <div>
-          <h1>公司設定</h1>
-          <p>
-            管理目前選定商家的基本資訊、訂單查詢 MCP
-            URL、聊天機器人開頭語與開場快速提問。
-          </p>
-        </div>
-      </div>
-
+    <AdminPageLayout
+      title="公司設定"
+      description="管理目前選定商家的基本資訊、訂單查詢 MCP URL、聊天機器人開頭語與開場快速提問。"
+      beforeHeader={contextHolder}
+    >
       <Card>
         {company ? (
           <>
@@ -270,7 +264,7 @@ export default function CompanySettingsPage() {
         )}
       </Card>
 
-      <Card className={ui.marginTop4} title="管理帳號">
+      <Card title="管理帳號">
         <Paragraph type="secondary">
           新增的 gmail
           帳號用該帳號登入即可管理這家商家服務（跟你權限相同，差別只在誰能新增/移除誰）。
@@ -336,7 +330,7 @@ export default function CompanySettingsPage() {
         )}
       </Card>
 
-      <Card className={ui.marginTop4} title="稽核紀錄">
+      <Card title="稽核紀錄">
         <Paragraph type="secondary">
           這家商家服務最近的異動紀錄：建立/刪除、設定變更、知識庫文件、協作帳號新增移除。
         </Paragraph>
@@ -353,6 +347,6 @@ export default function CompanySettingsPage() {
           )}
         />
       </Card>
-    </main>
+    </AdminPageLayout>
   );
 }

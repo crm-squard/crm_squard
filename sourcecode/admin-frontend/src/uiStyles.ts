@@ -1,7 +1,7 @@
 import { tw } from "./utils/tw";
 
 const menu = tw(
-    "[&_.ant-menu]:min-h-0 [&_.ant-menu]:flex-1 [&_.ant-menu]:[scrollbar-width:thin] [&_.ant-menu]:[scrollbar-color:#c5d0df_transparent] [&_.ant-menu]:overflow-x-hidden [&_.ant-menu]:overflow-y-auto [&_.ant-menu]:border-e-0! [&_.ant-menu]:bg-transparent [&_.ant-menu]:px-2 [&_.ant-menu]:py-1 [&_.ant-menu-item]:my-1 [&_.ant-menu-item]:font-semibold [&_.ant-menu-item]:text-[#42516c] [&_.ant-menu-item-selected]:bg-[linear-gradient(90deg,#e8f3ff,#eef7ff)]! [&_.ant-menu-item-selected]:text-admin-primary! [&_.ant-menu::-webkit-scrollbar]:w-1.5 [&_.ant-menu::-webkit-scrollbar-thumb]:rounded-full [&_.ant-menu::-webkit-scrollbar-thumb]:bg-[#c5d0df] [&_.ant-menu::-webkit-scrollbar-track]:bg-transparent",
+    "[&_.ant-menu]:min-h-0 [&_.ant-menu]:flex-1 [&_.ant-menu]:[scrollbar-width:thin] [&_.ant-menu]:[scrollbar-color:#c5d0df_transparent] [&_.ant-menu]:overflow-x-hidden [&_.ant-menu]:overflow-y-auto [&_.ant-menu]:border-e-0! [&_.ant-menu]:bg-transparent [&_.ant-menu]:px-2 [&_.ant-menu]:py-1 [&_.ant-menu-item]:my-1 [&_.ant-menu-item]:font-semibold [&_.ant-menu::-webkit-scrollbar]:w-1.5 [&_.ant-menu::-webkit-scrollbar-thumb]:rounded-full [&_.ant-menu::-webkit-scrollbar-thumb]:bg-[#c5d0df] [&_.ant-menu::-webkit-scrollbar-track]:bg-transparent",
   ),
   reducedMotion = tw(
     "motion-reduce:[&_*]:scroll-auto motion-reduce:[&_*]:duration-[.01ms] motion-reduce:[&_*::after]:duration-[.01ms] motion-reduce:[&_*::before]:duration-[.01ms]",
@@ -10,7 +10,7 @@ const menu = tw(
 export const ui = {
   adminShell: tw("min-h-screen", reducedMotion),
   desktopSider: tw(
-    "sticky! top-0 h-screen border-r border-[#e6ebf2] bg-white/94! [&_.ant-layout-sider-children]:relative [&_.ant-layout-sider-children]:flex [&_.ant-layout-sider-children]:min-h-full [&_.ant-layout-sider-children]:flex-col",
+    "sticky! top-0 h-screen border-r border-admin-border bg-white/94! [&_.ant-layout-sider-children]:relative [&_.ant-layout-sider-children]:flex [&_.ant-layout-sider-children]:min-h-full [&_.ant-layout-sider-children]:flex-col",
     menu,
   ),
   mobileNavigation: tw(
@@ -18,7 +18,7 @@ export const ui = {
     menu,
   ),
   siderBrand: tw(
-    "flex min-h-16.25 items-center border-b border-[#edf1f6] px-5.5 py-0",
+    "flex min-h-16.25 items-center border-b border-[#e6ebf2] px-5.5 py-0",
   ),
   brandMark: tw(
     "flex items-center gap-2.5 whitespace-nowrap text-[#0c1e45] [&_strong]:text-xl [&_strong]:tracking-[-.04em]",
@@ -60,14 +60,15 @@ export const ui = {
   pageHeading: tw(
     "flex min-h-19 items-start justify-between gap-6 [&_h1]:mt-0 [&_h1]:mb-1.25 [&_h1]:text-[clamp(27px,2.3vw,34px)] [&_h1]:tracking-[-.035em] [&_h1]:text-admin-heading [&_p]:m-0 [&_p]:text-sm [&_p]:text-admin-muted [&_time]:pt-2.5 [&_time]:text-caption [&_time]:text-admin-muted max-[899px]:[&_time]:hidden",
   ),
+  pageContent: tw("flex w-full flex-col gap-4"),
   detailHeading: tw(
     "items-center [&_.ant-btn]:mt-0 [&_.ant-btn]:mr-0 [&_.ant-btn]:mb-2 [&_.ant-btn]:-ml-3 [&_.ant-btn]:text-[#62718a]",
   ),
   metricGrid: tw(
-    "my-2 mb-4.5 grid grid-cols-4 gap-3.5 max-[1180px]:grid-cols-2 max-[620px]:grid-cols-1",
+    "grid grid-cols-4 gap-3.5 max-[1180px]:grid-cols-2 max-[620px]:grid-cols-1",
   ),
   metricCard: tw(
-    "flex min-h-[138px] items-center gap-4 rounded-metric border border-solid border-[#e3e9f1] bg-white/88 p-5 max-[620px]:min-h-28 [&_div>span]:text-caption [&_div>span]:font-semibold [&_div>span]:text-[#53617a] [&_small]:text-label [&_small]:whitespace-nowrap [&_small]:text-[#93a0b4] [&_strong]:text-[28px] [&_strong]:leading-[1.2] [&_strong]:text-[#10234b] [&>div]:grid [&>div]:min-w-0 [&>div]:gap-0.75",
+    "flex min-h-[138px] items-center gap-4 rounded-metric border border-solid border-admin-border bg-white/88 p-5 max-[620px]:min-h-28 [&_div>span]:text-caption [&_div>span]:font-semibold [&_div>span]:text-admin-text-secondary [&_small]:text-label [&_small]:whitespace-nowrap [&_small]:text-[#93a0b4] [&_strong]:text-[28px] [&_strong]:leading-[1.2] [&_strong]:text-[#10234b] [&>div]:grid [&>div]:min-w-0 [&>div]:gap-0.75",
   ),
   metricIcon: tw(
     "grid size-13.5 shrink-0 place-items-center rounded-surface text-2xl",
@@ -80,13 +81,13 @@ export const ui = {
     "overflow-hidden rounded-surface border border-solid border-admin-border bg-white/92",
   ),
   sectionHeading: tw(
-    "flex items-center justify-between gap-5 px-6 pt-5.5 pb-3 max-[620px]:items-start max-[620px]:p-4.5 [&_a]:text-caption [&_a]:font-semibold [&_a]:whitespace-nowrap [&_a]:text-admin-primary [&_h2]:mt-0 [&_h2]:mb-1 [&_h2]:text-lg [&_h2]:text-[#152750] [&_p]:m-0 [&_p]:text-caption [&_p]:text-[#7b889d] max-[620px]:[&_p]:max-w-[30ch]",
+    "flex items-center justify-between gap-5 px-6 pt-5.5 pb-3 max-[620px]:items-start max-[620px]:p-4.5 [&_a]:text-caption [&_a]:font-semibold [&_a]:whitespace-nowrap [&_a]:text-admin-primary [&_h2]:mt-0 [&_h2]:mb-1 [&_h2]:text-lg [&_h2]:text-admin-heading-secondary [&_p]:m-0 [&_p]:text-caption [&_p]:text-admin-text-subtle max-[620px]:[&_p]:max-w-[30ch]",
   ),
   periodChip: tw(
     "rounded-compact border border-solid border-[#dce4ee] px-3.25 py-2.25 text-xs text-[#65748c] max-[620px]:hidden",
   ),
   insightPlaceholder: tw(
-    "mb-4.5 min-h-[292px] [&_.ant-empty]:my-8.75 [&_.ant-empty-description]:grid [&_.ant-empty-description]:justify-items-center [&_.ant-empty-description]:gap-1.75 [&_.ant-empty-description]:text-[#8794a8]! [&_.ant-empty-description_span]:block [&_.ant-empty-description_span]:text-caption [&_.ant-empty-description_strong]:text-base [&_.ant-empty-description_strong]:text-[#1d3159]",
+    "min-h-[292px] [&_.ant-empty]:my-8.75 [&_.ant-empty-description]:grid [&_.ant-empty-description]:justify-items-center [&_.ant-empty-description]:gap-1.75 [&_.ant-empty-description]:text-[#8794a8]! [&_.ant-empty-description_span]:block [&_.ant-empty-description_span]:text-caption [&_.ant-empty-description_strong]:text-base [&_.ant-empty-description_strong]:text-[#1d3159]",
   ),
   recentOrders: tw(
     "min-h-[300px] [&_.ant-alert]:mx-6 [&_.ant-alert]:mt-4.5 [&_.ant-alert]:mb-6",
@@ -98,21 +99,21 @@ export const ui = {
   tableTools: tw(
     "flex items-center justify-between gap-5 pb-4.5 max-[620px]:flex-col max-[620px]:items-stretch! [&_.ant-input-affix-wrapper]:max-w-[360px] max-[620px]:[&_.ant-input-affix-wrapper]:max-w-none",
   ),
-  resultCount: tw("text-caption text-[#7b889d]"),
+  resultCount: tw("text-caption text-admin-text-subtle"),
   detailSurface: tw(
-    "p-6 max-[620px]:p-3.5 [&_h2]:mt-0 [&_h2]:mb-1 [&_h2]:text-lg [&_h2]:text-[#152750] [&_h2:not(:first-child)]:mt-7",
+    "p-6 max-[620px]:p-3.5 [&_h2]:mt-0 [&_h2]:mb-1 [&_h2]:text-lg [&_h2]:text-admin-heading-secondary [&_h2:not(:first-child)]:mt-7",
   ),
   marginTop4: tw("mt-4"),
-  fullWidth: tw("w-full"),
+  fullWidth: tw("w-full [&>.ant-space-item]:w-full"),
   preWrap: tw("mt-4 whitespace-pre-wrap"),
   headingTag: tw(
     "mt-2.5 rounded-full border-0 px-3 py-1.25 font-semibold max-[620px]:hidden",
   ),
   ragUploadCollapse: tw(
-    "rounded-surface border-admin-border bg-white/92 [&_.ant-collapse-expand-icon]:text-[#53617a] [&_.ant-collapse-expand-icon_.anticon]:text-base [&>.ant-collapse-item]:border-b-0 [&>.ant-collapse-item>.ant-collapse-content]:border-t-[#edf1f6] [&>.ant-collapse-item>.ant-collapse-content]:bg-transparent [&>.ant-collapse-item>.ant-collapse-content>.ant-collapse-content-box]:p-6 [&>.ant-collapse-item>.ant-collapse-header]:min-h-14.5 [&>.ant-collapse-item>.ant-collapse-header]:items-center [&>.ant-collapse-item>.ant-collapse-header]:px-6 [&>.ant-collapse-item>.ant-collapse-header]:py-3 [&>.ant-collapse-item>.ant-collapse-header]:text-nav-title [&>.ant-collapse-item>.ant-collapse-header]:font-semibold [&>.ant-collapse-item>.ant-collapse-header]:text-[#152750]",
+    "rounded-surface bg-white/92! [&_.ant-collapse-expand-icon]:text-admin-text-secondary [&_.ant-collapse-expand-icon_.anticon]:text-base! [&>.ant-collapse-item]:border-b-0 [&>.ant-collapse-item>.ant-collapse-header]:min-h-14.5 [&>.ant-collapse-item>.ant-collapse-header]:items-center [&>.ant-collapse-item>.ant-collapse-header]:text-nav-title [&>.ant-collapse-item>.ant-collapse-header]:font-semibold [&>.ant-collapse-item>.ant-collapse-header]:text-admin-heading-secondary",
   ),
   ragDocumentsCard: tw(
-    "rounded-surface border-admin-border bg-white/92 [&_.ant-btn-text.ant-btn-dangerous]:px-1 [&_.ant-btn-text.ant-btn-dangerous]:text-caption [&_.ant-card-head]:min-h-14.5 [&_.ant-card-head]:border-b-[#edf1f6] [&_.ant-card-head-title]:text-nav-title [&_.ant-card-head-title]:text-[#152750] [&_.ant-table-cell]:text-caption [&_.ant-tag]:me-0 [&_.ant-tag]:rounded-full [&_.ant-tag]:border-0",
+    "rounded-surface bg-white/92 [&_.ant-btn-text.ant-btn-dangerous]:px-1 [&_.ant-btn-text.ant-btn-dangerous]:text-caption [&_.ant-table-cell]:text-caption [&_.ant-tag]:me-0 [&_.ant-tag]:rounded-full [&_.ant-tag]:border-0",
   ),
   ragField: tw(
     "grid min-w-0 gap-2 [&>.ant-typography]:text-xs [&>.ant-typography]:font-semibold",
@@ -127,7 +128,7 @@ export const ui = {
     "relative z-[1001] [&.ant-upload-wrapper_.ant-upload-drag]:border-admin-primary [&.ant-upload-wrapper_.ant-upload-drag]:bg-[#f7fbff] [&.ant-upload-wrapper_.ant-upload-drag]:shadow-[0_0_0_4px_rgb(23_105_224/.18),0_18px_48px_rgb(7_28_62/.24)]",
   ),
   ragDragger: tw(
-    "[&.ant-upload-wrapper_.ant-upload-drag]:rounded-toast [&_.ant-upload-drag-icon]:mb-2.5! [&_.ant-upload-drag-icon_.anticon]:text-[42px]! [&_.ant-upload-drag-icon_.anticon]:text-admin-primary! [&_.ant-upload-hint]:text-xs! [&_.ant-upload-hint]:text-[#7c899d]! [&_.ant-upload-hint]:select-none [&_.ant-upload-text]:text-base! [&_.ant-upload-text]:font-[650]! [&_.ant-upload-text]:text-[#20345e]! [&_.ant-upload-text]:select-none [&.ant-upload-wrapper_.ant-upload-btn]:px-5 [&.ant-upload-wrapper_.ant-upload-btn]:pt-6.5 [&.ant-upload-wrapper_.ant-upload-btn]:pb-5.5 max-[620px]:[&.ant-upload-wrapper_.ant-upload-btn]:px-3.5 [&.ant-upload-wrapper_.ant-upload-drag]:border-[#cfd9e7] [&.ant-upload-wrapper_.ant-upload-drag]:bg-[linear-gradient(145deg,#f8fbff,#f4f8fd)] [&.ant-upload-wrapper_.ant-upload-drag:hover]:border-admin-primary [&.ant-upload-wrapper_.ant-upload-drag:hover]:bg-[#f2f7ff]",
+    "[&.ant-upload-wrapper_.ant-upload-drag]:rounded-toast [&_.ant-upload-drag-icon]:mb-2.5! [&_.ant-upload-drag-icon_.anticon]:text-[42px]! [&_.ant-upload-drag-icon_.anticon]:text-admin-primary! [&_.ant-upload-hint]:text-xs! [&_.ant-upload-hint]:text-[#7c899d]! [&_.ant-upload-hint]:select-none [&_.ant-upload-text]:text-base! [&_.ant-upload-text]:font-[650]! [&_.ant-upload-text]:text-[#20345e]! [&_.ant-upload-text]:select-none [&.ant-upload-wrapper_.ant-upload-btn]:px-5 [&.ant-upload-wrapper_.ant-upload-btn]:pt-6.5 [&.ant-upload-wrapper_.ant-upload-btn]:pb-5.5 max-[620px]:[&.ant-upload-wrapper_.ant-upload-btn]:px-3.5 [&.ant-upload-wrapper_.ant-upload-drag]:border-admin-border [&.ant-upload-wrapper_.ant-upload-drag]:bg-[linear-gradient(145deg,#f8fbff,#f4f8fd)] [&.ant-upload-wrapper_.ant-upload-drag:hover]:border-admin-primary [&.ant-upload-wrapper_.ant-upload-drag:hover]:bg-[#f2f7ff]",
   ),
   ragPickerActions: tw(
     "mt-4 justify-center max-[620px]:grid [&_.ant-btn]:min-w-33 [&_.ant-btn]:bg-white/86 max-[620px]:[&_.ant-btn]:w-full",
@@ -139,13 +140,13 @@ export const ui = {
     "mt-4.5 grid max-h-[238px] [scrollbar-width:thin] [scrollbar-color:#c5d0df_transparent] gap-1.75 overflow-y-auto pr-1",
   ),
   ragSelectedFile: tw(
-    "grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2.75 rounded-compact border border-solid border-[#e5ebf3] bg-white pt-2.25 pr-2.5 pb-2.25 pl-3.25 [&>.anticon]:text-[#4b73ae] [&>div]:flex [&>div]:min-w-0 [&>div]:items-center [&>div]:justify-between [&>div]:gap-3 max-[620px]:[&>div]:flex-col max-[620px]:[&>div]:items-start max-[620px]:[&>div]:gap-0.5 [&>div_.ant-typography:first-child]:min-w-0 [&>div_.ant-typography:first-child]:overflow-hidden [&>div_.ant-typography:first-child]:text-caption [&>div_.ant-typography:first-child]:text-ellipsis [&>div_.ant-typography:first-child]:whitespace-nowrap [&>div_.ant-typography:first-child]:text-[#30415f] [&>div_.ant-typography:last-child]:shrink-0 [&>div_.ant-typography:last-child]:text-label",
+    "grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2.75 rounded-compact border border-solid border-admin-border bg-white pt-2.25 pr-2.5 pb-2.25 pl-3.25 [&>.anticon]:text-[#4b73ae] [&>div]:flex [&>div]:min-w-0 [&>div]:items-center [&>div]:justify-between [&>div]:gap-3 max-[620px]:[&>div]:flex-col max-[620px]:[&>div]:items-start max-[620px]:[&>div]:gap-0.5 [&>div_.ant-typography:first-child]:min-w-0 [&>div_.ant-typography:first-child]:overflow-hidden [&>div_.ant-typography:first-child]:text-caption [&>div_.ant-typography:first-child]:text-ellipsis [&>div_.ant-typography:first-child]:whitespace-nowrap [&>div_.ant-typography:first-child]:text-[#30415f] [&>div_.ant-typography:last-child]:shrink-0 [&>div_.ant-typography:last-child]:text-label",
   ),
   ragSelectionSummary: tw(
-    "mt-4.5 flex items-center justify-between gap-5 rounded-control bg-[#f7f9fc] px-4 py-3.5 max-[620px]:flex-col max-[620px]:items-stretch",
+    "mt-4.5 flex items-center justify-between gap-5 rounded-control bg-admin-surface-subtle px-4 py-3.5 max-[620px]:flex-col max-[620px]:items-stretch",
   ),
   ragReview: tw(
-    "mt-5.5 grid gap-5.5 border-t border-[#edf1f6] pt-5.5 [&_.ant-table-cell]:text-caption [&_.ant-tag]:me-0 [&_.ant-tag]:rounded-full [&_.ant-tag]:border-0",
+    "mt-5.5 grid gap-5.5 border-t border-admin-border pt-5.5 [&_.ant-table-cell]:text-caption [&_.ant-tag]:me-0 [&_.ant-tag]:rounded-full [&_.ant-tag]:border-0",
   ),
   ragReviewSection: tw("min-w-0"),
   ragDuplicateList: tw(
@@ -156,7 +157,7 @@ export const ui = {
   ),
   ragStaleList: tw("grid gap-2"),
   ragStaleRow: tw(
-    "flex min-w-0 items-center gap-2.5 rounded-compact border border-solid border-[#edf1f6] px-3 py-2.5 max-[620px]:flex-wrap max-[620px]:items-start [&_.ant-checkbox-wrapper]:min-w-0 [&_.ant-checkbox-wrapper]:flex-1 [&_.ant-checkbox-wrapper]:[overflow-wrap:anywhere] [&_.ant-checkbox-wrapper]:text-[#334360]",
+    "flex min-w-0 items-center gap-2.5 rounded-compact border border-solid border-admin-border! px-3 py-2.5 max-[620px]:flex-wrap max-[620px]:items-start [&_.ant-checkbox-wrapper]:min-w-0 [&_.ant-checkbox-wrapper]:flex-1 [&_.ant-checkbox-wrapper]:[overflow-wrap:anywhere] [&_.ant-checkbox-wrapper]:text-[#334360]",
   ),
   ragTableTools: tw(
     "mb-4.5 grid grid-cols-[minmax(220px,1.2fr)_minmax(220px,1fr)_auto] gap-3 max-[620px]:grid-cols-1",

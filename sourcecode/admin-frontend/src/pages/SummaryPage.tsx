@@ -7,6 +7,7 @@ import Tag from "antd/es/tag";
 import Typography from "antd/es/typography";
 import dayjs, { type Dayjs } from "dayjs";
 import { useEffect, useState } from "react";
+import AdminPageLayout from "../components/AdminPageLayout";
 import { useAuth } from "../auth/AuthContext";
 import { getDailySummary, type DailySummary } from "../api/summary";
 import { ui } from "../uiStyles";
@@ -47,20 +48,18 @@ export default function SummaryPage() {
   }, [token, selectedCompanyId, date]);
 
   return (
-    <main>
-      <div className={ui.pageHeading}>
-        <div>
-          <h1>客服機器人</h1>
-          <p>查看指定日期使用者向聊天機器人提問的主題摘要。</p>
-        </div>
+    <AdminPageLayout
+      title="客服機器人"
+      description="查看指定日期使用者向聊天機器人提問的主題摘要。"
+      headerExtra={
         <DatePicker
           value={date}
           onChange={(value) => value && setDate(value)}
           allowClear={false}
           disabledDate={(current) => current && current > dayjs().endOf("day")}
         />
-      </div>
-
+      }
+    >
       <Card>
         {loading ? (
           <Spin />
@@ -77,6 +76,6 @@ export default function SummaryPage() {
           )
         ) : null}
       </Card>
-    </main>
+    </AdminPageLayout>
   );
 }

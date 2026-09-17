@@ -7,6 +7,7 @@ import Skeleton from "antd/es/skeleton";
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { getOrder, OrderApiError } from "../api/orders";
+import AdminPageLayout from "../components/AdminPageLayout";
 import StatusTag from "../components/StatusTag";
 import type { AdminOrder } from "../types/order";
 import { ui } from "../uiStyles";
@@ -44,36 +45,45 @@ export default function OrderDetailPage() {
     return () => controller.abort();
   }, [orderId]);
 
+  const backButton = (
+    <Button
+      type="text"
+      icon={<ArrowLeftOutlined />}
+      onClick={() => navigate("/orders")}
+    >
+      返回訂單列表
+    </Button>
+  );
+
   if (error?.status === 404)
     return (
-      <Result
-        status="404"
-        title="找不到訂單"
-        subTitle={error.message}
-        extra={
-          <Button type="primary" onClick={() => navigate("/orders")}>
-            返回訂單列表
-          </Button>
-        }
-      />
+      <AdminPageLayout
+        title="訂單詳情"
+        description={orderId}
+        headerLeading={backButton}
+        variant="detail"
+      >
+        <Result
+          status="404"
+          title="找不到訂單"
+          subTitle={error.message}
+          extra={
+            <Button type="primary" onClick={() => navigate("/orders")}>
+              返回訂單列表
+            </Button>
+          }
+        />
+      </AdminPageLayout>
     );
 
   return (
-    <main>
-      <div className={tw(ui.pageHeading, ui.detailHeading)}>
-        <div>
-          <Button
-            type="text"
-            icon={<ArrowLeftOutlined />}
-            onClick={() => navigate("/orders")}
-          >
-            返回訂單列表
-          </Button>
-          <h1>訂單詳情</h1>
-          <p>{order?.NewOrderID || orderId}</p>
-        </div>
-        {order && <StatusTag status={order.Status} />}
-      </div>
+    <AdminPageLayout
+      title="訂單詳情"
+      description={order?.NewOrderID || orderId}
+      headerLeading={backButton}
+      headerExtra={order && <StatusTag status={order.Status} />}
+      variant="detail"
+    >
       <section className={tw(ui.surface, ui.detailSurface)}>
         {error ? (
           <Alert type="error" showIcon message={error.message} />
@@ -143,6 +153,6 @@ export default function OrderDetailPage() {
           </>
         )}
       </section>
-    </main>
+    </AdminPageLayout>
   );
 }
