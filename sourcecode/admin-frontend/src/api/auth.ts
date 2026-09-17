@@ -1,4 +1,8 @@
-export type AccountRole = "platform_primary" | "platform_secondary" | "tenant_primary" | "tenant_secondary";
+export type AccountRole =
+  | "platform_primary"
+  | "platform_secondary"
+  | "tenant_primary"
+  | "tenant_secondary";
 
 export interface Account {
   id: string;
@@ -28,7 +32,8 @@ export interface LoginResponse {
 }
 
 // 跟 documents.ts 打同一個 backend 服務（8000 埠），沿用同一組 base URL 慣例。
-const API_BASE_URL = import.meta.env.VITE_RAG_API_URL || "http://localhost:8000";
+const API_BASE_URL =
+  import.meta.env.VITE_RAG_API_URL || "http://localhost:8000";
 
 async function throwIfNotOk(response: Response): Promise<void> {
   if (!response.ok) {

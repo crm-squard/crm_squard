@@ -1,8 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import SmartCRMChatWidget from "./SmartCRMChatWidget";
-import chatStyles from "./chat.css?inline";
-import widgetStyles from "./SmartCRMChatWidget.css?inline";
+import widgetStyles from "./widget.css?inline";
 
 declare global {
   interface Window {
@@ -16,7 +15,9 @@ const clientId = scriptElement?.dataset.clientId?.trim() ?? "";
 function mountWidget() {
   if (window.__CRM_CHAT_WIDGET_MOUNTED__) return;
   if (!clientId || clientId.length > 128) {
-    console.error("[CRM Chat Widget] data-client-id 必填，且長度不得超過 128 個字元。");
+    console.error(
+      "[CRM Chat Widget] data-client-id 必填，且長度不得超過 128 個字元。",
+    );
     return;
   }
 
@@ -24,7 +25,7 @@ function mountWidget() {
   host.dataset.crmChatWidgetHost = "";
   const shadowRoot = host.attachShadow({ mode: "open" });
   const styleElement = document.createElement("style");
-  styleElement.textContent = `${widgetStyles}\n${chatStyles}`;
+  styleElement.textContent = widgetStyles;
   const mountElement = document.createElement("div");
   shadowRoot.append(styleElement, mountElement);
   document.body.append(host);

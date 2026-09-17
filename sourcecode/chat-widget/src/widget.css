@@ -1,0 +1,53 @@
+@layer theme, base, components, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities) source("../");
+
+@theme {
+  --color-widget-on-primary: #ffffff;
+  --color-widget-background: #f4f7f9;
+  --color-widget-muted: #5d6b78;
+  --color-widget-subtle: #80909d;
+  --color-widget-success: #2e8b70;
+  --color-widget-border: #d7e0e8;
+  --font-widget:
+    "DM Sans", system-ui, -apple-system, "PingFang TC", "Noto Sans TC",
+    "Microsoft JhengHei", sans-serif;
+  --font-widget-display: "Plus Jakarta Sans", system-ui, sans-serif;
+  --text-caption: 0.8125rem;
+  --text-chip: 0.78125rem;
+  --text-label: 0.6875rem;
+  --text-micro: 0.65625rem;
+  --text-widget-title: 0.9375rem;
+  --radius-control: 0.625rem;
+  --radius-field: 0.75rem;
+  --radius-panel: 0.8125rem;
+  --radius-message: 0.875rem;
+  --shadow-widget-launcher: 0 8px 20px rgb(31 61 87 / 0.24);
+  --shadow-widget-panel: 0 20px 50px rgb(23 33 43 / 0.18);
+  --animate-widget-pop: widget-pop 220ms ease;
+  --animate-widget-bounce: widget-bounce 1.1s infinite ease-in-out;
+
+  @keyframes widget-pop {
+    from {
+      opacity: 0;
+      transform: translateY(12px) scale(0.98);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
+  @keyframes widget-bounce {
+    0%,
+    60%,
+    100% {
+      opacity: 0.5;
+      transform: translateY(0);
+    }
+    30% {
+      opacity: 1;
+      transform: translateY(-4px);
+    }
+  }
+}

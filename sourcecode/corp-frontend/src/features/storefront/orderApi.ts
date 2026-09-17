@@ -1,6 +1,12 @@
-import type { CartItem, CheckoutCustomer, CheckoutOrder, CheckoutResponse } from "./types";
+import type {
+  CartItem,
+  CheckoutCustomer,
+  CheckoutOrder,
+  CheckoutResponse,
+} from "./types";
 
-const ORDER_API_BASE_URL = import.meta.env.VITE_API_CORP_URL || "http://localhost:8001";
+const ORDER_API_BASE_URL =
+  import.meta.env.VITE_API_CORP_URL || "http://localhost:8001";
 
 export class OrderSubmissionError extends Error {}
 
@@ -46,17 +52,24 @@ export async function submitCheckout(
   cartItems: CartItem[],
 ): Promise<CheckoutResponse[]> {
   const orders = buildCheckoutOrders(customer, cartItems);
-  return Promise.all(orders.map(async (order) => {
-    const response = await fetch(`${ORDER_API_BASE_URL}/api/v1/collections/Order/docs`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ data: order }),
-    });
+  return Promise.all(
+    orders.map(async (order) => {
+      const response = await fetch(
+        `${ORDER_API_BASE_URL}/api/v1/collections/Order/docs`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ data: order }),
+        },
+      );
 
-    if (!response.ok) {
-      throw new OrderSubmissionError(`訂單送出失敗（${response.status}）。請確認訂單服務後重試。`);
-    }
+      if (!response.ok) {
+        throw new OrderSubmissionError(
+          `訂單送出失敗（${response.status}）。請確認訂單服務後重試。`,
+        );
+      }
 
-    return response.json() as Promise<CheckoutResponse>;
-  }));
+      return response.json() as Promise<CheckoutResponse>;
+    }),
+  );
 }

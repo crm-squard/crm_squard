@@ -10,9 +10,22 @@ export function toChatMessage(response: ChatResponse): BotMessage {
     case "text":
       return { role: "bot", type: "text", text: response.text };
     case "product":
-      return { role: "bot", type: "product", text: response.text, source: response.source, sources: response.sources };
+      return {
+        role: "bot",
+        type: "product",
+        text: response.text,
+        source: response.source,
+        sources: response.sources,
+      };
     case "order":
-      return { role: "bot", type: "order", code: response.code, status: response.status, eta: response.eta, items: response.items };
+      return {
+        role: "bot",
+        type: "order",
+        code: response.code,
+        status: response.status,
+        eta: response.eta,
+        items: response.items,
+      };
     default:
       return assertNever(response);
   }
@@ -20,7 +33,17 @@ export function toChatMessage(response: ChatResponse): BotMessage {
 
 export function buildHistory(messages: ChatMessage[]): HistoryTurn[] {
   return messages.flatMap((message): HistoryTurn[] => {
-    if (message.type === "order" || typeof message.text !== "string" || !message.text.length) return [];
-    return [{ role: message.role === "user" ? "user" : "assistant", content: message.text }];
+    if (
+      message.type === "order" ||
+      typeof message.text !== "string" ||
+      !message.text.length
+    )
+      return [];
+    return [
+      {
+        role: message.role === "user" ? "user" : "assistant",
+        content: message.text,
+      },
+    ];
   });
 }

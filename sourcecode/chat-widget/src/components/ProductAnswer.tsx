@@ -1,11 +1,19 @@
-interface ProductAnswerProps { text: string; source: string | null; }
+import { tw } from "../utils/tw";
+import { widgetUi } from "../widgetStyles";
+
+interface ProductAnswerProps {
+  text: string;
+  source: string | null;
+}
 
 export default function ProductAnswer({ text, source }: ProductAnswerProps) {
   return (
-    <div className="ccw-row ccw-row-bot">
-      <div className="ccw-bubble ccw-bubble-bot">
-        <p className="ccw-bubble-text">{text}</p>
-        {source && <span className="ccw-source-tag">相關主題：{source}</span>}
+    <div className={tw(widgetUi.row, widgetUi.rowBot)}>
+      <div className={tw(widgetUi.bubble, widgetUi.bubbleBot)}>
+        <p className={widgetUi.bubbleText}>{text}</p>
+        {source && (
+          <span className={widgetUi.sourceTag}>相關主題：{source}</span>
+        )}
       </div>
     </div>
   );

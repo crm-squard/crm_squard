@@ -28,6 +28,45 @@ crm-rag-project/
 └── chat-widget/              # 可獨立部署與嵌入的 React 聊天元件
 ```
 
+## 前端樣式架構
+
+三個前端均使用 Tailwind CSS v4，但維持獨立 package、lockfile、Vite 與 Prettier 設定，不使用 monorepo workspace 或跨 App 樣式 import。
+
+| App            | Tailwind 入口                   | 元件樣式位置                      | 特殊整合                                                                |
+| -------------- | ------------------------------- | --------------------------------- | ----------------------------------------------------------------------- |
+| Corp Frontend  | `corp-frontend/src/index.css`   | TSX 內的靜態 utility mapping      | 保留 1120、820、560px 斷點                                              |
+| Admin Frontend | `admin-frontend/src/styles.css` | `admin-frontend/src/uiStyles.ts`  | 保留 Ant Design，以 descendant variants 與必要的 important utility 覆寫 |
+| Chat Widget    | `chat-widget/src/widget.css`    | `chat-widget/src/widgetStyles.ts` | CSS 以 `?inline` 注入 Shadow DOM，保留 runtime theme variables          |
+
+Tailwind 入口不載入 Preflight，避免改變 Ant Design、原生控制項與既有瀏覽器預設。入口 CSS 只放 `@theme` token、字型與共用動畫；元件外觀使用 TSX utility，不新增傳統 selector class。
+
+### Token 與 utility 規則
+
+- 4px spacing 基準可精準表示的尺寸使用數字 utility，例如 9px → `2.25`、10px → `2.5`、13px → `3.25`、21px → `5.25`。
+- 字級使用 Tailwind 預設字級或語意化 `--text-*` token；圓角使用 `--radius-*` token，不以 spacing utility 代替。
+- 重複顏色、字級、圓角、陰影與動畫集中於 `@theme`。只有 `clamp()`、複合 grid、動態 viewport 與一次性圖片漸層使用 arbitrary value。
+- class 必須是完整靜態字串；組合時使用 `tw()`，不可動態拼接 utility 名稱。
+- 單邊框 utility 不與 `border-solid` 併用，避免其他邊出現預設框線。
+- 靜態樣式不得保留 inline style；runtime theme、自動高度與動態圖片 URL 例外。
+
+### 格式化與驗證
+
+每個 App 的 `prettier-plugin-tailwindcss` 會依官方順序排列 class，並透過 `tailwindStylesheet` 識別該 App 的自訂 token。修改前端樣式後，在對應 App 執行：
+
+```bash
+npm run format
+npm run format:check
+npm run build
+```
+
+Chat Widget 另需執行：
+
+```bash
+npm run inject:target
+```
+
+完成後應以瀏覽器檢查 hover、focus、disabled、active、reduced-motion、響應式斷點、Ant portal 與 Shadow DOM 隔離；視覺等價調整以 computed style 為驗收依據。
+
 ## 需求環境
 
 - Node.js 18+
@@ -96,6 +135,7 @@ npm run dev
 ### 5) 測試
 
 在聊天視窗輸入：
+
 - 「無線滑鼠支援多少 DPI？」→ 觸發 #1 產品問答（RAG + LLM）
 - 「智慧手錶有什麼特別功能？」→ 觸發 #1 產品問答，回答會提到隱藏的彩蛋錶面
 - 「查詢訂單 A12345」→ 觸發 #2 訂單查詢（回傳配送進度時間軸）

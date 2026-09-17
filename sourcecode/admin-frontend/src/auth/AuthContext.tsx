@@ -1,5 +1,18 @@
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
-import { getMe, loginWithGoogle, logout as logoutApi, type Account, type CompanyInfo } from "../api/auth";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
+import {
+  getMe,
+  loginWithGoogle,
+  logout as logoutApi,
+  type Account,
+  type CompanyInfo,
+} from "../api/auth";
 
 const STORAGE_KEY = "admin_auth_state";
 
@@ -64,10 +77,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     async (idToken: string) => {
       const { token, account } = await loginWithGoogle(idToken);
       const me = await getMe(token);
-      updateState({ token, account: me.account, companies: me.companies, selectedCompanyId: null });
+      updateState({
+        token,
+        account: me.account,
+        companies: me.companies,
+        selectedCompanyId: null,
+      });
       void account; // getMe 回傳的 account 已含相同資訊，登入回應僅用於取得 token
     },
-    [updateState]
+    [updateState],
   );
 
   const logout = useCallback(async () => {
@@ -85,7 +103,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     (companyId: string | null) => {
       updateState({ ...state, selectedCompanyId: companyId });
     },
-    [state, updateState]
+    [state, updateState],
   );
 
   const refreshMe = useCallback(async () => {
@@ -105,7 +123,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       selectCompany,
       refreshMe,
     }),
-    [state, loginWithIdToken, logout, selectCompany, refreshMe]
+    [state, loginWithIdToken, logout, selectCompany, refreshMe],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
