@@ -1,12 +1,14 @@
 # Admin 設計規範
 
-本文件定義 Admin 新增頁面時應延續的視覺語言、版型與互動原則。實際樣式以 [src/styles.css](./src/styles.css) 的 Tailwind theme、[src/uiStyles.ts](./src/uiStyles.ts) 的 utility mapping 與現有共用元件為準；本文件不作為執行階段依賴。
+本文件定義 Admin 新增頁面時應延續的視覺語言、版型與互動原則。實際樣式以 [src/styles.css](./src/styles.css) 的 Tailwind theme、[src/theme/adminTheme.ts](./src/theme/adminTheme.ts) 的 Ant Design theme、[src/uiStyles.ts](./src/uiStyles.ts) 的 utility mapping 與現有共用元件為準；本文件不作為執行階段依賴。
 
 ## Tailwind CSS v4 規則
 
 - `src/styles.css` 不載入 Preflight，只保留 Tailwind imports、`@theme` token 與共用動畫；不得新增專案 selector class。
 - 元件樣式集中於 `src/uiStyles.ts`，TSX 以 `ui.*` 套用完整、可靜態掃描的 utility 字串。
-- 保留 Ant Design；優先透過 `className`、`rootClassName`、`classNames` 與 arbitrary descendant variants 覆寫內部節點。
+- 原生 HTML、自建區塊、頁面布局與響應式使用 Tailwind；Ant Design 元件外觀由根層 `ConfigProvider` 的 global token 與 component token 管理。
+- Ant 元件依序使用元件 props、theme token、外部布局 `className`、公開的 `classNames`／`rootClassName`；只有 theme 無法涵蓋時才在 `src/uiStyles.ts` 加入有明確範圍的 descendant override。
+- Ant theme 使用具體色值，不能直接傳入 Tailwind CSS variable，避免 Ant 衍生色運算產生錯誤；兩邊共用值由 `npm run style:check` 驗證。
 - Ant 未分層樣式或一般 utility 覆蓋狀態樣式時，只對必要屬性加入 important modifier，不全面提高 specificity。
 - 單邊框 utility 不可與 `border-solid` 併用；完整四邊框才使用 `border border-solid`。
 - 新增 token、utility 或 TSX 後執行 `npm run format`，由 `prettier-plugin-tailwindcss` 依官方順序排序。
@@ -50,7 +52,7 @@
 - 區塊標題內距：上方與左右 `22–24px`，下方 `12px`。
 - 同層卡片間距：`14–18px`。
 
-Ant Design 全域 theme 設定集中於 [src/main.tsx](./src/main.tsx)，新增頁面應沿用既有 token，不在頁面內覆寫相同用途的色彩或圓角。
+Ant Design 全域 theme 設定集中於 [src/theme/adminTheme.ts](./src/theme/adminTheme.ts)，並由 [src/main.tsx](./src/main.tsx) 唯一的根層 `ConfigProvider` 套用。新增頁面不得建立巢狀 `ConfigProvider`、頁面層 `theme={{ ... }}`，也不得覆寫相同用途的色彩或圓角。
 
 ## 版型
 
@@ -60,15 +62,16 @@ Ant Design 全域 theme 設定集中於 [src/main.tsx](./src/main.tsx)，新增�
 - Header 高度為 `65px`，固定於畫面頂端。
 - Sidebar 在桌面版固定於左側；行動版改用 Drawer。
 - 選單區使用 `overflow-y: auto`，選項增加時由選單區獨立捲動，品牌與底部說明保持固定。
-- 主要內容以 `<main>` 作為頁面根節點，依序放置頁面標題、摘要卡片與內容表面。
+- 右側主要內容使用 `AdminPageLayout` 產生唯一的 `<main>`、頁面標題及 `16px` 垂直內容間距；登入與選擇公司頁除外。
 
 ## 頁面元件模式
 
-### Page Heading
+### AdminPageLayout 與 Page Heading
 
-- 使用 `ui.pageHeading`，左側放置單一 `h1` 與一句頁面目的說明。
-- 右側只放與整頁相關的日期、主要操作或篩選條件。
-- 詳情頁組合 `ui.pageHeading` 與 `ui.detailHeading`，返回操作放在標題前方。
+- Dashboard、Orders、OrderDetail、RAG、Summary、CompanySettings 必須使用 `AdminPageLayout`，不可自行重建 `<main>` 與 `ui.pageHeading`。
+- `title` 與 `description` 分別產生單一 `h1` 和頁面目的說明；日期、主要操作或狀態放入 `headerExtra`。
+- 詳情頁使用 `variant="detail"`，返回操作放入 `headerLeading`；message/modal holder 或固定 overlay 放入 `beforeHeader`。
+- 各頁頂層內容由模板的 Ant Design `Space size={16}` 排列，不再以 Card margin 建立頁面間距。
 
 ### Surface 與 Section Heading
 
@@ -124,10 +127,11 @@ Ant Design 全域 theme 設定集中於 [src/main.tsx](./src/main.tsx)，新增�
 
 ## 新增頁面檢查清單
 
-- [ ] 使用既有 AdminLayout、Page Heading、Surface 與 Section Heading 結構。
+- [ ] 右側內容頁使用既有 AdminLayout、AdminPageLayout、Surface 與 Section Heading 結構。
 - [ ] 優先重用現有共用元件與 Ant Design 元件，不建立相同用途的頁面專屬版本。
 - [ ] 元件樣式使用 `ui.*` utility mapping，未新增 selector class 或可由 token 取代的重複 arbitrary value。
 - [ ] `className` 已由官方 Tailwind Prettier plugin 排序，且必要的 Ant 覆寫已確認 computed style。
+- [ ] `npm run style:check` 通過，沒有頁面 theme、raw 色彩或未核准的 Ant class。
 - [ ] 使用既有色彩、字體、圓角、間距及狀態語意。
 - [ ] 已處理 loading、empty、error 與資料不足狀態。
 - [ ] 已確認 `1180px`、`899px`、`620px` 三個斷點。

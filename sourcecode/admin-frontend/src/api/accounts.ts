@@ -10,8 +10,16 @@ async function throwIfNotOk(response: Response): Promise<void> {
   }
 }
 
-export async function listAccounts(token: string): Promise<Account[]> {
-  const response = await fetch(`${API_BASE_URL}/api/admin/accounts`, {
+// 帶 companyId：查這家公司綁定的商家帳號（公司設定頁「管理帳號」用，不含管理者帳號）。
+// 不帶：查全部管理者帳號（「管理者帳號」頁籤用，僅限 platform 角色）。
+export async function listAccounts(
+  token: string,
+  companyId?: string,
+): Promise<Account[]> {
+  const url = companyId
+    ? `${API_BASE_URL}/api/admin/accounts?company_id=${encodeURIComponent(companyId)}`
+    : `${API_BASE_URL}/api/admin/accounts`;
+  const response = await fetch(url, {
     headers: { Authorization: `Bearer ${token}` },
   });
   await throwIfNotOk(response);
@@ -35,16 +43,19 @@ export async function createAccount(
   return (await response.json()) as Account;
 }
 
+// 帶 companyId：只把這個帳號從這家公司移除協作關係，不刪除帳號本身（他可能還在管別家公司）。
+// 不帶：刪除整個帳號（「管理者帳號」頁籤用）。
 export async function deleteAccount(
   token: string,
   accountId: string,
+  companyId?: string,
 ): Promise<void> {
-  const response = await fetch(
-    `${API_BASE_URL}/api/admin/accounts/${encodeURIComponent(accountId)}`,
-    {
-      method: "DELETE",
-      headers: { Authorization: `Bearer ${token}` },
-    },
-  );
+  const url = companyId
+    ? `${API_BASE_URL}/api/admin/accounts/${encodeURIComponent(accountId)}?company_id=${encodeURIComponent(companyId)}`
+    : `${API_BASE_URL}/api/admin/accounts/${encodeURIComponent(accountId)}`;
+  const response = await fetch(url, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+  });
   await throwIfNotOk(response);
 }

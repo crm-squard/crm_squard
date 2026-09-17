@@ -128,6 +128,10 @@ class AccountInfo(BaseModel):
     role: Literal["platform_primary", "platform_secondary", "tenant_primary", "tenant_secondary"]
     created_by: Optional[str] = None
     created_at: Optional[str] = None
+    # 這個帳號在「某一家公司」的身分（'primary'／'secondary'），只有透過
+    # GET /api/admin/accounts?company_id= 查出來的帳號才有值；跟上面的 role（全域角色）
+    # 是分開的兩件事，見 accounts_store.list_accounts_for_company() 的說明。
+    company_role: Optional[Literal["primary", "secondary"]] = None
 
 
 class LoginResponse(BaseModel):
@@ -142,6 +146,9 @@ class CompanyInfo(BaseModel):
     welcome_message: Optional[str] = None
     quick_replies: Optional[List[str]] = None
     created_at: Optional[str] = None
+    # 目前登入帳號在這家公司的身分（'primary'／'secondary'），只有 /api/auth/me 對 tenant
+    # 角色回傳時才有值；platform 角色沒有「依公司而變」的身分，固定是 None。
+    your_role: Optional[Literal["primary", "secondary"]] = None
 
 
 class MeResponse(BaseModel):

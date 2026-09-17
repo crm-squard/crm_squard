@@ -447,13 +447,14 @@ def delete_document(
 @app.post("/api/admin/companies", response_model=CompanyInfo)
 def create_company(req: CompanyCreateRequest, account: dict = Depends(auth.require_session)):
     """
-    任何已登入帳號都能新增企業服務（商家自助開通，不用平台方手動加入）：platform 角色建立的
-    公司不綁定任何帳號（沿用原本「看得到全部」的權限）；tenant 角色建立後自動綁定自己，
-    成為這家公司的主帳號，讓一個商家帳號可以自己開多個 company_id。
+    任何已登入帳號都能新增企業服務（商家自助開通，不用平台方手動加入），建立後一律自動綁定
+    建立者（不分 tenant／platform 角色）：讓一個商家帳號可以自己開多個 company_id；
+    管理者帳號建立公司時也綁定，讓「管理者帳號本來就是這家公司的創建者」這件事在公司設定頁
+    的協作帳號清單裡看得到、也能正常增減——管理者角色本來就對所有公司有存取權（不靠這個
+    綁定），這裡綁定純粹是為了在「這家公司」的視角下如實記錄跟顯示創建者。
     """
     company = accounts_store.create_company(req.name, req.mcp_url, req.welcome_message, req.quick_replies)
-    if account["role"] in accounts_store.TENANT_ROLES:
-        accounts_store.bind_company(account["id"], company["id"])
+    accounts_store.bind_company(account["id"], company["id"], role="primary")
     accounts_store.record_audit(
         account["id"], action="create_company", target_type="company", target_id=company["id"],
         detail={"name": req.name},
@@ -525,29 +526,58 @@ def _can_manage_account_for(actor: dict, req: AccountCreateRequest) -> bool:
     """
     新增/移除帳號的權限判斷：
     - 新增 platform_secondary：僅限 platform_primary。
-    - 新增 tenant_*（綁定某 company）：呼叫者對該 company 要有存取權
-      （platform 角色，或 tenant_primary/tenant_secondary 且已綁定該公司——見實作計畫，
-      次帳號權限跟主帳號相同，差別只在誰能新增/移除誰，這裡不特別區分 primary/secondary）。
+    - 新增/綁定 tenant_*（某 company 的協作帳號）：呼叫者要是這家公司的 primary
+      （不是「任何有綁定的帳號」——secondary 看得到協作帳號清單，但不能增減，比照
+      「主商家帳號可以增加減少協作商家帳號」這個規則；platform 角色永遠可以）。
     """
     if req.role == "platform_primary":
         return False  # 不開放透過 API 新增第二個 platform_primary，避免權限模型混亂
     if req.role == "platform_secondary":
         return actor["role"] == "platform_primary"
-    # tenant_primary / tenant_secondary
+    # tenant_primary / tenant_secondary：req.role 只用來決定這家公司的 company_role
+    # （primary／secondary），不是帳號的全域角色，見下面 create_account()。
     if not req.company_id:
         return False
-    return accounts_store.account_has_company_access(actor, req.company_id)
+    return accounts_store.is_company_primary(actor, req.company_id)
 
 
 @app.post("/api/admin/accounts", response_model=AccountInfo)
 def create_account(req: AccountCreateRequest, actor: dict = Depends(auth.require_session)):
+    """
+    req.role 對 tenant_* 只用來決定「這家公司」的身分（tenant_primary → company_accounts.role
+    = 'primary'，tenant_secondary → 'secondary'），不會拿來覆寫帳號的全域角色（accounts.role）：
+    一個帳號可以是 A 公司的 primary、同時是 B 公司的 secondary，全域角色只在帳號第一次被建立
+    （這個 email 在系統裡完全沒出現過）時才需要決定。
+
+    email 已經是系統帳號時（不管全域角色、不管目前綁定哪些公司）：對 tenant_* 請求，直接把
+    這個既有帳號綁定/更新成這家公司的協作帳號，不回錯誤——這是刻意的設計，讓同一個人可以
+    同時是自己公司的主帳號、又是別人公司的協作帳號。對 platform_secondary 請求維持原本行為
+    （管理者帳號一定要是全新 email，不支援「把既有商家帳號升成管理者」這種操作）。
+    """
     if not _can_manage_account_for(actor, req):
         raise HTTPException(status_code=403, detail="沒有權限新增這個角色的帳號。")
-    if accounts_store.get_account_by_email(req.email) is not None:
+    existing = accounts_store.get_account_by_email(req.email)
+    if req.role in accounts_store.TENANT_ROLES and req.company_id:
+        company_role = "primary" if req.role == "tenant_primary" else "secondary"
+        if existing is not None:
+            accounts_store.bind_company(existing["id"], req.company_id, role=company_role)
+            accounts_store.record_audit(
+                actor["id"], action="bind_existing_account", target_type="account", target_id=existing["id"],
+                detail={"email": req.email, "company_id": req.company_id, "company_role": company_role},
+            )
+            return AccountInfo(**existing)
+        account = accounts_store.create_account(req.email, req.role, actor["id"])
+        accounts_store.bind_company(account["id"], req.company_id, role=company_role)
+        accounts_store.record_audit(
+            actor["id"], action="create_account", target_type="account", target_id=account["id"],
+            detail={"email": req.email, "role": req.role, "company_id": req.company_id},
+        )
+        return AccountInfo(**account)
+
+    # platform_secondary：維持原本「email 必須是全新的」限制
+    if existing is not None:
         raise HTTPException(status_code=400, detail="這個 email 已經是系統帳號了。")
     account = accounts_store.create_account(req.email, req.role, actor["id"])
-    if req.role in accounts_store.TENANT_ROLES and req.company_id:
-        accounts_store.bind_company(account["id"], req.company_id)
     accounts_store.record_audit(
         actor["id"], action="create_account", target_type="account", target_id=account["id"],
         detail={"email": req.email, "role": req.role, "company_id": req.company_id},
@@ -556,28 +586,60 @@ def create_account(req: AccountCreateRequest, actor: dict = Depends(auth.require
 
 
 @app.get("/api/admin/accounts", response_model=AccountListResponse)
-def list_accounts(actor: dict = Depends(auth.require_session)):
-    accounts = accounts_store.list_accounts_visible_to(actor)
+def list_accounts(company_id: str | None = Query(default=None), actor: dict = Depends(auth.require_session)):
+    """
+    帶 company_id：回傳這家公司綁定的商家帳號（公司設定頁「管理帳號」用），呼叫者要對這家
+    公司有存取權，比照 update_company／audit-log 的權限模式；不含管理者帳號，天生就不會
+    混進其他公司的協作帳號。
+    不帶 company_id：回傳所有管理者帳號（platform_primary／platform_secondary，「管理者
+    帳號」頁籤用），僅限 platform 角色呼叫，商家帳號沒有理由要看到管理者帳號清單。
+    """
+    if company_id:
+        if not accounts_store.account_has_company_access(actor, company_id):
+            raise HTTPException(status_code=403, detail="沒有這家公司的存取權限。")
+        accounts = accounts_store.list_accounts_for_company(company_id)
+    else:
+        if actor["role"] not in accounts_store.PLATFORM_ROLES:
+            raise HTTPException(status_code=403, detail="此操作僅限平台維運帳號。")
+        accounts = accounts_store.list_platform_accounts()
     return AccountListResponse(accounts=[AccountInfo(**a) for a in accounts])
 
 
 @app.delete("/api/admin/accounts/{account_id}")
-def delete_account(account_id: str, actor: dict = Depends(auth.require_session)):
+def delete_account(
+    account_id: str, company_id: str | None = Query(default=None), actor: dict = Depends(auth.require_session)
+):
     """
-    刪除帳號：權限比照新增（platform_primary 能刪 platform_secondary；對某公司有存取權的帳號
-    能刪同公司的 tenant 帳號）。刪除後連帶清掉該帳號所有 sessions（ON DELETE CASCADE），
-    達成「移除次帳號時立刻讓對方 session 失效」。
+    帶 company_id：只把這個帳號從**這家公司**移除協作關係（unbind_company），不刪除帳號
+    本身——一個帳號可能同時是別家公司的主帳號/協作帳號，整個刪掉會連帶砍掉那些完全無關的
+    關係。呼叫者要是這家公司的 primary（或 platform）才能移除，對應「主商家帳號可以增加
+    減少協作商家帳號」。移除後該帳號只是存取不到這家公司，session 不受影響（他可能還在管
+    別家公司），不是「立刻無法登入」。
+
+    不帶 company_id：刪除整個帳號（目前只有「管理者帳號」頁籤在用，移除 platform_secondary），
+    連帶清掉所有 company_accounts 綁定跟 sessions（ON DELETE CASCADE）。
     """
     target = accounts_store.get_account_by_id(account_id)
     if target is None:
         raise HTTPException(status_code=404, detail="查無這個帳號。")
+
+    if company_id:
+        if not accounts_store.is_company_primary(actor, company_id):
+            raise HTTPException(status_code=403, detail="沒有權限移除這家公司的協作帳號。")
+        accounts_store.unbind_company(account_id, company_id)
+        accounts_store.record_audit(
+            actor["id"], action="unbind_account_from_company", target_type="account", target_id=account_id,
+            detail={"email": target["email"], "company_id": company_id},
+        )
+        return {"status": "unbound", "account_id": account_id, "company_id": company_id}
+
     if target["role"] == "platform_primary":
         raise HTTPException(status_code=403, detail="不能透過 API 刪除 platform_primary 帳號。")
     if target["role"] == "platform_secondary":
         if actor["role"] != "platform_primary":
             raise HTTPException(status_code=403, detail="沒有權限刪除這個帳號。")
     else:
-        # tenant_* 帳號：呼叫者要對這個帳號目前綁定的任一家公司有存取權才能刪
+        # tenant_* 帳號：呼叫者要對這個帳號目前綁定的任一家公司有存取權才能整個刪
         companies = accounts_store.list_companies_visible_to(target)
         if actor["role"] not in accounts_store.PLATFORM_ROLES and not any(
             accounts_store.account_has_company_access(actor, c["id"]) for c in companies

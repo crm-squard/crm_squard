@@ -69,7 +69,9 @@ Embedding 與本地 LLM 模型（第一次啟動會需要下載，依網路速�
   記憶體佔用低，繞過官方的 `optimum` 整合套件（跟 `mlx-lm` 等套件要求的 `transformers`
   版本硬衝突，無解）。
 - `huggingface`：原本的 fp32 `HuggingFaceEmbedding`，int8 版本有問題時可以切回這個，
-  不用改程式碼，`.env` 設 `EMBEDDING_BACKEND=huggingface` 即可。
+  不用改程式碼，`.env` 設 `EMBEDDING_BACKEND=huggingface` 即可，但要先手動安裝
+  `pip install -r requirements-embedding-fallback.txt`（torch/transformers 這個分支專用，
+  正式 image 不會裝，見該檔案開頭說明）。
 
 （原本還有兩套：自製的 `custom` 引擎——Chroma + 手寫檢索，已隨 `llamaindex` 引擎改用
 pgvector 一起退休；線上 Gemini embedding + Chroma 的 `gemini`/`online` 引擎也已移除，

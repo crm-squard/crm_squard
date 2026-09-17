@@ -4,12 +4,17 @@ export type AccountRole =
   | "tenant_primary"
   | "tenant_secondary";
 
+export type CompanyRole = "primary" | "secondary";
+
 export interface Account {
   id: string;
   email: string;
   role: AccountRole;
   created_by: string | null;
   created_at: string;
+  // 這個帳號在「某一家公司」的身分，只有依 company_id 查出來的帳號才有值；
+  // 跟上面全域的 role 是分開的兩件事（同一帳號在不同公司可能不一樣）。
+  company_role?: CompanyRole | null;
 }
 
 export interface CompanyInfo {
@@ -19,6 +24,8 @@ export interface CompanyInfo {
   welcome_message: string | null;
   quick_replies: string[] | null;
   created_at: string;
+  // 目前登入帳號在這家公司的身分；platform 帳號沒有這個概念，固定是 null。
+  your_role?: CompanyRole | null;
 }
 
 export interface MeResponse {

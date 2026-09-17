@@ -14,13 +14,12 @@
 # 輸出簡體字
 opencc-python-reimplemented==0.1.7
 
-# 已退休的 custom 引擎遺留依賴（app/rag/embedding.py 目前沒有任何引擎呼叫它，保留是因為
-# llama-index-embeddings-huggingface 的 fp32 備援路徑仍間接依賴 sentence-transformers）
-sentence-transformers>=3.0.1
+# sentence-transformers／llama-index-embeddings-huggingface（EMBEDDING_BACKEND=huggingface
+# fallback 分支專用，正式環境不會走到）拆到 requirements-embedding-fallback.txt，避免正式
+# image 白背 torch/transformers 這幾百 MB～1GB 的安裝時間，見該檔案開頭說明。
 
 # llamaindex 引擎用（app/rag/llamaindex_engine.py）
 llama-index-core==0.11.17
-llama-index-embeddings-huggingface==0.3.1
 
 # EMBEDDING_BACKEND=onnx_int8（預設，見 app/rag/onnx_embedding.py）用 onnxruntime 直接跑
 # int8 量化模型，繞過官方的 optimum 整合套件（跟 transformers 版本硬衝突，見該檔案開頭

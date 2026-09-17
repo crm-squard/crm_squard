@@ -8,6 +8,7 @@ import Popconfirm from "antd/es/popconfirm";
 import Typography from "antd/es/typography";
 import { useCallback, useEffect, useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
+import AdminPageLayout from "../components/AdminPageLayout";
 import { useAuth } from "../auth/AuthContext";
 import { ui } from "../uiStyles";
 import { deleteCompany, updateCompany } from "../api/companies";
@@ -66,12 +67,10 @@ export default function CompanySettingsPage() {
   const [addingAccount, setAddingAccount] = useState(false);
   const [auditEntries, setAuditEntries] = useState<AuditLogEntry[]>([]);
 
-  // list_accounts_visible_to 對商家帳號回傳的是「跟自己綁定同一家公司」的帳號，不是嚴格
-  // 依 company_id 過濾（後端目前沒有 per-company 的帳號查詢 API）；商家大多只管理一家公司，
-  // 這裡先用這份清單顯示「協作管理這家商家服務的帳號」，符合最小可行修改的原則。
+  // 帶 selectedCompanyId：只查這家公司綁定的商家帳號，不含管理者帳號、也不含其他公司的協作帳號。
   const loadAccounts = useCallback(() => {
-    if (!token) return;
-    listAccounts(token)
+    if (!token || !selectedCompanyId) return;
+    listAccounts(token, selectedCompanyId)
       .then(setAccounts)
       .catch((err) =>
         messageApi.error(
@@ -79,7 +78,7 @@ export default function CompanySettingsPage() {
         ),
       );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token]);
+  }, [token, selectedCompanyId]);
 
   useEffect(() => {
     loadAccounts();
@@ -177,29 +176,28 @@ export default function CompanySettingsPage() {
   }
 
   async function handleRemoveAccount(accountId: string) {
-    if (!token) return;
+    if (!token || !selectedCompanyId) return;
     try {
-      await deleteAccount(token, accountId);
+      await deleteAccount(token, accountId, selectedCompanyId);
       loadAccounts();
-      messageApi.success("已移除帳號");
+      messageApi.success("已將這個帳號從這家商家服務移除");
     } catch (err) {
       messageApi.error(err instanceof Error ? err.message : "移除失敗");
     }
   }
 
-  return (
-    <main>
-      {contextHolder}
-      <div className={ui.pageHeading}>
-        <div>
-          <h1>公司設定</h1>
-          <p>
-            管理目前選定商家的基本資訊、訂單查詢 MCP
-            URL、聊天機器人開頭語與開場快速提問。
-          </p>
-        </div>
-      </div>
+  const isPlatformRole =
+    currentAccount?.role === "platform_primary" ||
+    currentAccount?.role === "platform_secondary";
+  // 只有這家公司的 primary（或管理者帳號）能新增/移除協作帳號；secondary 看得到清單但不能改。
+  const canManageAccounts = isPlatformRole || company?.your_role === "primary";
 
+  return (
+    <AdminPageLayout
+      title="公司設定"
+      description="管理目前選定商家的基本資訊、訂單查詢 MCP URL、聊天機器人開頭語與開場快速提問。"
+      beforeHeader={contextHolder}
+    >
       <Card>
         {company ? (
           <>
@@ -266,7 +264,7 @@ export default function CompanySettingsPage() {
         )}
       </Card>
 
-      <Card className={ui.marginTop4} title="管理帳號">
+      <Card title="管理帳號">
         <Paragraph type="secondary">
           新增的 gmail
           帳號用該帳號登入即可管理這家商家服務（跟你權限相同，差別只在誰能新增/移除誰）。
@@ -277,13 +275,12 @@ export default function CompanySettingsPage() {
           renderItem={(acc) => (
             <List.Item
               actions={
-                acc.id === currentAccount?.id
-                  ? []
-                  : [
+                canManageAccounts && acc.id !== currentAccount?.id
+                  ? [
                       <Popconfirm
                         key="remove"
                         title="確定要移除這個帳號嗎？"
-                        description="移除後該帳號會立刻無法登入。"
+                        description="移除後該帳號將不再能存取這家商家服務（他其他的商家服務不受影響）。"
                         onConfirm={() => handleRemoveAccount(acc.id)}
                       >
                         <Button danger size="small">
@@ -291,39 +288,49 @@ export default function CompanySettingsPage() {
                         </Button>
                       </Popconfirm>,
                     ]
+                  : []
               }
             >
-              <List.Item.Meta title={acc.email} description={acc.role} />
+              <List.Item.Meta
+                title={acc.email}
+                description={acc.company_role === "primary" ? "主帳號" : "協作帳號"}
+              />
             </List.Item>
           )}
         />
-        <Form
-          className={ui.marginTop4}
-          form={accountForm}
-          layout="inline"
-          onFinish={handleAddAccount}
-        >
-          <Form.Item
-            name="email"
-            rules={[
-              {
-                required: true,
-                type: "email",
-                message: "請輸入有效的 gmail 地址",
-              },
-            ]}
+        {canManageAccounts ? (
+          <Form
+            className={ui.marginTop4}
+            form={accountForm}
+            layout="inline"
+            onFinish={handleAddAccount}
           >
-            <Input placeholder="要新增的 gmail 地址" />
-          </Form.Item>
-          <Form.Item>
-            <Button type="primary" htmlType="submit" loading={addingAccount}>
-              新增帳號
-            </Button>
-          </Form.Item>
-        </Form>
+            <Form.Item
+              name="email"
+              rules={[
+                {
+                  required: true,
+                  type: "email",
+                  message: "請輸入有效的 gmail 地址",
+                },
+              ]}
+            >
+              <Input placeholder="要新增的 gmail 地址" />
+            </Form.Item>
+            <Form.Item>
+              <Button type="primary" htmlType="submit" loading={addingAccount}>
+                新增帳號
+              </Button>
+            </Form.Item>
+          </Form>
+        ) : (
+          <Paragraph type="secondary" className={ui.marginTop4}>
+            只有這家商家服務的主帳號能新增/移除協作帳號。
+          </Paragraph>
+        )}
       </Card>
 
-      <Card className={ui.marginTop4} title="稽核紀錄">
+      <Card title="稽核紀錄">
         <Paragraph type="secondary">
           這家商家服務最近的異動紀錄：建立/刪除、設定變更、知識庫文件、協作帳號新增移除。
         </Paragraph>
@@ -340,6 +347,6 @@ export default function CompanySettingsPage() {
           )}
         />
       </Card>
-    </main>
+    </AdminPageLayout>
   );
 }

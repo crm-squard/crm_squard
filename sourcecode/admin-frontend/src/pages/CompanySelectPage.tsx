@@ -4,6 +4,7 @@ import Form from "antd/es/form";
 import Input from "antd/es/input";
 import List from "antd/es/list";
 import message from "antd/es/message";
+import Tag from "antd/es/tag";
 import Typography from "antd/es/typography";
 import { useEffect, useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
@@ -109,7 +110,19 @@ export default function CompanySelectPage() {
                   ]}
                 >
                   <List.Item.Meta
-                    title={company.name}
+                    title={
+                      <>
+                        {company.name}
+                        {company.your_role ? (
+                          <Tag
+                            className="ml-2"
+                            color={company.your_role === "primary" ? "blue" : "default"}
+                          >
+                            {company.your_role === "primary" ? "主帳號" : "協作帳號"}
+                          </Tag>
+                        ) : null}
+                      </>
+                    }
                     description={
                       <Text
                         type="secondary"

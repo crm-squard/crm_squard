@@ -6,6 +6,7 @@ import Alert from "antd/es/alert";
 import Button from "antd/es/button";
 import Empty from "antd/es/empty";
 import { Link } from "react-router-dom";
+import AdminPageLayout from "../components/AdminPageLayout";
 import OrderTable from "../components/OrderTable";
 import { useOrders } from "../hooks/useOrders";
 import { ui } from "../uiStyles";
@@ -25,12 +26,10 @@ export default function DashboardPage() {
   );
 
   return (
-    <main>
-      <div className={ui.pageHeading}>
-        <div>
-          <h1>儀表板</h1>
-          <p>掌握服務狀況，快速處理訂單，提供更好的客戶體驗。</p>
-        </div>
+    <AdminPageLayout
+      title="儀表板"
+      description="掌握服務狀況，快速處理訂單，提供更好的客戶體驗。"
+      headerExtra={
         <time>
           {new Intl.DateTimeFormat("zh-TW", {
             year: "numeric",
@@ -39,8 +38,8 @@ export default function DashboardPage() {
             weekday: "short",
           }).format(new Date())}
         </time>
-      </div>
-
+      }
+    >
       <section className={ui.metricGrid} aria-label="營運摘要">
         <article className={ui.metricCard}>
           <span className={tw(ui.metricIcon, ui.metricTeal)}>
@@ -126,6 +125,6 @@ export default function DashboardPage() {
           <OrderTable orders={orders} loading={isLoading} compact />
         )}
       </section>
-    </main>
+    </AdminPageLayout>
   );
 }
