@@ -6,9 +6,14 @@
   --color-admin-canvas: #f5f8fc;
   --color-admin-text: #16213e;
   --color-admin-heading: #0f2148;
+  --color-admin-heading-secondary: #152750;
   --color-admin-primary: #1769e0;
   --color-admin-border: #e2e8f0;
   --color-admin-muted: #71809a;
+  --color-admin-text-secondary: #53617a;
+  --color-admin-text-subtle: #7b889d;
+  --color-admin-surface: #ffffff;
+  --color-admin-surface-subtle: #f7f9fc;
   --font-admin: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
   --text-caption: 0.8125rem;
   --text-label: 0.6875rem;
