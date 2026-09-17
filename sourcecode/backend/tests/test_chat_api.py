@@ -6,7 +6,7 @@
   這個格式前端拿來畫出貨時間軸卡片，不能被破壞。
 - 訊息帶到查無此訂單的編號時，依 main.py 目前實際的邏輯回傳 type="text" 的提示訊息
   （不是 404、不是丟例外），並包含訂單編號方便使用者確認。
-- 訂單查詢改用公司自訂的 mcp_url（見 app/orders.py、app/main.py）：company_id（也就是
+- 訂單查詢改用公司自訂的 mcp_url（見 app/orders.py、app/main.py）：chatbot_id（也就是
   X-Client-ID header）對不到任何公司、或公司沒填 mcp_url 時，直接回覆「尚未提供訂單查詢
   功能」的文字，不會落到本機 SQLite demo 資料（那是全域資料，跟任何一家真的公司無關）；
   只有公司有填 mcp_url 才會走原本的 MCP／SQLite fallback 邏輯。這裡的測試在 corp-backend
@@ -17,36 +17,36 @@ from fastapi.testclient import TestClient
 
 from app import accounts_store
 from app.config import settings
-from app.main import app, _company_request_log, _request_log
+from app.main import app, _chatbot_request_log, _request_log
 from tests.conftest import SEED_ORDERS, NON_EXISTENT_ORDER_CODE
 
 CLIENT_HEADERS = {"X-Client-ID": "client_test"}
 
 
 @pytest.fixture
-def order_company():
+def order_chatbot():
     """有填 mcp_url 的測試公司，用來驗證「公司有開訂單查詢功能」的路徑。
     mcp_url 指向一個不存在的位址即可——這裡驗證的重點是「有沒有嘗試查詢並 fallback」，
     不是真的接到 corp-backend（corp-backend 沒有另外啟動）。"""
-    company = accounts_store.create_company(
-        "Pytest Order Company", "http://localhost:9/mcp"
+    chatbot = accounts_store.create_chatbot(
+        "Pytest Order Chatbot", "http://localhost:9/mcp"
     )
-    yield company
-    accounts_store.delete_company(company["id"])
+    yield chatbot
+    accounts_store.delete_chatbot(chatbot["id"])
 
 
-def _client_headers(company_id: str) -> dict:
-    return {"X-Client-ID": company_id}
+def _client_headers(chatbot_id: str) -> dict:
+    return {"X-Client-ID": chatbot_id}
 
 
 @pytest.fixture(autouse=True)
 def _reset_rate_limit():
     """避免同一支測試檔案內多次呼叫 /api/chat 時，被 main.py 的簡易 rate limit 誤擋。"""
     _request_log.clear()
-    _company_request_log.clear()
+    _chatbot_request_log.clear()
     yield
     _request_log.clear()
-    _company_request_log.clear()
+    _chatbot_request_log.clear()
 
 
 @pytest.fixture
@@ -55,14 +55,14 @@ def client():
         yield c
 
 
-def test_chat_with_valid_order_code_returns_order_card(client, order_company):
+def test_chat_with_valid_order_code_returns_order_card(client, order_chatbot):
     code = "A12345"
     expected = SEED_ORDERS[code]
 
     resp = client.post(
         "/api/chat",
         json={"message": code, "history": [], "provider": "google"},
-        headers=_client_headers(order_company["id"]),
+        headers=_client_headers(order_chatbot["id"]),
     )
 
     assert resp.status_code == 200
@@ -74,7 +74,7 @@ def test_chat_with_valid_order_code_returns_order_card(client, order_company):
     assert body["items"] == expected["items"]
 
 
-def test_chat_with_order_keyword_and_valid_code(client, order_company):
+def test_chat_with_order_keyword_and_valid_code(client, order_chatbot):
     """訊息夾雜文字（含「訂單」二字）也要能解析出正確的訂單編號並回傳一致的結構。"""
     code = "C55210"
     expected = SEED_ORDERS[code]
@@ -82,7 +82,7 @@ def test_chat_with_order_keyword_and_valid_code(client, order_company):
     resp = client.post(
         "/api/chat",
         json={"message": f"請幫我查一下訂單 {code} 的狀態", "history": [], "provider": "google"},
-        headers=_client_headers(order_company["id"]),
+        headers=_client_headers(order_chatbot["id"]),
     )
 
     assert resp.status_code == 200
@@ -94,7 +94,7 @@ def test_chat_with_order_keyword_and_valid_code(client, order_company):
     assert body["items"] == expected["items"]
 
 
-def test_chat_with_unknown_order_code_returns_text_message(client, order_company):
+def test_chat_with_unknown_order_code_returns_text_message(client, order_chatbot):
     """
     依 main.py 目前實際邏輯：找不到訂單時回傳 type="text"，
     text 內容包含查無此訂單的提示與該訂單編號，不是丟 4xx 例外。
@@ -102,7 +102,7 @@ def test_chat_with_unknown_order_code_returns_text_message(client, order_company
     resp = client.post(
         "/api/chat",
         json={"message": NON_EXISTENT_ORDER_CODE, "history": [], "provider": "google"},
-        headers=_client_headers(order_company["id"]),
+        headers=_client_headers(order_chatbot["id"]),
     )
 
     assert resp.status_code == 200
@@ -113,9 +113,9 @@ def test_chat_with_unknown_order_code_returns_text_message(client, order_company
     assert "查無訂單編號" in body["text"]
 
 
-def test_chat_with_order_code_but_no_company_returns_not_supported_message(client):
+def test_chat_with_order_code_but_no_chatbot_returns_not_supported_message(client):
     """
-    X-Client-ID 對不到任何公司（例如 widget 沒串接真的 company_id，或本測試檔預設的
+    X-Client-ID 對不到任何公司（例如 widget 沒串接真的 chatbot_id，或本測試檔預設的
     "client_test" 不是合法 UUID）時，訂單查詢要回覆「尚未提供」的文字，不能落到 SQLite
     demo 資料裝作查得到——即使輸入的是 SEED_ORDERS 裡真的存在的編號。
     """
@@ -131,14 +131,14 @@ def test_chat_with_order_code_but_no_company_returns_not_supported_message(clien
     assert "尚未提供訂單查詢功能" in body["text"]
 
 
-def test_chat_with_order_code_but_company_has_no_mcp_url_returns_not_supported_message(
-    client, test_company
+def test_chat_with_order_code_but_chatbot_has_no_mcp_url_returns_not_supported_message(
+    client, test_chatbot
 ):
-    """company_id 查得到公司，但該公司沒填 mcp_url：一樣視為沒開這個功能。"""
+    """chatbot_id 查得到公司，但該公司沒填 mcp_url：一樣視為沒開這個功能。"""
     resp = client.post(
         "/api/chat",
         json={"message": "A12345", "history": [], "provider": "google"},
-        headers=_client_headers(test_company["id"]),
+        headers=_client_headers(test_chatbot["id"]),
     )
 
     assert resp.status_code == 200
@@ -169,28 +169,28 @@ def test_widget_get_endpoints_require_client_id(client, path):
     assert "X-Client-ID" in resp.json()["detail"]
 
 
-def test_chat_rate_limits_per_company_id(client, monkeypatch):
+def test_chat_rate_limits_per_chatbot_id(client, monkeypatch):
     """
-    company_id 是公開識別碼（widget 原始碼裡看得到），單靠 per-IP 限流擋不住換 IP／多台機器
-    打同一個 company_id 的濫用，所以要另外對 company_id 本身也有總量限制。
+    chatbot_id 是公開識別碼（widget 原始碼裡看得到），單靠 per-IP 限流擋不住換 IP／多台機器
+    打同一個 chatbot_id 的濫用，所以要另外對 chatbot_id 本身也有總量限制。
     """
     from app import main as main_module
 
-    monkeypatch.setattr(main_module, "COMPANY_RATE_LIMIT_MAX_REQUESTS", 3)
-    company_id = "client_company_rate_limit_test"
+    monkeypatch.setattr(main_module, "CHATBOT_RATE_LIMIT_MAX_REQUESTS", 3)
+    chatbot_id = "client_chatbot_rate_limit_test"
 
     for _ in range(3):
         resp = client.post(
             "/api/chat",
             json={"message": "哈囉", "history": [], "provider": "google"},
-            headers={"X-Client-ID": company_id},
+            headers={"X-Client-ID": chatbot_id},
         )
         assert resp.status_code == 200
 
     resp = client.post(
         "/api/chat",
         json={"message": "哈囉", "history": [], "provider": "google"},
-        headers={"X-Client-ID": company_id},
+        headers={"X-Client-ID": chatbot_id},
     )
     assert resp.status_code == 429
 

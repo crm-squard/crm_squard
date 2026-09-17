@@ -88,18 +88,18 @@ class LlamaIndexRetriever:
         from app.rag.documents_store import seed_if_empty
         seed_if_empty(self.index)
 
-    def retrieve(self, query: str, top_k: int = 3, company_id: str | None = None) -> list[dict]:
+    def retrieve(self, query: str, top_k: int = 3, chatbot_id: str | None = None) -> list[dict]:
         """
-        company_id：多租戶 RAG 隔離的強制過濾條件（見 app/rag/documents_store.py 的
-        company_id 隔離說明）。用 LlamaIndex 的 MetadataFilters 帶進 retriever，讓 pgvector
+        chatbot_id：多租戶 RAG 隔離的強制過濾條件（見 app/rag/documents_store.py 的
+        chatbot_id 隔離說明）。用 LlamaIndex 的 MetadataFilters 帶進 retriever，讓 pgvector
         在 SQL 層面就篩掉其他公司的向量，不是查出來後再用程式碼過濾（避免因為
         similarity_top_k 篩選發生在過濾之前，導致其他公司的資料擠掉真正該回傳的結果）。
-        company_id 為 None（呼叫端還沒有公司概念）時维持舊行為，不加過濾條件。
+        chatbot_id 為 None（呼叫端還沒有公司概念）時维持舊行為，不加過濾條件。
         """
         filters = None
-        if company_id is not None:
+        if chatbot_id is not None:
             filters = MetadataFilters(
-                filters=[MetadataFilter(key="company_id", value=company_id, operator=FilterOperator.EQ)]
+                filters=[MetadataFilter(key="chatbot_id", value=chatbot_id, operator=FilterOperator.EQ)]
             )
         retriever = self.index.as_retriever(similarity_top_k=top_k, filters=filters)
         nodes = retriever.retrieve(query)

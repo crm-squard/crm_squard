@@ -68,7 +68,7 @@ Ant Design 全域 theme 設定集中於 [src/theme/adminTheme.ts](./src/theme/ad
 
 ### AdminPageLayout 與 Page Heading
 
-- Dashboard、Orders、OrderDetail、RAG、Summary、CompanySettings 必須使用 `AdminPageLayout`，不可自行重建 `<main>` 與 `ui.pageHeading`。
+- Dashboard、Orders、OrderDetail、RAG、Summary、ChatbotSettings 必須使用 `AdminPageLayout`，不可自行重建 `<main>` 與 `ui.pageHeading`。
 - `title` 與 `description` 分別產生單一 `h1` 和頁面目的說明；日期、主要操作或狀態放入 `headerExtra`。
 - 詳情頁使用 `variant="detail"`，返回操作放入 `headerLeading`；message/modal holder 或固定 overlay 放入 `beforeHeader`。
 - 各頁頂層內容由模板的 Ant Design `Space size={16}` 排列，不再以 Card margin 建立頁面間距。

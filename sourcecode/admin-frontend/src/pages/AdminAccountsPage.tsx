@@ -17,7 +17,7 @@ const { Text, Paragraph } = Typography;
 /**
  * 管理者帳號頁籤：只有 platform_primary／platform_secondary 看得到，跟商家帳號完全分開
  * （不會出現在公司設定頁的「管理帳號」清單，也看不到這個頁籤）。新增/移除副管理者僅限
- * platform_primary（比照 CompanySettingsPage 商家主帳號能管理次帳號的權限模型）。
+ * platform_primary（比照 ChatbotSettingsPage 商家主帳號能管理次帳號的權限模型）。
  */
 export default function AdminAccountsPage() {
   const { token, account: currentAccount } = useAuth();
@@ -82,7 +82,7 @@ export default function AdminAccountsPage() {
       {contextHolder}
       <div>
         <h1>管理者帳號</h1>
-        <p>平台維運帳號，預設對所有商家服務都有存取權限，不受單一公司綁定限制。</p>
+        <p>平台維運帳號，預設對所有商家服務都有存取權限，不受單一 Chatbot 綁定限制。</p>
       </div>
 
       <Card>

@@ -194,7 +194,7 @@ function TagChipsInput({
 }
 
 export default function AdminDocumentsPage() {
-  const { token, selectedCompanyId } = useAuth();
+  const { token, selectedChatbotId } = useAuth();
   const [messageApi, messageContextHolder] = message.useMessage();
   const [modalApi, modalContextHolder] = Modal.useModal();
   const filesInputRef = useRef<HTMLInputElement>(null);
@@ -248,10 +248,10 @@ export default function AdminDocumentsPage() {
   }, [modalApi, navigationBlocker]);
 
   async function loadDocuments() {
-    if (!token || !selectedCompanyId) return;
+    if (!token || !selectedChatbotId) return;
     setLoading(true);
     try {
-      const docs = await fetchDocuments(token, selectedCompanyId);
+      const docs = await fetchDocuments(token, selectedChatbotId);
       setDocuments(docs);
     } catch (err) {
       messageApi.error(err instanceof Error ? err.message : "載入文件列表失敗");
@@ -260,11 +260,11 @@ export default function AdminDocumentsPage() {
     }
   }
 
-  // selectedCompanyId 變動（使用者切換公司）時要重新拉取該公司的文件列表。
+  // selectedChatbotId 變動（使用者切換公司）時要重新拉取該公司的文件列表。
   useEffect(() => {
     loadDocuments();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token, selectedCompanyId]);
+  }, [token, selectedChatbotId]);
 
   useEffect(() => {
     function hasFiles(event: DragEvent): boolean {
@@ -355,7 +355,7 @@ export default function AdminDocumentsPage() {
   }
 
   async function analyzeSelection() {
-    if (selectedFiles.length === 0 || !token || !selectedCompanyId) return;
+    if (selectedFiles.length === 0 || !token || !selectedChatbotId) return;
     setAnalyzing(true);
     setNotice(null);
     try {
@@ -386,7 +386,7 @@ export default function AdminDocumentsPage() {
       const scopePrefix = getScopePrefix(selectedFiles, upperPath);
       const response = await precheckDocuments(
         token,
-        selectedCompanyId,
+        selectedChatbotId,
         items,
         scopePrefix,
       );
@@ -440,7 +440,7 @@ export default function AdminDocumentsPage() {
   }
 
   async function processOneRow(row: ProcessRow) {
-    if (!token || !selectedCompanyId) return;
+    if (!token || !selectedChatbotId) return;
     updateProcessRow(row.path, { progress: "processing" });
     try {
       // new/content_changed 才需要真的帶檔案內容；tags_only_changed/linked 只改標籤紀錄，不用上傳。
@@ -448,7 +448,7 @@ export default function AdminDocumentsPage() {
         row.status === "new" || row.status === "content_changed";
       if (needsFile && !row.file)
         throw new Error("缺少檔案內容，請重新選擇檔案。");
-      await upsertDocument(token, selectedCompanyId, {
+      await upsertDocument(token, selectedChatbotId, {
         path: row.path,
         tags: row.tags,
         clientSha256: row.clientSha256,
@@ -463,10 +463,10 @@ export default function AdminDocumentsPage() {
   }
 
   async function processOneDelete(row: StaleRow) {
-    if (!token || !selectedCompanyId) return;
+    if (!token || !selectedChatbotId) return;
     updateStaleRow(row.path, { progress: "processing" });
     try {
-      await deleteDocument(token, selectedCompanyId, row.path);
+      await deleteDocument(token, selectedChatbotId, row.path);
       updateStaleRow(row.path, { progress: "success" });
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "刪除失敗";
@@ -518,10 +518,10 @@ export default function AdminDocumentsPage() {
   }, [documents, searchText, tagFilters]);
 
   async function handleDelete(path: string) {
-    if (!token || !selectedCompanyId) return;
+    if (!token || !selectedChatbotId) return;
     setNotice(null);
     try {
-      await deleteDocument(token, selectedCompanyId, path);
+      await deleteDocument(token, selectedChatbotId, path);
       setDocuments((prev) => prev.filter((doc) => doc.path !== path));
     } catch (err) {
       messageApi.error(err instanceof Error ? err.message : "刪除文件失敗");
@@ -537,7 +537,7 @@ export default function AdminDocumentsPage() {
           {messageContextHolder}
           {modalContextHolder}
           {/* 讓管理者可以直接在這頁測試「目前選定公司」的聊天機器人回答，不用切去 corp-frontend。 */}
-          <ChatWidgetPreview companyId={selectedCompanyId} />
+          <ChatWidgetPreview chatbotId={selectedChatbotId} />
           {isDraggingFiles ? (
             <div className={ui.ragDragOverlay} aria-hidden="true" />
           ) : null}

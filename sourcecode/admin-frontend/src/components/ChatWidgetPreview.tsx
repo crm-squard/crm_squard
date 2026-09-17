@@ -18,12 +18,12 @@ declare global {
  * DOM 節點跟 script 標籤、重置掛載旗標，才能重新掛載成新公司的 client id。
  */
 export default function ChatWidgetPreview({
-  companyId,
+  chatbotId,
 }: {
-  companyId: string | null;
+  chatbotId: string | null;
 }) {
   useEffect(() => {
-    if (!companyId) return;
+    if (!chatbotId) return;
 
     function cleanup() {
       document
@@ -38,13 +38,13 @@ export default function ChatWidgetPreview({
     cleanup();
     const script = document.createElement("script");
     script.src = WIDGET_SRC;
-    script.dataset.clientId = companyId;
+    script.dataset.clientId = chatbotId;
     script.dataset.crmChatWidgetLoader = "";
     script.defer = true;
     document.body.appendChild(script);
 
     return cleanup;
-  }, [companyId]);
+  }, [chatbotId]);
 
   return null;
 }

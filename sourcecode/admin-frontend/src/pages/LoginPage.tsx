@@ -44,7 +44,7 @@ export default function LoginPage() {
       setError(null);
       try {
         await loginWithIdToken(response.credential);
-        navigate("/select-company", { replace: true });
+        navigate("/select-chatbot", { replace: true });
       } catch (err) {
         setError(
           err instanceof Error

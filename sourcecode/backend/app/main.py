@@ -30,10 +30,10 @@ from app.schemas import (
     AuditLogListResponse,
     ChatRequest,
     ChatResponse,
-    CompanyCreateRequest,
-    CompanyInfo,
-    CompanyListResponse,
-    CompanyUpdateRequest,
+    ChatbotCreateRequest,
+    ChatbotInfo,
+    ChatbotListResponse,
+    ChatbotUpdateRequest,
     DailySummaryResponse,
     DocumentInfo,
     DocumentListResponse,
@@ -75,7 +75,7 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         print(f"[Warning] Backend startup db init failed: {e}")
     try:
-        # 多租戶帳號表（companies/accounts/company_accounts/sessions/audit_log）冪等建立，
+        # 多租戶帳號表（chatbots/accounts/chatbot_accounts/sessions/audit_log）冪等建立，
         # 順便跑 bootstrap_initial_platform_admins()（見 accounts_store._ensure_schema()）。
         accounts_store._ensure_schema()
     except Exception as e:
@@ -105,13 +105,13 @@ RATE_LIMIT_WINDOW_SECONDS = 60
 RATE_LIMIT_MAX_REQUESTS = 20
 _request_log: dict[str, deque] = defaultdict(deque)
 
-# company_id（X-Client-ID）額外的限流：company_id 是公開識別碼，會出現在客戶網站的
+# chatbot_id（X-Client-ID）額外的限流：chatbot_id 是公開識別碼，會出現在客戶網站的
 # widget 原始碼裡，不是密鑰，任何人都拿得到；只靠上面的 per-IP 限流擋不住「換 IP／用多台
-# 機器打同一個 company_id」的濫用，所以另外對 company_id 本身也做一組更寬鬆的總量限制
+# 機器打同一個 chatbot_id」的濫用，所以另外對 chatbot_id 本身也做一組更寬鬆的總量限制
 # （一家商家的真實流量本來就會來自很多不同顧客的 IP，門檻要比單一 IP 高很多）。
-COMPANY_RATE_LIMIT_WINDOW_SECONDS = 60
-COMPANY_RATE_LIMIT_MAX_REQUESTS = 120
-_company_request_log: dict[str, deque] = defaultdict(deque)
+CHATBOT_RATE_LIMIT_WINDOW_SECONDS = 60
+CHATBOT_RATE_LIMIT_MAX_REQUESTS = 120
+_chatbot_request_log: dict[str, deque] = defaultdict(deque)
 
 
 def _check_rate_limit(client_ip: str):
@@ -124,12 +124,12 @@ def _check_rate_limit(client_ip: str):
     timestamps.append(now)
 
 
-def _check_company_rate_limit(company_id: str):
+def _check_chatbot_rate_limit(chatbot_id: str):
     now = time.time()
-    timestamps = _company_request_log[company_id]
-    while timestamps and now - timestamps[0] > COMPANY_RATE_LIMIT_WINDOW_SECONDS:
+    timestamps = _chatbot_request_log[chatbot_id]
+    while timestamps and now - timestamps[0] > CHATBOT_RATE_LIMIT_WINDOW_SECONDS:
         timestamps.popleft()
-    if len(timestamps) >= COMPANY_RATE_LIMIT_MAX_REQUESTS:
+    if len(timestamps) >= CHATBOT_RATE_LIMIT_MAX_REQUESTS:
         raise HTTPException(status_code=429, detail="這家商家的聊天機器人請求量過大，請稍後再試。")
     timestamps.append(now)
 
@@ -156,7 +156,7 @@ def health():
 def login_with_google(req: GoogleLoginRequest):
     """
     驗證前端拿到的 Google ID token，查帳號表；帳號不存在時自動建立一個 tenant_primary 帳號
-    （商家自助註冊，不用平台方手動加入），但不會自動幫他建立任何企業服務（company），
+    （商家自助註冊，不用平台方手動加入），但不會自動幫他建立任何企業服務（chatbot），
     商家登入後要自己在後台新增第一個企業服務。驗證成功建立 session，回傳明文 token
     （僅此一次，之後的請求都帶 Authorization: Bearer <token>）。
     """
@@ -193,10 +193,10 @@ def logout(authorization: str | None = Header(default=None)):
 @app.get("/api/auth/me", response_model=MeResponse)
 def get_me(account: dict = Depends(auth.require_session)):
     """回傳目前登入帳號資訊，以及這個帳號看得到的公司清單（platform 角色回全部）。"""
-    companies = accounts_store.list_companies_visible_to(account)
+    chatbots = accounts_store.list_chatbots_visible_to(account)
     return MeResponse(
         account=AccountInfo(**account),
-        companies=[CompanyInfo(**c) for c in companies],
+        chatbots=[ChatbotInfo(**c) for c in chatbots],
     )
 
 
@@ -224,13 +224,13 @@ DEFAULT_QUICK_REPLIES = ["無線滑鼠支援多少 DPI？", "查詢訂單 A12345
 def widget_config(_client_id: str = Depends(_require_client_id)):
     """
     開頭語（welcome_message）、開場快速提問（quick_replies）依 _client_id（就是
-    company_id，見 _lookup_company）讀取公司自訂的值；查無公司或公司沒填就退回
+    chatbot_id，見 _lookup_chatbot）讀取公司自訂的值；查無公司或公司沒填就退回
     DEFAULT_WELCOME_MESSAGE／DEFAULT_QUICK_REPLIES（原本 chat-widget 端寫死的內容搬過來
     當預設值），不讓 widget 掛掉。其餘品牌樣式 MVP 先共用，之後可以一併搬進公司資訊頁面。
     """
-    company = _lookup_company(_client_id)
-    welcome_message = (company.get("welcome_message") if company else None) or DEFAULT_WELCOME_MESSAGE
-    quick_replies = (company.get("quick_replies") if company else None) or DEFAULT_QUICK_REPLIES
+    chatbot = _lookup_chatbot(_client_id)
+    welcome_message = (chatbot.get("welcome_message") if chatbot else None) or DEFAULT_WELCOME_MESSAGE
+    quick_replies = (chatbot.get("quick_replies") if chatbot else None) or DEFAULT_QUICK_REPLIES
     return WidgetConfig(
         brand_name="線上客服",
         welcome_message=welcome_message,
@@ -247,14 +247,14 @@ def widget_config(_client_id: str = Depends(_require_client_id)):
 
 @app.get("/api/admin/summary", response_model=DailySummaryResponse)
 def admin_summary(
-    company_id: str = Query(...),
+    chatbot_id: str = Query(...),
     date: str | None = None,
-    _account: dict = Depends(auth.require_company_access),
+    _account: dict = Depends(auth.require_chatbot_access),
 ):
     """
     管理者查看指定公司、指定日期（預設今天，UTC）使用者提問的主題摘要。
 
-    company_id 必填 + require_company_access：只有 platform 帳號或綁定這家公司的帳號
+    chatbot_id 必填 + require_chatbot_access：只有 platform 帳號或綁定這家公司的帳號
     才能看到這家公司的顧客提問內容，比照 /api/admin/documents* 的驗證模式。
     """
     if date is None:
@@ -263,7 +263,7 @@ def admin_summary(
         raise HTTPException(status_code=400, detail="date 格式須為 YYYY-MM-DD")
 
     try:
-        result = summarize_day(date, company_id)
+        result = summarize_day(date, chatbot_id)
     except Exception as e:
         # 同 /api/chat：未預期的例外要在應用程式層處理掉，回傳正常的錯誤回應，
         # 避免整個請求掛掉變成 Cloud Run 層級的 502/503（不帶 CORS 標頭）。
@@ -280,18 +280,18 @@ def _get_llamaindex_index():
 
 
 @app.get("/api/admin/documents", response_model=DocumentListResponse)
-def list_documents(company_id: str = Query(...), _account: dict = Depends(auth.require_company_access)):
+def list_documents(chatbot_id: str = Query(...), _account: dict = Depends(auth.require_chatbot_access)):
     """
     列出這家公司知識庫目前所有路徑（一份內容掛兩個路徑就是兩列，各自標籤），供管理頁面畫列表。
 
-    company_id 查詢參數 + require_company_access：只有 platform 帳號或綁定這家公司的帳號
+    chatbot_id 查詢參數 + require_chatbot_access：只有 platform 帳號或綁定這家公司的帳號
     才能查看（見 app/auth.py）。
     """
     from app.rag.documents_store import list_documents as _list_documents
 
     _get_llamaindex_index()  # 確認 pgvector 連線正常，不通就提早回錯誤
     try:
-        docs = _list_documents(company_id)
+        docs = _list_documents(chatbot_id)
     except Exception as e:
         print(f"[Documents Error] list failed: {e}")
         raise HTTPException(status_code=502, detail="讀取知識庫文件列表時發生錯誤，請稍後再試。")
@@ -321,7 +321,7 @@ def _check_client_hash(server_hash: str, client_sha256: str):
 
 @app.post("/api/admin/documents/precheck", response_model=PrecheckResponse)
 def precheck_documents(
-    req: PrecheckRequest, company_id: str = Query(...), _account: dict = Depends(auth.require_company_access)
+    req: PrecheckRequest, chatbot_id: str = Query(...), _account: dict = Depends(auth.require_chatbot_access)
 ):
     """
     批次上傳前的預檢：對每個 (path, client_sha256, tags) 交叉查「這家公司底下這個路徑目前
@@ -341,12 +341,12 @@ def precheck_documents(
         seen_paths = set()
         for item in req.items:
             seen_paths.add(item.path)
-            label = get_label(company_id, item.path)
+            label = get_label(chatbot_id, item.path)
             if label is not None and label["content_hash"] == item.client_sha256:
                 status: Literal[
                     "new", "unchanged", "content_changed", "tags_only_changed", "linked"
                 ] = "unchanged" if set(label["tags"]) == set(item.tags) else "tags_only_changed"
-            elif find_document_by_hash(company_id, item.client_sha256) is not None:
+            elif find_document_by_hash(chatbot_id, item.client_sha256) is not None:
                 status = "linked"
             elif label is not None:
                 status = "content_changed"
@@ -357,7 +357,7 @@ def precheck_documents(
         stale_paths: list[str] = []
         if req.scope_prefix:
             stale_paths = [
-                p for p in list_paths_by_prefix(company_id, req.scope_prefix) if p not in seen_paths
+                p for p in list_paths_by_prefix(chatbot_id, req.scope_prefix) if p not in seen_paths
             ]
     except Exception as e:
         print(f"[Documents Error] precheck failed: {e}")
@@ -371,14 +371,14 @@ def upsert_document(
     tags: list[str] = Form(default=[]),
     client_sha256: str = Form(...),
     file: UploadFile | None = File(default=None),
-    company_id: str = Query(...),
-    account: dict = Depends(auth.require_company_access),
+    chatbot_id: str = Query(...),
+    account: dict = Depends(auth.require_chatbot_access),
 ):
     """
     新增/更新內容/改標籤/掛到既有內容（linked）統一走這支端點，不需要呼叫端提供 doc_id。
     後端依「這家公司底下這個路徑目前指向什麼」跟「這個雜湊是不是已經存在這家公司別的地方」
     決定實際動作，見 app/rag/documents_store.py 的 upsert_document()。平台帳號也能直接修改
-    商家的 RAG 資料（非唯讀），跟商家帳號走同一條路徑，差別只在權限檢查（require_company_access
+    商家的 RAG 資料（非唯讀），跟商家帳號走同一條路徑，差別只在權限檢查（require_chatbot_access
     對 platform 角色一律放行）。
 
     `file` 只有在真的需要新內容（新文件／內容變更）時才要帶；純改標籤或掛到既有內容
@@ -393,7 +393,7 @@ def upsert_document(
         raw_text = _read_md_upload(file)
         _check_client_hash(hash_content(raw_text), client_sha256)
     try:
-        result = _upsert_document(company_id, path, tags, client_sha256, raw_text, index)
+        result = _upsert_document(chatbot_id, path, tags, client_sha256, raw_text, index)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -402,7 +402,7 @@ def upsert_document(
     try:
         accounts_store.record_audit(
             account["id"], action="upsert_document", target_type="kb_document", target_id=path,
-            detail={"company_id": company_id, "status": result["status"], "tags": tags},
+            detail={"chatbot_id": chatbot_id, "status": result["status"], "tags": tags},
         )
     except Exception as e:
         # 稽核紀錄失敗不該讓文件已經寫入成功的請求跟著失敗，只印 log。
@@ -415,7 +415,7 @@ def upsert_document(
 
 @app.delete("/api/admin/documents/{path:path}")
 def delete_document(
-    path: str, company_id: str = Query(...), account: dict = Depends(auth.require_company_access)
+    path: str, chatbot_id: str = Query(...), account: dict = Depends(auth.require_chatbot_access)
 ):
     """
     刪除這家公司底下這個路徑的標籤紀錄；該內容如果沒有其他路徑指著了，才真的刪掉向量與內容紀錄
@@ -425,7 +425,7 @@ def delete_document(
 
     index = _get_llamaindex_index()
     try:
-        deleted = delete_document_by_path(company_id, path, index)
+        deleted = delete_document_by_path(chatbot_id, path, index)
     except Exception as e:
         print(f"[Documents Error] delete {path} failed: {e}")
         raise HTTPException(status_code=502, detail="刪除知識庫文件時發生錯誤，請稍後再試。")
@@ -434,89 +434,89 @@ def delete_document(
     try:
         accounts_store.record_audit(
             account["id"], action="delete_document", target_type="kb_document", target_id=path,
-            detail={"company_id": company_id},
+            detail={"chatbot_id": chatbot_id},
         )
     except Exception as e:
         print(f"[Audit Error] delete_document {path} failed to record: {e}")
     return {"status": "deleted", "path": path}
 
 
-# ---- 公司（商家服務）管理：/api/admin/companies ----
+# ---- 公司（商家服務）管理：/api/admin/chatbots ----
 
 
-@app.post("/api/admin/companies", response_model=CompanyInfo)
-def create_company(req: CompanyCreateRequest, account: dict = Depends(auth.require_session)):
+@app.post("/api/admin/chatbots", response_model=ChatbotInfo)
+def create_chatbot(req: ChatbotCreateRequest, account: dict = Depends(auth.require_session)):
     """
     任何已登入帳號都能新增企業服務（商家自助開通，不用平台方手動加入），建立後一律自動綁定
-    建立者（不分 tenant／platform 角色）：讓一個商家帳號可以自己開多個 company_id；
+    建立者（不分 tenant／platform 角色）：讓一個商家帳號可以自己開多個 chatbot_id；
     管理者帳號建立公司時也綁定，讓「管理者帳號本來就是這家公司的創建者」這件事在公司設定頁
     的協作帳號清單裡看得到、也能正常增減——管理者角色本來就對所有公司有存取權（不靠這個
     綁定），這裡綁定純粹是為了在「這家公司」的視角下如實記錄跟顯示創建者。
     """
-    company = accounts_store.create_company(req.name, req.mcp_url, req.welcome_message, req.quick_replies)
-    accounts_store.bind_company(account["id"], company["id"], role="primary")
+    chatbot = accounts_store.create_chatbot(req.name, req.mcp_url, req.welcome_message, req.quick_replies)
+    accounts_store.bind_chatbot(account["id"], chatbot["id"], role="primary")
     accounts_store.record_audit(
-        account["id"], action="create_company", target_type="company", target_id=company["id"],
+        account["id"], action="create_chatbot", target_type="chatbot", target_id=chatbot["id"],
         detail={"name": req.name},
     )
-    return CompanyInfo(**company)
+    return ChatbotInfo(**chatbot)
 
 
-@app.get("/api/admin/companies", response_model=CompanyListResponse)
-def list_companies(account: dict = Depends(auth.require_session)):
+@app.get("/api/admin/chatbots", response_model=ChatbotListResponse)
+def list_chatbots(account: dict = Depends(auth.require_session)):
     """回傳呼叫者可見的公司清單：platform 角色看全部，tenant 角色只看自己綁定的。"""
-    companies = accounts_store.list_companies_visible_to(account)
-    return CompanyListResponse(companies=[CompanyInfo(**c) for c in companies])
+    chatbots = accounts_store.list_chatbots_visible_to(account)
+    return ChatbotListResponse(chatbots=[ChatbotInfo(**c) for c in chatbots])
 
 
-@app.put("/api/admin/companies/{company_id}", response_model=CompanyInfo)
-def update_company(
-    company_id: str, req: CompanyUpdateRequest, account: dict = Depends(auth.require_company_access)
+@app.put("/api/admin/chatbots/{chatbot_id}", response_model=ChatbotInfo)
+def update_chatbot(
+    chatbot_id: str, req: ChatbotUpdateRequest, account: dict = Depends(auth.require_chatbot_access)
 ):
     """
     更新公司資訊（name／mcp_url／welcome_message／quick_replies）：platform 帳號或綁定
     這家公司的商家帳號都能改，對應「公司資訊頁面可設定 MCP URL、聊天機器人開頭語、
     開場快速提問」的需求。
     """
-    company = accounts_store.update_company(
-        company_id, req.name, req.mcp_url, req.welcome_message, req.quick_replies
+    chatbot = accounts_store.update_chatbot(
+        chatbot_id, req.name, req.mcp_url, req.welcome_message, req.quick_replies
     )
-    if company is None:
+    if chatbot is None:
         raise HTTPException(status_code=404, detail="查無這家公司。")
     accounts_store.record_audit(
-        account["id"], action="update_company", target_type="company", target_id=company_id,
+        account["id"], action="update_chatbot", target_type="chatbot", target_id=chatbot_id,
         detail={
             "name": req.name, "mcp_url": req.mcp_url, "welcome_message": req.welcome_message,
             "quick_replies": req.quick_replies,
         },
     )
-    return CompanyInfo(**company)
+    return ChatbotInfo(**chatbot)
 
 
-@app.delete("/api/admin/companies/{company_id}")
-def delete_company(company_id: str, account: dict = Depends(auth.require_company_access)):
+@app.delete("/api/admin/chatbots/{chatbot_id}")
+def delete_chatbot(chatbot_id: str, account: dict = Depends(auth.require_chatbot_access)):
     """
-    硬刪除公司：platform 角色或綁定這家公司的商家帳號都能刪除（比照 update_company 的權限
+    硬刪除公司：platform 角色或綁定這家公司的商家帳號都能刪除（比照 update_chatbot 的權限
     模型）——商家自助建立公司後，理當也能自己刪除，不用另外找平台方。連同該公司的 RAG
-    文件記錄與向量 chunk 一起清掉（見 documents_store.purge_company()），company_accounts
+    文件記錄與向量 chunk 一起清掉（見 documents_store.purge_chatbot()），chatbot_accounts
     綁定靠 ON DELETE CASCADE 自動清。
     """
-    from app.rag.documents_store import purge_company
+    from app.rag.documents_store import purge_chatbot
 
     index = _get_llamaindex_index()
-    deleted = accounts_store.delete_company(company_id)
+    deleted = accounts_store.delete_chatbot(chatbot_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="查無這家公司。")
     try:
-        purge_company(company_id, index)
+        purge_chatbot(chatbot_id, index)
     except Exception as e:
         # 公司本身已經刪除成功；RAG 資料清理失敗只印 log，不讓整個刪除請求回錯誤
-        # （避免呼叫端誤以為公司沒刪成功而重試，造成後續 accounts_store.delete_company 再次回 404 的困惑）。
-        print(f"[Company Delete Error] purge_company {company_id} failed: {e}")
+        # （避免呼叫端誤以為公司沒刪成功而重試，造成後續 accounts_store.delete_chatbot 再次回 404 的困惑）。
+        print(f"[Chatbot Delete Error] purge_chatbot {chatbot_id} failed: {e}")
     accounts_store.record_audit(
-        account["id"], action="delete_company", target_type="company", target_id=company_id,
+        account["id"], action="delete_chatbot", target_type="chatbot", target_id=chatbot_id,
     )
-    return {"status": "deleted", "company_id": company_id}
+    return {"status": "deleted", "chatbot_id": chatbot_id}
 
 
 # ---- 帳號管理：/api/admin/accounts（主帳號/主開發者新增次帳號/次開發者） ----
@@ -526,7 +526,7 @@ def _can_manage_account_for(actor: dict, req: AccountCreateRequest) -> bool:
     """
     新增/移除帳號的權限判斷：
     - 新增 platform_secondary：僅限 platform_primary。
-    - 新增/綁定 tenant_*（某 company 的協作帳號）：呼叫者要是這家公司的 primary
+    - 新增/綁定 tenant_*（某 chatbot 的協作帳號）：呼叫者要是這家公司的 primary
       （不是「任何有綁定的帳號」——secondary 看得到協作帳號清單，但不能增減，比照
       「主商家帳號可以增加減少協作商家帳號」這個規則；platform 角色永遠可以）。
     """
@@ -534,17 +534,17 @@ def _can_manage_account_for(actor: dict, req: AccountCreateRequest) -> bool:
         return False  # 不開放透過 API 新增第二個 platform_primary，避免權限模型混亂
     if req.role == "platform_secondary":
         return actor["role"] == "platform_primary"
-    # tenant_primary / tenant_secondary：req.role 只用來決定這家公司的 company_role
+    # tenant_primary / tenant_secondary：req.role 只用來決定這家公司的 chatbot_role
     # （primary／secondary），不是帳號的全域角色，見下面 create_account()。
-    if not req.company_id:
+    if not req.chatbot_id:
         return False
-    return accounts_store.is_company_primary(actor, req.company_id)
+    return accounts_store.is_chatbot_primary(actor, req.chatbot_id)
 
 
 @app.post("/api/admin/accounts", response_model=AccountInfo)
 def create_account(req: AccountCreateRequest, actor: dict = Depends(auth.require_session)):
     """
-    req.role 對 tenant_* 只用來決定「這家公司」的身分（tenant_primary → company_accounts.role
+    req.role 對 tenant_* 只用來決定「這家公司」的身分（tenant_primary → chatbot_accounts.role
     = 'primary'，tenant_secondary → 'secondary'），不會拿來覆寫帳號的全域角色（accounts.role）：
     一個帳號可以是 A 公司的 primary、同時是 B 公司的 secondary，全域角色只在帳號第一次被建立
     （這個 email 在系統裡完全沒出現過）時才需要決定。
@@ -557,20 +557,20 @@ def create_account(req: AccountCreateRequest, actor: dict = Depends(auth.require
     if not _can_manage_account_for(actor, req):
         raise HTTPException(status_code=403, detail="沒有權限新增這個角色的帳號。")
     existing = accounts_store.get_account_by_email(req.email)
-    if req.role in accounts_store.TENANT_ROLES and req.company_id:
-        company_role = "primary" if req.role == "tenant_primary" else "secondary"
+    if req.role in accounts_store.TENANT_ROLES and req.chatbot_id:
+        chatbot_role = "primary" if req.role == "tenant_primary" else "secondary"
         if existing is not None:
-            accounts_store.bind_company(existing["id"], req.company_id, role=company_role)
+            accounts_store.bind_chatbot(existing["id"], req.chatbot_id, role=chatbot_role)
             accounts_store.record_audit(
                 actor["id"], action="bind_existing_account", target_type="account", target_id=existing["id"],
-                detail={"email": req.email, "company_id": req.company_id, "company_role": company_role},
+                detail={"email": req.email, "chatbot_id": req.chatbot_id, "chatbot_role": chatbot_role},
             )
             return AccountInfo(**existing)
         account = accounts_store.create_account(req.email, req.role, actor["id"])
-        accounts_store.bind_company(account["id"], req.company_id, role=company_role)
+        accounts_store.bind_chatbot(account["id"], req.chatbot_id, role=chatbot_role)
         accounts_store.record_audit(
             actor["id"], action="create_account", target_type="account", target_id=account["id"],
-            detail={"email": req.email, "role": req.role, "company_id": req.company_id},
+            detail={"email": req.email, "role": req.role, "chatbot_id": req.chatbot_id},
         )
         return AccountInfo(**account)
 
@@ -580,24 +580,24 @@ def create_account(req: AccountCreateRequest, actor: dict = Depends(auth.require
     account = accounts_store.create_account(req.email, req.role, actor["id"])
     accounts_store.record_audit(
         actor["id"], action="create_account", target_type="account", target_id=account["id"],
-        detail={"email": req.email, "role": req.role, "company_id": req.company_id},
+        detail={"email": req.email, "role": req.role, "chatbot_id": req.chatbot_id},
     )
     return AccountInfo(**account)
 
 
 @app.get("/api/admin/accounts", response_model=AccountListResponse)
-def list_accounts(company_id: str | None = Query(default=None), actor: dict = Depends(auth.require_session)):
+def list_accounts(chatbot_id: str | None = Query(default=None), actor: dict = Depends(auth.require_session)):
     """
-    帶 company_id：回傳這家公司綁定的商家帳號（公司設定頁「管理帳號」用），呼叫者要對這家
-    公司有存取權，比照 update_company／audit-log 的權限模式；不含管理者帳號，天生就不會
+    帶 chatbot_id：回傳這家公司綁定的商家帳號（公司設定頁「管理帳號」用），呼叫者要對這家
+    公司有存取權，比照 update_chatbot／audit-log 的權限模式；不含管理者帳號，天生就不會
     混進其他公司的協作帳號。
-    不帶 company_id：回傳所有管理者帳號（platform_primary／platform_secondary，「管理者
+    不帶 chatbot_id：回傳所有管理者帳號（platform_primary／platform_secondary，「管理者
     帳號」頁籤用），僅限 platform 角色呼叫，商家帳號沒有理由要看到管理者帳號清單。
     """
-    if company_id:
-        if not accounts_store.account_has_company_access(actor, company_id):
+    if chatbot_id:
+        if not accounts_store.account_has_chatbot_access(actor, chatbot_id):
             raise HTTPException(status_code=403, detail="沒有這家公司的存取權限。")
-        accounts = accounts_store.list_accounts_for_company(company_id)
+        accounts = accounts_store.list_accounts_for_chatbot(chatbot_id)
     else:
         if actor["role"] not in accounts_store.PLATFORM_ROLES:
             raise HTTPException(status_code=403, detail="此操作僅限平台維運帳號。")
@@ -607,31 +607,31 @@ def list_accounts(company_id: str | None = Query(default=None), actor: dict = De
 
 @app.delete("/api/admin/accounts/{account_id}")
 def delete_account(
-    account_id: str, company_id: str | None = Query(default=None), actor: dict = Depends(auth.require_session)
+    account_id: str, chatbot_id: str | None = Query(default=None), actor: dict = Depends(auth.require_session)
 ):
     """
-    帶 company_id：只把這個帳號從**這家公司**移除協作關係（unbind_company），不刪除帳號
+    帶 chatbot_id：只把這個帳號從**這家公司**移除協作關係（unbind_chatbot），不刪除帳號
     本身——一個帳號可能同時是別家公司的主帳號/協作帳號，整個刪掉會連帶砍掉那些完全無關的
     關係。呼叫者要是這家公司的 primary（或 platform）才能移除，對應「主商家帳號可以增加
     減少協作商家帳號」。移除後該帳號只是存取不到這家公司，session 不受影響（他可能還在管
     別家公司），不是「立刻無法登入」。
 
-    不帶 company_id：刪除整個帳號（目前只有「管理者帳號」頁籤在用，移除 platform_secondary），
-    連帶清掉所有 company_accounts 綁定跟 sessions（ON DELETE CASCADE）。
+    不帶 chatbot_id：刪除整個帳號（目前只有「管理者帳號」頁籤在用，移除 platform_secondary），
+    連帶清掉所有 chatbot_accounts 綁定跟 sessions（ON DELETE CASCADE）。
     """
     target = accounts_store.get_account_by_id(account_id)
     if target is None:
         raise HTTPException(status_code=404, detail="查無這個帳號。")
 
-    if company_id:
-        if not accounts_store.is_company_primary(actor, company_id):
+    if chatbot_id:
+        if not accounts_store.is_chatbot_primary(actor, chatbot_id):
             raise HTTPException(status_code=403, detail="沒有權限移除這家公司的協作帳號。")
-        accounts_store.unbind_company(account_id, company_id)
+        accounts_store.unbind_chatbot(account_id, chatbot_id)
         accounts_store.record_audit(
-            actor["id"], action="unbind_account_from_company", target_type="account", target_id=account_id,
-            detail={"email": target["email"], "company_id": company_id},
+            actor["id"], action="unbind_account_from_chatbot", target_type="account", target_id=account_id,
+            detail={"email": target["email"], "chatbot_id": chatbot_id},
         )
-        return {"status": "unbound", "account_id": account_id, "company_id": company_id}
+        return {"status": "unbound", "account_id": account_id, "chatbot_id": chatbot_id}
 
     if target["role"] == "platform_primary":
         raise HTTPException(status_code=403, detail="不能透過 API 刪除 platform_primary 帳號。")
@@ -640,35 +640,35 @@ def delete_account(
             raise HTTPException(status_code=403, detail="沒有權限刪除這個帳號。")
     else:
         # tenant_* 帳號：呼叫者要對這個帳號目前綁定的任一家公司有存取權才能整個刪
-        companies = accounts_store.list_companies_visible_to(target)
+        chatbots = accounts_store.list_chatbots_visible_to(target)
         if actor["role"] not in accounts_store.PLATFORM_ROLES and not any(
-            accounts_store.account_has_company_access(actor, c["id"]) for c in companies
+            accounts_store.account_has_chatbot_access(actor, c["id"]) for c in chatbots
         ):
             raise HTTPException(status_code=403, detail="沒有權限刪除這個帳號。")
-    target_companies = accounts_store.list_companies_visible_to(target) if target["role"] in accounts_store.TENANT_ROLES else []
+    target_chatbots = accounts_store.list_chatbots_visible_to(target) if target["role"] in accounts_store.TENANT_ROLES else []
     accounts_store.delete_account(account_id)
     accounts_store.record_audit(
         actor["id"], action="delete_account", target_type="account", target_id=account_id,
         detail={
             "email": target["email"],
-            # 只記第一家，稽核頁面用這個欄位做 company_id 過濾；帳號同時綁多家公司是少數情況，
+            # 只記第一家，稽核頁面用這個欄位做 chatbot_id 過濾；帳號同時綁多家公司是少數情況，
             # 這裡不為了這個邊角案例把 detail 改成陣列、多寫一套查詢邏輯。
-            "company_id": target_companies[0]["id"] if target_companies else None,
+            "chatbot_id": target_chatbots[0]["id"] if target_chatbots else None,
         },
     )
     return {"status": "deleted", "account_id": account_id}
 
 
-# ---- 稽核紀錄：/api/admin/audit-log（依 company_id 查這家公司相關的異動紀錄） ----
+# ---- 稽核紀錄：/api/admin/audit-log（依 chatbot_id 查這家公司相關的異動紀錄） ----
 
 
 @app.get("/api/admin/audit-log", response_model=AuditLogListResponse)
-def get_audit_log(company_id: str = Query(...), _account: dict = Depends(auth.require_company_access)):
+def get_audit_log(chatbot_id: str = Query(...), _account: dict = Depends(auth.require_chatbot_access)):
     """
     查一家公司的稽核紀錄：權限比照 /api/admin/summary，只有 platform 帳號或綁定這家公司的
     帳號才能看。內容涵蓋公司異動、RAG 文件上傳/刪除、這家公司協作帳號的新增/移除。
     """
-    entries = accounts_store.list_audit_log_for_company(company_id)
+    entries = accounts_store.list_audit_log_for_chatbot(chatbot_id)
     return AuditLogListResponse(entries=[AuditLogEntry(**e) for e in entries])
 
 
@@ -676,16 +676,16 @@ def get_audit_log(company_id: str = Query(...), _account: dict = Depends(auth.re
 async def chat(req: ChatRequest, request: Request, _client_id: str = Depends(_require_client_id)):
     client_ip = request.client.host if request.client else "unknown"
     _check_rate_limit(client_ip)
-    _check_company_rate_limit(_client_id)
+    _check_chatbot_rate_limit(_client_id)
 
     text = req.message.strip()
     history = [{"role": h.role, "content": h.content} for h in req.history]
     history = history[-(settings.MAX_HISTORY_TURNS * 2):]
     try:
-        # X-Client-ID（_client_id）現在就是 companies 表的 company_id（見
+        # X-Client-ID（_client_id）現在就是 chatbots 表的 chatbot_id（見
         # sourcecode/chat-widget/README.md 的 data-client-id 說明）；沒對應到任何公司時
         # 檢索合理地回傳空結果（不是錯誤），不影響其他訂單分流邏輯。
-        response = await _handle_chat(text, history, req.provider, company_id=_client_id)
+        response = await _handle_chat(text, history, req.provider, chatbot_id=_client_id)
     except Exception as e:
         # 任何未預期的例外（金鑰失效、首次建索引逾時等）都要回傳正常的 200 回應，
         # 讓 FastAPI/CORSMiddleware 有機會處理，避免請求整個掛掉變成 Cloud Run
@@ -697,7 +697,7 @@ async def chat(req: ChatRequest, request: Request, _client_id: str = Depends(_re
         log_text = response.text if response.text is not None else f"[訂單 {response.code}]"
         log_chat(
             message=text, response_type=response.type, response_text=log_text, client_ip=client_ip,
-            company_id=_client_id,
+            chatbot_id=_client_id,
         )
     except Exception:
         # 對話紀錄失敗不該讓使用者的聊天請求跟著失敗
@@ -706,23 +706,23 @@ async def chat(req: ChatRequest, request: Request, _client_id: str = Depends(_re
     return response
 
 
-def _lookup_company(company_id: str | None) -> dict | None:
+def _lookup_chatbot(chatbot_id: str | None) -> dict | None:
     """
-    company_id 來自未經驗證的 X-Client-ID header，可能是 None、空字串，或格式不合法的
-    UUID；accounts_store.get_company() 底層是 Postgres 查詢，帶入不合法 UUID 會直接拋
+    chatbot_id 來自未經驗證的 X-Client-ID header，可能是 None、空字串，或格式不合法的
+    UUID；accounts_store.get_chatbot() 底層是 Postgres 查詢，帶入不合法 UUID 會直接拋
     例外，這裡統一包一層防呆，查不到／格式不對都當作「查無公司」，不能讓呼叫端的請求
     跟著炸掉。widget_config() 與 _handle_chat() 的訂單查詢分流都靠這個函式取得公司資料。
     """
-    if not company_id:
+    if not chatbot_id:
         return None
     try:
-        return accounts_store.get_company(company_id)
+        return accounts_store.get_chatbot(chatbot_id)
     except Exception:
         return None
 
 
 async def _handle_chat(
-    text: str, history: list, provider: str, company_id: str | None = None
+    text: str, history: list, provider: str, chatbot_id: str | None = None
 ) -> ChatResponse:
     if not text:
         return ChatResponse(type="text", text="請輸入您的問題。")
@@ -735,15 +735,15 @@ async def _handle_chat(
                 text="請提供訂單編號（例如 A12345 或 ORD-500001）以便查詢。",
             )
         code = match.group(0)
-        company = _lookup_company(company_id)
-        if not company or not company.get("mcp_url"):
+        chatbot = _lookup_chatbot(chatbot_id)
+        if not chatbot or not chatbot.get("mcp_url"):
             # 沒有對應公司，或公司沒填 mcp_url：這家服務沒開訂單查詢功能，不落到 SQLite
             # fallback（那是全域 demo 資料，跟任何一家真的公司無關，不該冒充出現）。
             return ChatResponse(
                 type="text",
                 text="此服務目前尚未提供訂單查詢功能，如需協助請聯繫客服（0800-123-456）。",
             )
-        order = await get_order(code, company["mcp_url"])
+        order = await get_order(code, chatbot["mcp_url"])
         if order is None:
             return ChatResponse(
                 type="text",
@@ -758,7 +758,7 @@ async def _handle_chat(
         )
 
     agent = get_agent()
-    answer, retrieved = agent.generate_answer(text, history=history, provider=provider, company_id=company_id)
+    answer, retrieved = agent.generate_answer(text, history=history, provider=provider, chatbot_id=chatbot_id)
     if not retrieved:
         # 沒有實際檢索結果（查無資訊、provider 未設定或呼叫失敗）：這是提示/錯誤訊息，不是
         # 根據知識庫生成的產品/政策回答，依 contracts.md 的分類該用 type: text，且不該帶無關的 source。

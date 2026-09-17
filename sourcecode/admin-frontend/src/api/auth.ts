@@ -4,7 +4,7 @@ export type AccountRole =
   | "tenant_primary"
   | "tenant_secondary";
 
-export type CompanyRole = "primary" | "secondary";
+export type ChatbotRole = "primary" | "secondary";
 
 export interface Account {
   id: string;
@@ -12,12 +12,12 @@ export interface Account {
   role: AccountRole;
   created_by: string | null;
   created_at: string;
-  // 這個帳號在「某一家公司」的身分，只有依 company_id 查出來的帳號才有值；
+  // 這個帳號在「某一家公司」的身分，只有依 chatbot_id 查出來的帳號才有值；
   // 跟上面全域的 role 是分開的兩件事（同一帳號在不同公司可能不一樣）。
-  company_role?: CompanyRole | null;
+  chatbot_role?: ChatbotRole | null;
 }
 
-export interface CompanyInfo {
+export interface ChatbotInfo {
   id: string;
   name: string;
   mcp_url: string | null;
@@ -25,12 +25,12 @@ export interface CompanyInfo {
   quick_replies: string[] | null;
   created_at: string;
   // 目前登入帳號在這家公司的身分；platform 帳號沒有這個概念，固定是 null。
-  your_role?: CompanyRole | null;
+  your_role?: ChatbotRole | null;
 }
 
 export interface MeResponse {
   account: Account;
-  companies: CompanyInfo[];
+  chatbots: ChatbotInfo[];
 }
 
 export interface LoginResponse {

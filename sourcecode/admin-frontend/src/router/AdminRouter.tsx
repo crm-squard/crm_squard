@@ -13,8 +13,8 @@ const OrderDetailPage = lazy(() => import("../pages/OrderDetailPage"));
 const OrdersPage = lazy(() => import("../pages/OrdersPage"));
 const RagPage = lazy(() => import("../pages/RagPage"));
 const LoginPage = lazy(() => import("../pages/LoginPage"));
-const CompanySelectPage = lazy(() => import("../pages/CompanySelectPage"));
-const CompanySettingsPage = lazy(() => import("../pages/CompanySettingsPage"));
+const ChatbotSelectPage = lazy(() => import("../pages/ChatbotSelectPage"));
+const ChatbotSettingsPage = lazy(() => import("../pages/ChatbotSettingsPage"));
 const SummaryPage = lazy(() => import("../pages/SummaryPage"));
 const AdminAccountsPage = lazy(() => import("../pages/AdminAccountsPage"));
 
@@ -32,7 +32,7 @@ function loadPage(page: ReactNode) {
 
 const router = createBrowserRouter([
   { path: "login", element: loadPage(<LoginPage />) },
-  { path: "select-company", element: loadPage(<CompanySelectPage />) },
+  { path: "select-chatbot", element: loadPage(<ChatbotSelectPage />) },
   {
     element: (
       <RequireAuth>
@@ -44,7 +44,7 @@ const router = createBrowserRouter([
       { path: "orders", element: loadPage(<OrdersPage />) },
       { path: "orders/:orderId", element: loadPage(<OrderDetailPage />) },
       { path: "rag", element: loadPage(<RagPage />) },
-      { path: "company-settings", element: loadPage(<CompanySettingsPage />) },
+      { path: "chatbot-settings", element: loadPage(<ChatbotSettingsPage />) },
       { path: "summary", element: loadPage(<SummaryPage />) },
       { path: "admin-accounts", element: loadPage(<AdminAccountsPage />) },
       { path: "*", element: <Navigate to="/" replace /> },

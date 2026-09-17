@@ -2,7 +2,7 @@
 共用 Postgres（pgvector 所在的同一個資料庫）SQLAlchemy engine。
 
 原本 app/rag/documents_store.py 自己有一份私有的 _get_engine()；多租戶帳號相關的
-app/accounts_store.py 需要連到同一個資料庫（companies/accounts/... 跟 kb_documents 同庫），
+app/accounts_store.py 需要連到同一個資料庫（chatbots/accounts/... 跟 kb_documents 同庫），
 把 engine 建立邏輯搬來這裡共用，避免兩個模組各自維護一份連線池設定（也避免兩個 process
 內 engine 造成不必要的連線數）。
 """

@@ -11,7 +11,7 @@ import {
   loginWithGoogle,
   logout as logoutApi,
   type Account,
-  type CompanyInfo,
+  type ChatbotInfo,
 } from "../api/auth";
 
 const STORAGE_KEY = "admin_auth_state";
@@ -19,15 +19,15 @@ const STORAGE_KEY = "admin_auth_state";
 interface StoredAuthState {
   token: string | null;
   account: Account | null;
-  companies: CompanyInfo[];
-  selectedCompanyId: string | null;
+  chatbots: ChatbotInfo[];
+  selectedChatbotId: string | null;
 }
 
 const EMPTY_STATE: StoredAuthState = {
   token: null,
   account: null,
-  companies: [],
-  selectedCompanyId: null,
+  chatbots: [],
+  selectedChatbotId: null,
 };
 
 // token 是可撤銷的 opaque session token（非密碼），存 localStorage 讓重整頁面不用重新登入，
@@ -40,8 +40,8 @@ function loadStoredState(): StoredAuthState {
     return {
       token: parsed.token ?? null,
       account: parsed.account ?? null,
-      companies: parsed.companies ?? [],
-      selectedCompanyId: parsed.selectedCompanyId ?? null,
+      chatbots: parsed.chatbots ?? [],
+      selectedChatbotId: parsed.selectedChatbotId ?? null,
     };
   } catch {
     return EMPTY_STATE;
@@ -55,11 +55,11 @@ function persistState(state: StoredAuthState) {
 interface AuthContextValue {
   token: string | null;
   account: Account | null;
-  companies: CompanyInfo[];
-  selectedCompanyId: string | null;
+  chatbots: ChatbotInfo[];
+  selectedChatbotId: string | null;
   loginWithIdToken: (idToken: string) => Promise<void>;
   logout: () => Promise<void>;
-  selectCompany: (companyId: string | null) => void;
+  selectChatbot: (chatbotId: string | null) => void;
   refreshMe: () => Promise<void>;
 }
 
@@ -80,8 +80,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       updateState({
         token,
         account: me.account,
-        companies: me.companies,
-        selectedCompanyId: null,
+        chatbots: me.chatbots,
+        selectedChatbotId: null,
       });
       void account; // getMe 回傳的 account 已含相同資訊，登入回應僅用於取得 token
     },
@@ -99,9 +99,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     updateState(EMPTY_STATE);
   }, [state.token, updateState]);
 
-  const selectCompany = useCallback(
-    (companyId: string | null) => {
-      updateState({ ...state, selectedCompanyId: companyId });
+  const selectChatbot = useCallback(
+    (chatbotId: string | null) => {
+      updateState({ ...state, selectedChatbotId: chatbotId });
     },
     [state, updateState],
   );
@@ -109,21 +109,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const refreshMe = useCallback(async () => {
     if (!state.token) return;
     const me = await getMe(state.token);
-    updateState({ ...state, account: me.account, companies: me.companies });
+    updateState({ ...state, account: me.account, chatbots: me.chatbots });
   }, [state, updateState]);
 
   const value = useMemo<AuthContextValue>(
     () => ({
       token: state.token,
       account: state.account,
-      companies: state.companies,
-      selectedCompanyId: state.selectedCompanyId,
+      chatbots: state.chatbots,
+      selectedChatbotId: state.selectedChatbotId,
       loginWithIdToken,
       logout,
-      selectCompany,
+      selectChatbot,
       refreshMe,
     }),
-    [state, loginWithIdToken, logout, selectCompany, refreshMe],
+    [state, loginWithIdToken, logout, selectChatbot, refreshMe],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

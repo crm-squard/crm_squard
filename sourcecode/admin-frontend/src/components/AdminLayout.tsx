@@ -25,7 +25,7 @@ const { Header, Sider, Content } = Layout;
 
 // 公司設定排第一個（使用者明確要求：進到後台第一眼要能設定/確認目前是哪家公司）。
 const navigationItems = [
-  { key: "/company-settings", icon: <SettingOutlined />, label: "公司設定" },
+  { key: "/chatbot-settings", icon: <SettingOutlined />, label: "Chatbot 設定" },
   { key: "/", icon: <HomeOutlined />, label: "儀表板" },
   { key: "/orders", icon: <ShoppingOutlined />, label: "訂單管理" },
   { key: "/rag", icon: <DatabaseOutlined />, label: "RAG 知識庫" },
@@ -42,7 +42,7 @@ const ADMIN_ACCOUNTS_ITEM = {
 function resolveSelectedKey(pathname: string) {
   if (pathname.startsWith("/orders")) return "/orders";
   if (pathname.startsWith("/rag")) return "/rag";
-  if (pathname.startsWith("/company-settings")) return "/company-settings";
+  if (pathname.startsWith("/chatbot-settings")) return "/chatbot-settings";
   if (pathname.startsWith("/summary")) return "/summary";
   if (pathname.startsWith("/admin-accounts")) return "/admin-accounts";
   return "/";
@@ -51,14 +51,14 @@ function resolveSelectedKey(pathname: string) {
 export default function AdminLayout() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { account, companies, selectedCompanyId, selectCompany, logout } =
+  const { account, chatbots, selectedChatbotId, selectChatbot, logout } =
     useAuth();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(() => window.innerWidth < 900);
   const selectedKey = resolveSelectedKey(location.pathname);
-  const selectedCompany = companies.find(
-    (company) => company.id === selectedCompanyId,
+  const selectedChatbot = chatbots.find(
+    (chatbot) => chatbot.id === selectedChatbotId,
   );
   const isPlatformRole =
     account?.role === "platform_primary" || account?.role === "platform_secondary";
@@ -87,29 +87,29 @@ export default function AdminLayout() {
       {(!collapsed || isMobile) && (
         <div className={ui.tenantBlock}>
           <span>目前商家</span>
-          {companies.length > 1 ? (
+          {chatbots.length > 1 ? (
             <Dropdown
               menu={{
-                items: companies.map((company) => ({
-                  key: company.id,
-                  label: company.name,
+                items: chatbots.map((chatbot) => ({
+                  key: chatbot.id,
+                  label: chatbot.name,
                 })),
-                onClick: ({ key }) => selectCompany(key),
+                onClick: ({ key }) => selectChatbot(key),
               }}
             >
               <strong className={ui.tenantSwitcher}>
-                {selectedCompany?.name ?? "選擇商家"} <DownOutlined />
+                {selectedChatbot?.name ?? "選擇商家"} <DownOutlined />
               </strong>
             </Dropdown>
           ) : (
-            <strong>{selectedCompany?.name ?? "-"}</strong>
+            <strong>{selectedChatbot?.name ?? "-"}</strong>
           )}
           {/* 只有一家公司時上面沒有下拉選單，這裡另外給一個固定入口，不然新增第二家商家後
-              就永遠回不到選公司頁面了（選了一家之後 CompanySelectPage 不會再自動出現）。 */}
+              就永遠回不到選公司頁面了（選了一家之後 ChatbotSelectPage 不會再自動出現）。 */}
           <button
             type="button"
             className={ui.tenantManageLink}
-            onClick={() => navigate("/select-company")}
+            onClick={() => navigate("/select-chatbot")}
           >
             管理商家服務
           </button>

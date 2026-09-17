@@ -33,10 +33,10 @@ export async function sha256Hex(file: File): Promise<string> {
 
 export async function fetchDocuments(
   token: string,
-  companyId: string,
+  chatbotId: string,
 ): Promise<DocumentInfo[]> {
   const response = await fetch(
-    `${API_BASE_URL}/api/admin/documents?company_id=${encodeURIComponent(companyId)}`,
+    `${API_BASE_URL}/api/admin/documents?chatbot_id=${encodeURIComponent(chatbotId)}`,
     {
       headers: { Authorization: `Bearer ${token}` },
     },
@@ -48,12 +48,12 @@ export async function fetchDocuments(
 
 export async function precheckDocuments(
   token: string,
-  companyId: string,
+  chatbotId: string,
   items: PrecheckRequestItem[],
   scopePrefix: string | null,
 ): Promise<PrecheckResponse> {
   const response = await fetch(
-    `${API_BASE_URL}/api/admin/documents/precheck?company_id=${encodeURIComponent(companyId)}`,
+    `${API_BASE_URL}/api/admin/documents/precheck?chatbot_id=${encodeURIComponent(chatbotId)}`,
     {
       method: "POST",
       headers: {
@@ -79,7 +79,7 @@ interface UpsertDocumentParams {
 // 後端依路徑跟雜湊自己判斷要做什麼事（見 contracts.md）。
 export async function upsertDocument(
   token: string,
-  companyId: string,
+  chatbotId: string,
   params: UpsertDocumentParams,
 ): Promise<DocumentInfo> {
   const formData = new FormData();
@@ -87,7 +87,7 @@ export async function upsertDocument(
   formData.append("client_sha256", params.clientSha256);
   if (params.file) formData.append("file", params.file);
   const response = await fetch(
-    `${API_BASE_URL}/api/admin/documents/${encodePathForUrl(params.path)}?company_id=${encodeURIComponent(companyId)}`,
+    `${API_BASE_URL}/api/admin/documents/${encodePathForUrl(params.path)}?chatbot_id=${encodeURIComponent(chatbotId)}`,
     {
       method: "PUT",
       headers: { Authorization: `Bearer ${token}` },
@@ -100,11 +100,11 @@ export async function upsertDocument(
 
 export async function deleteDocument(
   token: string,
-  companyId: string,
+  chatbotId: string,
   path: string,
 ): Promise<void> {
   const response = await fetch(
-    `${API_BASE_URL}/api/admin/documents/${encodePathForUrl(path)}?company_id=${encodeURIComponent(companyId)}`,
+    `${API_BASE_URL}/api/admin/documents/${encodePathForUrl(path)}?chatbot_id=${encodeURIComponent(chatbotId)}`,
     {
       method: "DELETE",
       headers: { Authorization: `Bearer ${token}` },
