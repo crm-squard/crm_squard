@@ -20,10 +20,10 @@ async function throwIfNotOk(response: Response): Promise<void> {
 
 export async function listAuditLog(
   token: string,
-  companyId: string,
+  chatbotId: string,
 ): Promise<AuditLogEntry[]> {
   const response = await fetch(
-    `${API_BASE_URL}/api/admin/audit-log?company_id=${encodeURIComponent(companyId)}`,
+    `${API_BASE_URL}/api/admin/audit-log?chatbot_id=${encodeURIComponent(chatbotId)}`,
     { headers: { Authorization: `Bearer ${token}` } },
   );
   await throwIfNotOk(response);

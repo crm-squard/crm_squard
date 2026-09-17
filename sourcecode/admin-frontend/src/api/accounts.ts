@@ -10,14 +10,14 @@ async function throwIfNotOk(response: Response): Promise<void> {
   }
 }
 
-// 帶 companyId：查這家公司綁定的商家帳號（公司設定頁「管理帳號」用，不含管理者帳號）。
+// 帶 chatbotId：查這家公司綁定的商家帳號（公司設定頁「管理帳號」用，不含管理者帳號）。
 // 不帶：查全部管理者帳號（「管理者帳號」頁籤用，僅限 platform 角色）。
 export async function listAccounts(
   token: string,
-  companyId?: string,
+  chatbotId?: string,
 ): Promise<Account[]> {
-  const url = companyId
-    ? `${API_BASE_URL}/api/admin/accounts?company_id=${encodeURIComponent(companyId)}`
+  const url = chatbotId
+    ? `${API_BASE_URL}/api/admin/accounts?chatbot_id=${encodeURIComponent(chatbotId)}`
     : `${API_BASE_URL}/api/admin/accounts`;
   const response = await fetch(url, {
     headers: { Authorization: `Bearer ${token}` },
@@ -29,7 +29,7 @@ export async function listAccounts(
 
 export async function createAccount(
   token: string,
-  params: { email: string; role: AccountRole; company_id?: string },
+  params: { email: string; role: AccountRole; chatbot_id?: string },
 ): Promise<Account> {
   const response = await fetch(`${API_BASE_URL}/api/admin/accounts`, {
     method: "POST",
@@ -43,15 +43,15 @@ export async function createAccount(
   return (await response.json()) as Account;
 }
 
-// 帶 companyId：只把這個帳號從這家公司移除協作關係，不刪除帳號本身（他可能還在管別家公司）。
+// 帶 chatbotId：只把這個帳號從這家公司移除協作關係，不刪除帳號本身（他可能還在管別家公司）。
 // 不帶：刪除整個帳號（「管理者帳號」頁籤用）。
 export async function deleteAccount(
   token: string,
   accountId: string,
-  companyId?: string,
+  chatbotId?: string,
 ): Promise<void> {
-  const url = companyId
-    ? `${API_BASE_URL}/api/admin/accounts/${encodeURIComponent(accountId)}?company_id=${encodeURIComponent(companyId)}`
+  const url = chatbotId
+    ? `${API_BASE_URL}/api/admin/accounts/${encodeURIComponent(accountId)}?chatbot_id=${encodeURIComponent(chatbotId)}`
     : `${API_BASE_URL}/api/admin/accounts/${encodeURIComponent(accountId)}`;
   const response = await fetch(url, {
     method: "DELETE",

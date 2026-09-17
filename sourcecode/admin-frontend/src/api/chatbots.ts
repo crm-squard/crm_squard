@@ -1,4 +1,4 @@
-import type { CompanyInfo } from "./auth";
+import type { ChatbotInfo } from "./auth";
 
 const API_BASE_URL =
   import.meta.env.VITE_RAG_API_URL || "http://localhost:8000";
@@ -10,16 +10,16 @@ async function throwIfNotOk(response: Response): Promise<void> {
   }
 }
 
-export async function listCompanies(token: string): Promise<CompanyInfo[]> {
-  const response = await fetch(`${API_BASE_URL}/api/admin/companies`, {
+export async function listChatbots(token: string): Promise<ChatbotInfo[]> {
+  const response = await fetch(`${API_BASE_URL}/api/admin/chatbots`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   await throwIfNotOk(response);
-  const data = (await response.json()) as { companies: CompanyInfo[] };
-  return data.companies;
+  const data = (await response.json()) as { chatbots: ChatbotInfo[] };
+  return data.chatbots;
 }
 
-export async function createCompany(
+export async function createChatbot(
   token: string,
   params: {
     name: string;
@@ -27,8 +27,8 @@ export async function createCompany(
     welcome_message?: string;
     quick_replies?: string[];
   },
-): Promise<CompanyInfo> {
-  const response = await fetch(`${API_BASE_URL}/api/admin/companies`, {
+): Promise<ChatbotInfo> {
+  const response = await fetch(`${API_BASE_URL}/api/admin/chatbots`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -37,15 +37,15 @@ export async function createCompany(
     body: JSON.stringify(params),
   });
   await throwIfNotOk(response);
-  return (await response.json()) as CompanyInfo;
+  return (await response.json()) as ChatbotInfo;
 }
 
-export async function deleteCompany(
+export async function deleteChatbot(
   token: string,
-  companyId: string,
+  chatbotId: string,
 ): Promise<void> {
   const response = await fetch(
-    `${API_BASE_URL}/api/admin/companies/${encodeURIComponent(companyId)}`,
+    `${API_BASE_URL}/api/admin/chatbots/${encodeURIComponent(chatbotId)}`,
     {
       method: "DELETE",
       headers: { Authorization: `Bearer ${token}` },
@@ -54,18 +54,18 @@ export async function deleteCompany(
   await throwIfNotOk(response);
 }
 
-export async function updateCompany(
+export async function updateChatbot(
   token: string,
-  companyId: string,
+  chatbotId: string,
   params: {
     name?: string;
     mcp_url?: string;
     welcome_message?: string;
     quick_replies?: string[];
   },
-): Promise<CompanyInfo> {
+): Promise<ChatbotInfo> {
   const response = await fetch(
-    `${API_BASE_URL}/api/admin/companies/${encodeURIComponent(companyId)}`,
+    `${API_BASE_URL}/api/admin/chatbots/${encodeURIComponent(chatbotId)}`,
     {
       method: "PUT",
       headers: {
@@ -76,5 +76,5 @@ export async function updateCompany(
     },
   );
   await throwIfNotOk(response);
-  return (await response.json()) as CompanyInfo;
+  return (await response.json()) as ChatbotInfo;
 }

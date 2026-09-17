@@ -1,5 +1,5 @@
 """
-多租戶帳號核心邏輯：companies（商家服務）/ accounts（帳號）/ company_accounts（帳號-公司
+多租戶帳號核心邏輯：chatbots（商家服務）/ accounts（帳號）/ chatbot_accounts（帳號-公司
 綁定）/ sessions（登入 session）/ audit_log（稽核紀錄）這五張表的 schema 與存取函式。
 
 架構比照 app/rag/documents_store.py 的風格：raw SQL（sqlalchemy.text()）、模組層級
@@ -9,8 +9,8 @@ _schema_ready flag 做冪等 CREATE TABLE IF NOT EXISTS，不用 ORM／migration
 
 兩層帳號角色（accounts.role）：
 - platform_primary / platform_secondary：服務方（平台維運）帳號，看得到所有商家服務。
-- tenant_primary / tenant_secondary：商家帳號，只看得到自己綁定（company_accounts）的公司；
-  一個 tenant_primary 可以綁多家 company，tenant_secondary 權限跟 primary 相同，差別只在
+- tenant_primary / tenant_secondary：商家帳號，只看得到自己綁定（chatbot_accounts）的公司；
+  一個 tenant_primary 可以綁多家 chatbot，tenant_secondary 權限跟 primary 相同，差別只在
   「誰能新增/移除誰」（見 main.py 的 /api/admin/accounts 權限判斷）。
 
 session 只存 token 的 SHA-256 雜湊（不存明文），避免資料庫外洩就等於外洩所有人的登入憑證；
@@ -44,7 +44,7 @@ def _ensure_schema() -> None:
             pass
         conn.execute(sql_text(
             """
-            CREATE TABLE IF NOT EXISTS companies (
+            CREATE TABLE IF NOT EXISTS chatbots (
                 id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 name       TEXT NOT NULL,
                 mcp_url    TEXT,
@@ -52,16 +52,16 @@ def _ensure_schema() -> None:
             )
             """
         ))
-        # companies 表已經有真實資料（商家自己建立的公司），不能用「砍掉重建」的方式加欄位；
+        # chatbots 表已經有真實資料（商家自己建立的公司），不能用「砍掉重建」的方式加欄位；
         # 用 ALTER TABLE ADD COLUMN IF NOT EXISTS 冪等地補上 welcome_message
         # （聊天機器人開頭語，取代 main.py 原本寫死的字串，見 widget_config()）。
         conn.execute(sql_text(
-            "ALTER TABLE companies ADD COLUMN IF NOT EXISTS welcome_message TEXT"
+            "ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS welcome_message TEXT"
         ))
         # quick_replies：開場快速提問清單（原本 chat-widget 寫死 3 題），存成 JSON 陣列字串
         # （TEXT 欄位），比另開一張子表簡單，反正只是一份不需要單獨查詢/索引的小清單。
         conn.execute(sql_text(
-            "ALTER TABLE companies ADD COLUMN IF NOT EXISTS quick_replies TEXT"
+            "ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS quick_replies TEXT"
         ))
         conn.execute(sql_text(
             """
@@ -78,11 +78,11 @@ def _ensure_schema() -> None:
         ))
         conn.execute(sql_text(
             """
-            CREATE TABLE IF NOT EXISTS company_accounts (
+            CREATE TABLE IF NOT EXISTS chatbot_accounts (
                 account_id UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
-                company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+                chatbot_id UUID NOT NULL REFERENCES chatbots(id) ON DELETE CASCADE,
                 created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-                PRIMARY KEY (account_id, company_id)
+                PRIMARY KEY (account_id, chatbot_id)
             )
             """
         ))
@@ -92,11 +92,11 @@ def _ensure_schema() -> None:
         # 全域角色回填一次：tenant_primary → primary，其餘（含 platform 帳號、tenant_secondary）
         # → secondary，是「猜」不是精確還原，回填後可以再手動調整。
         conn.execute(sql_text(
-            "ALTER TABLE company_accounts ADD COLUMN IF NOT EXISTS role TEXT"
+            "ALTER TABLE chatbot_accounts ADD COLUMN IF NOT EXISTS role TEXT"
         ))
         conn.execute(sql_text(
             """
-            UPDATE company_accounts ca SET role = COALESCE(
+            UPDATE chatbot_accounts ca SET role = COALESCE(
                 (SELECT CASE WHEN a.role = 'tenant_primary' THEN 'primary' ELSE 'secondary' END
                  FROM accounts a WHERE a.id = ca.account_id),
                 'secondary'
@@ -105,10 +105,10 @@ def _ensure_schema() -> None:
             """
         ))
         conn.execute(sql_text(
-            "ALTER TABLE company_accounts ALTER COLUMN role SET DEFAULT 'secondary'"
+            "ALTER TABLE chatbot_accounts ALTER COLUMN role SET DEFAULT 'secondary'"
         ))
         conn.execute(sql_text(
-            "ALTER TABLE company_accounts ALTER COLUMN role SET NOT NULL"
+            "ALTER TABLE chatbot_accounts ALTER COLUMN role SET NOT NULL"
         ))
         conn.execute(sql_text(
             """
@@ -137,7 +137,7 @@ def _ensure_schema() -> None:
             "CREATE INDEX IF NOT EXISTS sessions_account_id_idx ON sessions (account_id)"
         ))
         conn.execute(sql_text(
-            "CREATE INDEX IF NOT EXISTS company_accounts_company_id_idx ON company_accounts (company_id)"
+            "CREATE INDEX IF NOT EXISTS chatbot_accounts_chatbot_id_idx ON chatbot_accounts (chatbot_id)"
         ))
     _schema_ready = True
     bootstrap_initial_platform_admins()
@@ -154,11 +154,11 @@ def _row_to_account(row) -> dict:
         "role": row.role,
         "created_by": str(row.created_by) if row.created_by is not None else None,
         "created_at": row.created_at.isoformat() if row.created_at is not None else None,
-        # 只有 list_accounts_for_company() 這種帶了 company_accounts.role 的查詢才有值；
-        # role 是帳號的全域角色，company_role 是「在這家公司」的身分（primary／secondary），
+        # 只有 list_accounts_for_chatbot() 這種帶了 chatbot_accounts.role 的查詢才有值；
+        # role 是帳號的全域角色，chatbot_role 是「在這家公司」的身分（primary／secondary），
         # 兩者可能不一樣（例如管理者帳號建立了這家公司，全域 role 是 platform_primary，
-        # company_role 卻是 primary）。
-        "company_role": getattr(row, "company_role", None),
+        # chatbot_role 卻是 primary）。
+        "chatbot_role": getattr(row, "chatbot_role", None),
     }
 
 
@@ -203,7 +203,7 @@ def create_account(email: str, role: str, created_by: Optional[str]) -> dict:
 
 
 def delete_account(account_id: str) -> bool:
-    """刪除帳號；ON DELETE CASCADE 會連帶刪掉 company_accounts／sessions，
+    """刪除帳號；ON DELETE CASCADE 會連帶刪掉 chatbot_accounts／sessions，
     達成「移除次帳號時立刻讓對方 session 失效」（不是等 token 自然過期）。"""
     _ensure_schema()
     engine = get_engine()
@@ -216,7 +216,7 @@ def delete_account(account_id: str) -> bool:
 
 def list_platform_accounts() -> list[dict]:
     """給「管理者帳號」頁籤用：只回傳 platform_primary／platform_secondary 這兩種角色，
-    不含任何商家帳號（商家帳號一定是透過 company_accounts 綁定，跟這裡完全分開查詢）。"""
+    不含任何商家帳號（商家帳號一定是透過 chatbot_accounts 綁定，跟這裡完全分開查詢）。"""
     _ensure_schema()
     engine = get_engine()
     with engine.connect() as conn:
@@ -229,12 +229,12 @@ def list_platform_accounts() -> list[dict]:
     return [_row_to_account(r) for r in rows]
 
 
-def list_accounts_for_company(company_id: str) -> list[dict]:
-    """給「公司設定→管理帳號」用：回傳綁定這一家 company_id 的帳號（不含其他公司的協作
+def list_accounts_for_chatbot(chatbot_id: str) -> list[dict]:
+    """給「公司設定→管理帳號」用：回傳綁定這一家 chatbot_id 的帳號（不含其他公司的協作
     帳號）——修正原本 list_accounts_visible_to() 對 platform 角色回傳「全部帳號」，導致
     公司設定頁看到其他公司帳號混在一起的問題。不特別排除管理者角色：管理者帳號預設不會被
     綁定任何公司（一般管理者天生就不會出現在這份清單），但如果是管理者自己建立了這家公司
-    （見 main.py create_company()），或被明確加為協作帳號，就應該正常顯示、正常能被增減，
+    （見 main.py create_chatbot()），或被明確加為協作帳號，就應該正常顯示、正常能被增減，
     不該被角色濾掉。"""
     _ensure_schema()
     engine = get_engine()
@@ -242,19 +242,19 @@ def list_accounts_for_company(company_id: str) -> list[dict]:
         rows = conn.execute(
             sql_text(
                 """
-                SELECT a.id, a.email, a.role, a.created_by, a.created_at, ca.role AS company_role
+                SELECT a.id, a.email, a.role, a.created_by, a.created_at, ca.role AS chatbot_role
                 FROM accounts a
-                JOIN company_accounts ca ON ca.account_id = a.id
-                WHERE ca.company_id = :company_id
+                JOIN chatbot_accounts ca ON ca.account_id = a.id
+                WHERE ca.chatbot_id = :chatbot_id
                 ORDER BY a.created_at
                 """
             ),
-            {"company_id": company_id},
+            {"chatbot_id": chatbot_id},
         ).fetchall()
     return [_row_to_account(r) for r in rows]
 
 
-def bind_company(account_id: str, company_id: str, role: str = "secondary") -> None:
+def bind_chatbot(account_id: str, chatbot_id: str, role: str = "secondary") -> None:
     """role：這個帳號在**這家公司**的身分（'primary' 或 'secondary'），跟帳號的全域
     accounts.role 是分開的兩件事——同一個帳號可以是 A 公司的 primary、同時是 B 公司的
     secondary。已經綁定過時用新值覆蓋 role（例如把協作帳號升成共同主帳號），不是單純忽略。
@@ -265,29 +265,29 @@ def bind_company(account_id: str, company_id: str, role: str = "secondary") -> N
         conn.execute(
             sql_text(
                 """
-                INSERT INTO company_accounts (account_id, company_id, role)
-                VALUES (:account_id, :company_id, :role)
-                ON CONFLICT (account_id, company_id) DO UPDATE SET role = EXCLUDED.role
+                INSERT INTO chatbot_accounts (account_id, chatbot_id, role)
+                VALUES (:account_id, :chatbot_id, :role)
+                ON CONFLICT (account_id, chatbot_id) DO UPDATE SET role = EXCLUDED.role
                 """
             ),
-            {"account_id": account_id, "company_id": company_id, "role": role},
+            {"account_id": account_id, "chatbot_id": chatbot_id, "role": role},
         )
 
 
-def unbind_company(account_id: str, company_id: str) -> None:
+def unbind_chatbot(account_id: str, chatbot_id: str) -> None:
     _ensure_schema()
     engine = get_engine()
     with engine.begin() as conn:
         conn.execute(
             sql_text(
-                "DELETE FROM company_accounts WHERE account_id = :account_id AND company_id = :company_id"
+                "DELETE FROM chatbot_accounts WHERE account_id = :account_id AND chatbot_id = :chatbot_id"
             ),
-            {"account_id": account_id, "company_id": company_id},
+            {"account_id": account_id, "chatbot_id": chatbot_id},
         )
 
 
-def account_has_company_access(account: dict, company_id: str) -> bool:
-    """platform 角色對任何公司都有存取權；tenant 角色要查 company_accounts 有沒有綁定。"""
+def account_has_chatbot_access(account: dict, chatbot_id: str) -> bool:
+    """platform 角色對任何公司都有存取權；tenant 角色要查 chatbot_accounts 有沒有綁定。"""
     if account["role"] in PLATFORM_ROLES:
         return True
     _ensure_schema()
@@ -295,38 +295,38 @@ def account_has_company_access(account: dict, company_id: str) -> bool:
     with engine.connect() as conn:
         row = conn.execute(
             sql_text(
-                "SELECT 1 FROM company_accounts WHERE account_id = :account_id AND company_id = :company_id"
+                "SELECT 1 FROM chatbot_accounts WHERE account_id = :account_id AND chatbot_id = :chatbot_id"
             ),
-            {"account_id": account["id"], "company_id": company_id},
+            {"account_id": account["id"], "chatbot_id": chatbot_id},
         ).fetchone()
     return row is not None
 
 
-def get_company_role(account_id: str, company_id: str) -> Optional[str]:
+def get_chatbot_role(account_id: str, chatbot_id: str) -> Optional[str]:
     """查這個帳號在這家公司的身分（'primary'／'secondary'），沒綁定回 None。只回答「這家
     公司」的身分，不管帳號的全域角色——呼叫端如果是 platform 帳號，通常不用查這個
-    （platform 對任何公司本來就有完整存取權，見 account_has_company_access）。"""
+    （platform 對任何公司本來就有完整存取權，見 account_has_chatbot_access）。"""
     _ensure_schema()
     engine = get_engine()
     with engine.connect() as conn:
         row = conn.execute(
             sql_text(
-                "SELECT role FROM company_accounts WHERE account_id = :account_id AND company_id = :company_id"
+                "SELECT role FROM chatbot_accounts WHERE account_id = :account_id AND chatbot_id = :chatbot_id"
             ),
-            {"account_id": account_id, "company_id": company_id},
+            {"account_id": account_id, "chatbot_id": chatbot_id},
         ).fetchone()
     return row.role if row is not None else None
 
 
-def is_company_primary(account: dict, company_id: str) -> bool:
+def is_chatbot_primary(account: dict, chatbot_id: str) -> bool:
     """這個帳號能不能管理（新增/移除）這家公司的其他協作帳號：platform 角色永遠可以；
     tenant 角色要是這家公司的 primary 才行（secondary 看得到協作帳號清單，但不能增減）。"""
     if account["role"] in PLATFORM_ROLES:
         return True
-    return get_company_role(account["id"], company_id) == "primary"
+    return get_chatbot_role(account["id"], chatbot_id) == "primary"
 
 
-def _row_to_company(row) -> dict:
+def _row_to_chatbot(row) -> dict:
     return {
         "id": str(row.id),
         "name": row.name,
@@ -334,14 +334,14 @@ def _row_to_company(row) -> dict:
         "welcome_message": row.welcome_message,
         "quick_replies": json.loads(row.quick_replies) if row.quick_replies else None,
         "created_at": row.created_at.isoformat() if row.created_at is not None else None,
-        # 只有透過 list_companies_visible_to() 查出來的公司才有這個欄位（SELECT 裡有多帶
-        # your_role）；get_company()／create_company()／update_company() 回傳的公司資訊
+        # 只有透過 list_chatbots_visible_to() 查出來的公司才有這個欄位（SELECT 裡有多帶
+        # your_role）；get_chatbot()／create_chatbot()／update_chatbot() 回傳的公司資訊
         # 沒有「查詢者身分」這個概念，getattr 拿不到就是 None，不是每個呼叫端都要改。
         "your_role": getattr(row, "your_role", None),
     }
 
 
-def create_company(
+def create_chatbot(
     name: str, mcp_url: Optional[str], welcome_message: Optional[str] = None,
     quick_replies: Optional[list[str]] = None,
 ) -> dict:
@@ -351,7 +351,7 @@ def create_company(
         row = conn.execute(
             sql_text(
                 """
-                INSERT INTO companies (name, mcp_url, welcome_message, quick_replies)
+                INSERT INTO chatbots (name, mcp_url, welcome_message, quick_replies)
                 VALUES (:name, :mcp_url, :welcome_message, :quick_replies)
                 RETURNING id, name, mcp_url, welcome_message, quick_replies, created_at
                 """
@@ -361,11 +361,11 @@ def create_company(
                 "quick_replies": json.dumps(quick_replies) if quick_replies is not None else None,
             },
         ).fetchone()
-    return _row_to_company(row)
+    return _row_to_chatbot(row)
 
 
-def update_company(
-    company_id: str, name: Optional[str], mcp_url: Optional[str], welcome_message: Optional[str] = None,
+def update_chatbot(
+    chatbot_id: str, name: Optional[str], mcp_url: Optional[str], welcome_message: Optional[str] = None,
     quick_replies: Optional[list[str]] = None,
 ) -> Optional[dict]:
     """
@@ -380,7 +380,7 @@ def update_company(
         row = conn.execute(
             sql_text(
                 """
-                UPDATE companies
+                UPDATE chatbots
                 SET name = COALESCE(:name, name),
                     mcp_url = COALESCE(:mcp_url, mcp_url),
                     welcome_message = COALESCE(:welcome_message, welcome_message),
@@ -390,45 +390,45 @@ def update_company(
                 """
             ),
             {
-                "id": company_id, "name": name, "mcp_url": mcp_url, "welcome_message": welcome_message,
+                "id": chatbot_id, "name": name, "mcp_url": mcp_url, "welcome_message": welcome_message,
                 "quick_replies": json.dumps(quick_replies) if quick_replies is not None else None,
             },
         ).fetchone()
-    return _row_to_company(row) if row is not None else None
+    return _row_to_chatbot(row) if row is not None else None
 
 
-def get_company(company_id: str) -> Optional[dict]:
+def get_chatbot(chatbot_id: str) -> Optional[dict]:
     _ensure_schema()
     engine = get_engine()
     with engine.connect() as conn:
         row = conn.execute(
             sql_text(
                 "SELECT id, name, mcp_url, welcome_message, quick_replies, created_at "
-                "FROM companies WHERE id = :id"
+                "FROM chatbots WHERE id = :id"
             ),
-            {"id": company_id},
+            {"id": chatbot_id},
         ).fetchone()
-    return _row_to_company(row) if row is not None else None
+    return _row_to_chatbot(row) if row is not None else None
 
 
-def delete_company(company_id: str) -> bool:
+def delete_chatbot(chatbot_id: str) -> bool:
     """
-    硬刪除公司：company_accounts 靠 ON DELETE CASCADE 自動清掉綁定紀錄；RAG 文件/向量
-    不是外鍵關聯（documents_store 的 kb_documents.company_id 沒有實體 FK，避免兩個模組
-    互相依賴對方的 schema），呼叫端要自己另外呼叫 documents_store.purge_company()。
+    硬刪除公司：chatbot_accounts 靠 ON DELETE CASCADE 自動清掉綁定紀錄；RAG 文件/向量
+    不是外鍵關聯（documents_store 的 kb_documents.chatbot_id 沒有實體 FK，避免兩個模組
+    互相依賴對方的 schema），呼叫端要自己另外呼叫 documents_store.purge_chatbot()。
     """
     _ensure_schema()
     engine = get_engine()
     with engine.begin() as conn:
         row = conn.execute(
-            sql_text("DELETE FROM companies WHERE id = :id RETURNING id"), {"id": company_id}
+            sql_text("DELETE FROM chatbots WHERE id = :id RETURNING id"), {"id": chatbot_id}
         ).fetchone()
     return row is not None
 
 
-def list_companies_visible_to(account: dict) -> list[dict]:
+def list_chatbots_visible_to(account: dict) -> list[dict]:
     """platform 角色回全部（沒有「這家公司的身分」這個概念，your_role 固定 None）；
-    tenant 角色經 company_accounts join 回自己綁定的，附帶 your_role（'primary'／
+    tenant 角色經 chatbot_accounts join 回自己綁定的，附帶 your_role（'primary'／
     'secondary'）讓前端可以依公司分別顯示「主帳號」還是「協作帳號」，不是看帳號的
     全域角色（accounts.role）——同一個帳號在不同公司的 your_role 可能不一樣。"""
     _ensure_schema()
@@ -436,7 +436,7 @@ def list_companies_visible_to(account: dict) -> list[dict]:
     if account["role"] in PLATFORM_ROLES:
         sql = sql_text(
             "SELECT id, name, mcp_url, welcome_message, quick_replies, created_at, "
-            "NULL AS your_role FROM companies ORDER BY created_at"
+            "NULL AS your_role FROM chatbots ORDER BY created_at"
         )
         params = {}
     else:
@@ -444,8 +444,8 @@ def list_companies_visible_to(account: dict) -> list[dict]:
             """
             SELECT c.id, c.name, c.mcp_url, c.welcome_message, c.quick_replies, c.created_at,
                    ca.role AS your_role
-            FROM companies c
-            JOIN company_accounts ca ON ca.company_id = c.id
+            FROM chatbots c
+            JOIN chatbot_accounts ca ON ca.chatbot_id = c.id
             WHERE ca.account_id = :account_id
             ORDER BY c.created_at
             """
@@ -453,7 +453,7 @@ def list_companies_visible_to(account: dict) -> list[dict]:
         params = {"account_id": account["id"]}
     with engine.connect() as conn:
         rows = conn.execute(sql, params).fetchall()
-    return [_row_to_company(r) for r in rows]
+    return [_row_to_chatbot(r) for r in rows]
 
 
 def _hash_token(token: str) -> str:
@@ -549,10 +549,10 @@ def _row_to_audit_entry(row) -> dict:
     }
 
 
-def list_audit_log_for_company(company_id: str, limit: int = 100) -> list[dict]:
+def list_audit_log_for_chatbot(chatbot_id: str, limit: int = 100) -> list[dict]:
     """
-    查一家公司相關的稽核紀錄：target_type='company' 時 target_id 本身就是 company_id；
-    'kb_document' 跟部分 'account' 動作（新增/刪除次帳號）則是把 company_id 存在 detail
+    查一家公司相關的稽核紀錄：target_type='chatbot' 時 target_id 本身就是 chatbot_id；
+    'kb_document' 跟部分 'account' 動作（新增/刪除次帳號）則是把 chatbot_id 存在 detail
     這個 JSONB 欄位裡（見 main.py 各個 record_audit() 呼叫點），所以兩種都要比對，才不會漏掉
     「新增/刪除這家公司的協作帳號」這類紀錄。
     """
@@ -566,12 +566,12 @@ def list_audit_log_for_company(company_id: str, limit: int = 100) -> list[dict]:
                        al.detail, al.created_at
                 FROM audit_log al
                 LEFT JOIN accounts a ON a.id = al.actor_account_id
-                WHERE al.target_id = :company_id OR al.detail->>'company_id' = :company_id
+                WHERE al.target_id = :chatbot_id OR al.detail->>'chatbot_id' = :chatbot_id
                 ORDER BY al.created_at DESC
                 LIMIT :limit
                 """
             ),
-            {"company_id": company_id, "limit": limit},
+            {"chatbot_id": chatbot_id, "limit": limit},
         ).fetchall()
     return [_row_to_audit_entry(r) for r in rows]
 

@@ -54,7 +54,7 @@ export const ui = {
   loginCard: tw(
     "grid w-full max-w-[420px] gap-4 rounded-2xl bg-white p-8 shadow-[0_20px_40px_rgb(15_33_72/.08)] [&_h1]:m-0 [&_h1]:text-card-heading [&_h1]:text-admin-heading",
   ),
-  companySelectCard: tw(
+  chatbotSelectCard: tw(
     "grid w-full max-w-[640px] gap-4 rounded-2xl bg-white p-8 shadow-[0_20px_40px_rgb(15_33_72/.08)] [&_h1]:m-0 [&_h1]:text-card-heading [&_h1]:text-admin-heading",
   ),
   pageHeading: tw(

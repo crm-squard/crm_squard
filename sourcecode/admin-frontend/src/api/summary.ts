@@ -16,11 +16,11 @@ async function throwIfNotOk(response: Response): Promise<void> {
 
 export async function getDailySummary(
   token: string,
-  companyId: string,
+  chatbotId: string,
   date?: string,
 ): Promise<DailySummary> {
   const url = new URL(`${API_BASE_URL}/api/admin/summary`);
-  url.searchParams.set("company_id", companyId);
+  url.searchParams.set("chatbot_id", chatbotId);
   if (date) url.searchParams.set("date", date);
   const response = await fetch(url, {
     headers: { Authorization: `Bearer ${token}` },

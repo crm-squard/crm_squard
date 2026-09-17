@@ -30,7 +30,7 @@ os.chdir(BACKEND_DIR)
 # 多租戶帳號測試共用 helper：直接透過 accounts_store 建帳號/session（不透過真的 Google
 # 登入流程——pytest 沒辦法真的拿到一個有效的 Google ID token，Google 驗證本身用
 # monkeypatch app.auth.verify_google_id_token 在 test_auth.py 個別測試），
-# 跟 documents_api／companies／accounts 測試共用同一套 fixture，統一在這裡定義避免重複。
+# 跟 documents_api／chatbots／accounts 測試共用同一套 fixture，統一在這裡定義避免重複。
 
 
 def _unique_email(prefix: str = "pytest") -> str:
@@ -56,7 +56,7 @@ def platform_token(platform_account):
 
 
 @pytest.fixture
-def test_company(request):
+def test_chatbot(request):
     """
     建立一家測試用公司，測試結束後硬刪除（含清掉該公司的 RAG 文件記錄與向量 chunk）。
 
@@ -65,15 +65,15 @@ def test_company(request):
     沒有額外參數時預設 mcp_url=None，對應「公司沒開訂單查詢功能」的情境。
     """
     from app import accounts_store
-    from app.rag.documents_store import purge_company
+    from app.rag.documents_store import purge_chatbot
     from app.rag.engine import get_retriever
 
     mcp_url = getattr(request, "param", None)
-    company = accounts_store.create_company(f"Pytest Company {uuid.uuid4().hex[:8]}", mcp_url)
-    yield company
-    accounts_store.delete_company(company["id"])
+    chatbot = accounts_store.create_chatbot(f"Pytest Chatbot {uuid.uuid4().hex[:8]}", mcp_url)
+    yield chatbot
+    accounts_store.delete_chatbot(chatbot["id"])
     try:
-        purge_company(company["id"], get_retriever().index)
+        purge_chatbot(chatbot["id"], get_retriever().index)
     except Exception:
         pass
 

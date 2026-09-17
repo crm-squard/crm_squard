@@ -11,15 +11,15 @@ import { Navigate, useNavigate } from "react-router-dom";
 import AdminPageLayout from "../components/AdminPageLayout";
 import { useAuth } from "../auth/AuthContext";
 import { ui } from "../uiStyles";
-import { deleteCompany, updateCompany } from "../api/companies";
+import { deleteChatbot, updateChatbot } from "../api/chatbots";
 import { createAccount, deleteAccount, listAccounts } from "../api/accounts";
 import { listAuditLog, type AuditLogEntry } from "../api/auditLog";
 import type { Account } from "../api/auth";
 
 const ACTION_LABELS: Record<string, string> = {
-  create_company: "建立商家服務",
-  update_company: "更新商家設定",
-  delete_company: "刪除商家服務",
+  create_chatbot: "建立商家服務",
+  update_chatbot: "更新商家設定",
+  delete_chatbot: "刪除商家服務",
   create_account: "新增帳號",
   delete_account: "移除帳號",
   self_register: "帳號自助註冊",
@@ -30,7 +30,7 @@ const ACTION_LABELS: Record<string, string> = {
 const { Text, Paragraph } = Typography;
 const { TextArea } = Input;
 
-interface CompanySettingsForm {
+interface ChatbotSettingsForm {
   name: string;
   mcp_url?: string;
   welcome_message?: string;
@@ -44,22 +44,22 @@ const DEFAULT_QUICK_REPLIES = [
 ];
 
 /**
- * 公司資訊設定頁面：MCP URL（訂單查詢用）跟聊天機器人開頭語從原本 select-company 頁面
- * 的就地編輯移過來這裡，select-company 頁面只留商家名稱跟識別碼，操作對象一律是
- * AuthContext 目前選定的公司（跟 RagPage 一樣的模式，不用另外帶 company_id 路由參數）。
+ * 公司資訊設定頁面：MCP URL（訂單查詢用）跟聊天機器人開頭語從原本 select-chatbot 頁面
+ * 的就地編輯移過來這裡，select-chatbot 頁面只留商家名稱跟識別碼，操作對象一律是
+ * AuthContext 目前選定的公司（跟 RagPage 一樣的模式，不用另外帶 chatbot_id 路由參數）。
  */
-export default function CompanySettingsPage() {
+export default function ChatbotSettingsPage() {
   const navigate = useNavigate();
   const {
     token,
     account: currentAccount,
-    companies,
-    selectedCompanyId,
-    selectCompany,
+    chatbots,
+    selectedChatbotId,
+    selectChatbot,
     refreshMe,
   } = useAuth();
   const [messageApi, contextHolder] = message.useMessage();
-  const [form] = Form.useForm<CompanySettingsForm>();
+  const [form] = Form.useForm<ChatbotSettingsForm>();
   const [accountForm] = Form.useForm<{ email: string }>();
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -67,10 +67,10 @@ export default function CompanySettingsPage() {
   const [addingAccount, setAddingAccount] = useState(false);
   const [auditEntries, setAuditEntries] = useState<AuditLogEntry[]>([]);
 
-  // 帶 selectedCompanyId：只查這家公司綁定的商家帳號，不含管理者帳號、也不含其他公司的協作帳號。
+  // 帶 selectedChatbotId：只查這家公司綁定的商家帳號，不含管理者帳號、也不含其他公司的協作帳號。
   const loadAccounts = useCallback(() => {
-    if (!token || !selectedCompanyId) return;
-    listAccounts(token, selectedCompanyId)
+    if (!token || !selectedChatbotId) return;
+    listAccounts(token, selectedChatbotId)
       .then(setAccounts)
       .catch((err) =>
         messageApi.error(
@@ -78,15 +78,15 @@ export default function CompanySettingsPage() {
         ),
       );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token, selectedCompanyId]);
+  }, [token, selectedChatbotId]);
 
   useEffect(() => {
     loadAccounts();
   }, [loadAccounts]);
 
   useEffect(() => {
-    if (!token || !selectedCompanyId) return;
-    listAuditLog(token, selectedCompanyId)
+    if (!token || !selectedChatbotId) return;
+    listAuditLog(token, selectedChatbotId)
       .then(setAuditEntries)
       .catch((err) =>
         messageApi.error(
@@ -94,45 +94,45 @@ export default function CompanySettingsPage() {
         ),
       );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token, selectedCompanyId]);
+  }, [token, selectedChatbotId]);
 
-  // companies 本來就是 /api/auth/me 依權限回傳的清單（平台角色回全部、商家帳號只回自己
-  // 綁定的），能在這個清單裡找到，後端的 require_company_access 就一定會放行，不用在
+  // chatbots 本來就是 /api/auth/me 依權限回傳的清單（平台角色回全部、商家帳號只回自己
+  // 綁定的），能在這個清單裡找到，後端的 require_chatbot_access 就一定會放行，不用在
   // 前端另外判斷角色。
-  const company = companies.find((c) => c.id === selectedCompanyId);
+  const chatbot = chatbots.find((c) => c.id === selectedChatbotId);
 
   useEffect(() => {
-    if (company) {
+    if (chatbot) {
       form.setFieldsValue({
-        name: company.name,
-        mcp_url: company.mcp_url ?? "",
-        welcome_message: company.welcome_message ?? "",
-        quick_replies: (company.quick_replies ?? DEFAULT_QUICK_REPLIES).join(
+        name: chatbot.name,
+        mcp_url: chatbot.mcp_url ?? "",
+        welcome_message: chatbot.welcome_message ?? "",
+        quick_replies: (chatbot.quick_replies ?? DEFAULT_QUICK_REPLIES).join(
           "\n",
         ),
       });
     }
-  }, [company, form]);
+  }, [chatbot, form]);
 
   if (!token) return <Navigate to="/login" replace />;
-  if (!selectedCompanyId) return <Navigate to="/select-company" replace />;
+  if (!selectedChatbotId) return <Navigate to="/select-chatbot" replace />;
 
-  async function handleSave(values: CompanySettingsForm) {
-    if (!token || !selectedCompanyId) return;
+  async function handleSave(values: ChatbotSettingsForm) {
+    if (!token || !selectedChatbotId) return;
     setSaving(true);
     try {
       const quickReplies = (values.quick_replies ?? "")
         .split("\n")
         .map((line) => line.trim())
         .filter((line) => line.length > 0);
-      await updateCompany(token, selectedCompanyId, {
+      await updateChatbot(token, selectedChatbotId, {
         name: values.name,
         mcp_url: values.mcp_url ?? "",
         welcome_message: values.welcome_message ?? "",
         quick_replies: quickReplies,
       });
       await refreshMe();
-      messageApi.success("已儲存公司設定");
+      messageApi.success("已儲存 Chatbot 設定");
     } catch (err) {
       messageApi.error(err instanceof Error ? err.message : "儲存失敗");
     } finally {
@@ -141,13 +141,13 @@ export default function CompanySettingsPage() {
   }
 
   async function handleAddAccount(values: { email: string }) {
-    if (!token || !selectedCompanyId) return;
+    if (!token || !selectedChatbotId) return;
     setAddingAccount(true);
     try {
       await createAccount(token, {
         email: values.email,
         role: "tenant_secondary",
-        company_id: selectedCompanyId,
+        chatbot_id: selectedChatbotId,
       });
       accountForm.resetFields();
       loadAccounts();
@@ -159,15 +159,15 @@ export default function CompanySettingsPage() {
     }
   }
 
-  async function handleDeleteCompany() {
-    if (!token || !selectedCompanyId) return;
+  async function handleDeleteChatbot() {
+    if (!token || !selectedChatbotId) return;
     setDeleting(true);
     try {
-      await deleteCompany(token, selectedCompanyId);
-      selectCompany(null);
+      await deleteChatbot(token, selectedChatbotId);
+      selectChatbot(null);
       await refreshMe();
       messageApi.success("已刪除商家服務");
-      navigate("/select-company", { replace: true });
+      navigate("/select-chatbot", { replace: true });
     } catch (err) {
       messageApi.error(err instanceof Error ? err.message : "刪除失敗");
     } finally {
@@ -176,9 +176,9 @@ export default function CompanySettingsPage() {
   }
 
   async function handleRemoveAccount(accountId: string) {
-    if (!token || !selectedCompanyId) return;
+    if (!token || !selectedChatbotId) return;
     try {
-      await deleteAccount(token, accountId, selectedCompanyId);
+      await deleteAccount(token, accountId, selectedChatbotId);
       loadAccounts();
       messageApi.success("已將這個帳號從這家商家服務移除");
     } catch (err) {
@@ -190,21 +190,21 @@ export default function CompanySettingsPage() {
     currentAccount?.role === "platform_primary" ||
     currentAccount?.role === "platform_secondary";
   // 只有這家公司的 primary（或管理者帳號）能新增/移除協作帳號；secondary 看得到清單但不能改。
-  const canManageAccounts = isPlatformRole || company?.your_role === "primary";
+  const canManageAccounts = isPlatformRole || chatbot?.your_role === "primary";
 
   return (
     <AdminPageLayout
-      title="公司設定"
+      title="Chatbot 設定"
       description="管理目前選定商家的基本資訊、訂單查詢 MCP URL、聊天機器人開頭語與開場快速提問。"
       beforeHeader={contextHolder}
     >
       <Card>
-        {company ? (
+        {chatbot ? (
           <>
             <Paragraph type="secondary">
               商家識別碼：
               <Text code copyable>
-                {company.id}
+                {chatbot.id}
               </Text>
             </Paragraph>
             <Form form={form} layout="vertical" onFinish={handleSave}>
@@ -251,7 +251,7 @@ export default function CompanySettingsPage() {
             <Popconfirm
               title="確定要刪除這家商家服務嗎？"
               description="會連同這家商家的 RAG 知識庫文件、向量資料一起硬刪除，無法復原。"
-              onConfirm={handleDeleteCompany}
+              onConfirm={handleDeleteChatbot}
               okButtonProps={{ danger: true }}
             >
               <Button className={ui.marginTop4} danger loading={deleting}>
@@ -260,7 +260,7 @@ export default function CompanySettingsPage() {
             </Popconfirm>
           </>
         ) : (
-          <Text type="secondary">查無這家公司的資料。</Text>
+          <Text type="secondary">查無這個 Chatbot 的資料。</Text>
         )}
       </Card>
 
@@ -293,7 +293,7 @@ export default function CompanySettingsPage() {
             >
               <List.Item.Meta
                 title={acc.email}
-                description={acc.company_role === "primary" ? "主帳號" : "協作帳號"}
+                description={acc.chatbot_role === "primary" ? "主帳號" : "協作帳號"}
               />
             </List.Item>
           )}

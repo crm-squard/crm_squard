@@ -64,12 +64,12 @@ def require_platform_role(account: dict = Depends(require_session)) -> dict:
     return account
 
 
-def require_company_access(company_id: str, account: dict = Depends(require_session)) -> dict:
+def require_chatbot_access(chatbot_id: str, account: dict = Depends(require_session)) -> dict:
     """
-    company_id 來自 route path/query（FastAPI 依參數名稱注入，main.py 的路由固定用
-    `company_id` 這個名字）。檢查目前帳號是 platform 角色，或在 company_accounts 裡有
-    該 company_id 的綁定，否則 403。
+    chatbot_id 來自 route path/query（FastAPI 依參數名稱注入，main.py 的路由固定用
+    `chatbot_id` 這個名字）。檢查目前帳號是 platform 角色，或在 chatbot_accounts 裡有
+    該 chatbot_id 的綁定，否則 403。
     """
-    if not accounts_store.account_has_company_access(account, company_id):
+    if not accounts_store.account_has_chatbot_access(account, chatbot_id):
         raise HTTPException(status_code=403, detail="沒有這家公司的存取權限。")
     return account

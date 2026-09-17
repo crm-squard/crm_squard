@@ -24,7 +24,7 @@ from app.config import settings
 
 logger = logging.getLogger("backend.orders")
 
-# mcp_url 改成每家公司各自在 companies.mcp_url 設定（見 app/accounts_store.py），
+# mcp_url 改成每家公司各自在 chatbots.mcp_url 設定（見 app/accounts_store.py），
 # 呼叫端（app/main.py）要先查出公司有沒有設定，沒設定就不該呼叫這裡——
 # 這個模組不再讀取任何全域的 MCP URL 設定值。
 

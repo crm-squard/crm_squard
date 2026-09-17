@@ -16,22 +16,22 @@ const { Paragraph } = Typography;
 
 /**
  * 客服機器人：當日提問主題摘要（對應儀表板「今日對話」卡片原本寫的「對話分析功能規劃中」）。
- * 依 AuthContext.selectedCompanyId 過濾，跟 RAG 頁面一樣的模式——切換公司時這裡也要
+ * 依 AuthContext.selectedChatbotId 過濾，跟 RAG 頁面一樣的模式——切換公司時這裡也要
  * 重新拉取，只看得到目前選定公司的顧客提問內容。
  */
 export default function SummaryPage() {
-  const { token, selectedCompanyId } = useAuth();
+  const { token, selectedChatbotId } = useAuth();
   const [date, setDate] = useState<Dayjs>(() => dayjs());
   const [data, setData] = useState<DailySummary | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!token || !selectedCompanyId) return;
+    if (!token || !selectedChatbotId) return;
     let cancelled = false;
     setLoading(true);
     setError(null);
-    getDailySummary(token, selectedCompanyId, date.format("YYYY-MM-DD"))
+    getDailySummary(token, selectedChatbotId, date.format("YYYY-MM-DD"))
       .then((result) => {
         if (!cancelled) setData(result);
       })
@@ -45,7 +45,7 @@ export default function SummaryPage() {
     return () => {
       cancelled = true;
     };
-  }, [token, selectedCompanyId, date]);
+  }, [token, selectedChatbotId, date]);
 
   return (
     <AdminPageLayout

@@ -129,9 +129,9 @@ class AccountInfo(BaseModel):
     created_by: Optional[str] = None
     created_at: Optional[str] = None
     # 這個帳號在「某一家公司」的身分（'primary'／'secondary'），只有透過
-    # GET /api/admin/accounts?company_id= 查出來的帳號才有值；跟上面的 role（全域角色）
-    # 是分開的兩件事，見 accounts_store.list_accounts_for_company() 的說明。
-    company_role: Optional[Literal["primary", "secondary"]] = None
+    # GET /api/admin/accounts?chatbot_id= 查出來的帳號才有值；跟上面的 role（全域角色）
+    # 是分開的兩件事，見 accounts_store.list_accounts_for_chatbot() 的說明。
+    chatbot_role: Optional[Literal["primary", "secondary"]] = None
 
 
 class LoginResponse(BaseModel):
@@ -139,7 +139,7 @@ class LoginResponse(BaseModel):
     account: AccountInfo
 
 
-class CompanyInfo(BaseModel):
+class ChatbotInfo(BaseModel):
     id: str
     name: str
     mcp_url: Optional[str] = None
@@ -153,22 +153,22 @@ class CompanyInfo(BaseModel):
 
 class MeResponse(BaseModel):
     account: AccountInfo
-    companies: List[CompanyInfo]
+    chatbots: List[ChatbotInfo]
 
 
-class CompanyListResponse(BaseModel):
-    companies: List[CompanyInfo]
+class ChatbotListResponse(BaseModel):
+    chatbots: List[ChatbotInfo]
 
 
-class CompanyCreateRequest(BaseModel):
+class ChatbotCreateRequest(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     mcp_url: Optional[str] = Field(default=None, max_length=500)
     welcome_message: Optional[str] = Field(default=None, max_length=500)
     quick_replies: Optional[List[str]] = Field(default=None, max_length=10)
 
 
-class CompanyUpdateRequest(BaseModel):
-    # 只更新有帶值的欄位；沒帶的欄位維持不變（不是清空），見 accounts_store.update_company()。
+class ChatbotUpdateRequest(BaseModel):
+    # 只更新有帶值的欄位；沒帶的欄位維持不變（不是清空），見 accounts_store.update_chatbot()。
     name: Optional[str] = Field(default=None, min_length=1, max_length=200)
     mcp_url: Optional[str] = Field(default=None, max_length=500)
     welcome_message: Optional[str] = Field(default=None, max_length=500)
@@ -179,7 +179,7 @@ class AccountCreateRequest(BaseModel):
     email: str = Field(min_length=3, max_length=320)
     role: Literal["platform_primary", "platform_secondary", "tenant_primary", "tenant_secondary"]
     # tenant_* 角色新增時必填（要綁定到哪家公司）；platform_* 角色不需要。
-    company_id: Optional[str] = None
+    chatbot_id: Optional[str] = None
 
 
 class AccountListResponse(BaseModel):

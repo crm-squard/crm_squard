@@ -57,8 +57,8 @@ class ProductQueryAgent:
     def receive_query(self, query: str) -> str:
         return query.strip()
 
-    def retrieve_from_kb(self, query: str, top_k: int = 3, company_id: str | None = None):
-        return self.retriever.retrieve(query, top_k=top_k, company_id=company_id)
+    def retrieve_from_kb(self, query: str, top_k: int = 3, chatbot_id: str | None = None):
+        return self.retriever.retrieve(query, top_k=top_k, chatbot_id=chatbot_id)
 
     def _build_retrieval_query(self, query: str, history) -> str:
         if not history:
@@ -89,13 +89,13 @@ class ProductQueryAgent:
         provider: str = "google",
         top_k: int = 3,
         max_new_tokens: int = 2048,
-        company_id: str | None = None,
+        chatbot_id: str | None = None,
     ):
         """
         history：之前幾輪對話 [{"role": "user"|"assistant", "content": ...}, ...]，
         用來讓機器人理解「那電池呢？」這種依賴上文的追問。
         provider：要用哪個 LLM 回答，見 app/providers.py 的 PROVIDERS。
-        company_id：多租戶 RAG 隔離用，穿透到 retrieve_from_kb() -> retriever.retrieve()，
+        chatbot_id：多租戶 RAG 隔離用，穿透到 retrieve_from_kb() -> retriever.retrieve()，
         見 app/rag/llamaindex_engine.py 的說明。
         max_new_tokens 預設拉高到 2048（原本 512）：本地小模型 openbmb/MiniCPM5-2B 是
         混合推理模型，app/llm.py 預設用 enable_thinking=False 關掉思考過程直接回答，
@@ -110,7 +110,7 @@ class ProductQueryAgent:
         """
         clean_query = self.receive_query(query)
         retrieval_query = self._build_retrieval_query(clean_query, history)
-        retrieved_chunks = self.retrieve_from_kb(retrieval_query, top_k=top_k, company_id=company_id)
+        retrieved_chunks = self.retrieve_from_kb(retrieval_query, top_k=top_k, chatbot_id=chatbot_id)
 
         if not retrieved_chunks:
             return NO_INFO_ANSWER, []

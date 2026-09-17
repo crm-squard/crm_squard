@@ -3,8 +3,8 @@ import { Navigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 
 export default function RequireAuth({ children }: { children: ReactNode }) {
-  const { token, selectedCompanyId } = useAuth();
+  const { token, selectedChatbotId } = useAuth();
   if (!token) return <Navigate to="/login" replace />;
-  if (!selectedCompanyId) return <Navigate to="/select-company" replace />;
+  if (!selectedChatbotId) return <Navigate to="/select-chatbot" replace />;
   return <>{children}</>;
 }

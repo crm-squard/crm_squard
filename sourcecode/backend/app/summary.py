@@ -67,9 +67,9 @@ def _reduce_summaries(batch_summaries: list[str], provider: str) -> str:
     return generate_with_provider(provider, messages, max_new_tokens=_SUMMARY_MAX_NEW_TOKENS)
 
 
-def summarize_day(date: str, company_id: str) -> dict:
+def summarize_day(date: str, chatbot_id: str) -> dict:
     """date 格式為 YYYY-MM-DD（UTC）。回傳指定公司當天提問數量與摘要文字。"""
-    questions = get_messages_for_date(date, company_id)
+    questions = get_messages_for_date(date, chatbot_id)
     if not questions:
         return {"date": date, "question_count": 0, "summary": "當天沒有使用者提問紀錄。"}
 

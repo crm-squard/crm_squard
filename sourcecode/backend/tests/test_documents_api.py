@@ -19,7 +19,7 @@ import hashlib
 import pytest
 from fastapi.testclient import TestClient
 
-from app.main import app, _company_request_log, _request_log
+from app.main import app, _chatbot_request_log, _request_log
 
 TEST_PATH = "pytest_test_doc.md"
 
@@ -35,22 +35,22 @@ def _md_file(content: str, filename: str = TEST_PATH):
 @pytest.fixture(autouse=True)
 def _reset_rate_limit():
     _request_log.clear()
-    _company_request_log.clear()
+    _chatbot_request_log.clear()
     yield
     _request_log.clear()
-    _company_request_log.clear()
+    _chatbot_request_log.clear()
 
 
 @pytest.fixture
-def client(platform_token, test_company):
+def client(platform_token, test_chatbot):
     """
-    這份測試檔案的所有請求都需要 company_id 查詢參數 + Authorization header
-    （/api/admin/documents* 加了 require_company_access，見 app/main.py）。用 httpx.Client
+    這份測試檔案的所有請求都需要 chatbot_id 查詢參數 + Authorization header
+    （/api/admin/documents* 加了 require_chatbot_access，見 app/main.py）。用 httpx.Client
     的預設 headers／params 機制，讓每一筆請求自動帶上，測試本體的呼叫寫法不用逐一修改。
     """
     with TestClient(app) as c:
         c.headers["Authorization"] = f"Bearer {platform_token}"
-        c.params = {"company_id": test_company["id"]}
+        c.params = {"chatbot_id": test_chatbot["id"]}
         yield c
         # 測試後清乾淨，避免留下測試資料污染共用的 pgvector table
         c.delete(f"/api/admin/documents/{TEST_PATH}")
@@ -352,22 +352,22 @@ class TestPrecheck:
             client.delete(f"/api/admin/documents/{path}")
 
 
-class TestCompanyIsolation:
+class TestChatbotIsolation:
     """
-    多租戶 company_id 隔離：同名 path／同雜湊在不同 company_id 下互不干擾，各自視為獨立的
-    new；一家公司的文件列表看不到另一家公司的文件；purge_company 之後這家公司的文件與
-    （靠 company_id metadata 過濾的）檢索都要清空。
+    多租戶 chatbot_id 隔離：同名 path／同雜湊在不同 chatbot_id 下互不干擾，各自視為獨立的
+    new；一家公司的文件列表看不到另一家公司的文件；purge_chatbot 之後這家公司的文件與
+    （靠 chatbot_id metadata 過濾的）檢索都要清空。
     """
 
-    def test_same_path_and_hash_are_independent_across_companies(self, client, platform_token):
+    def test_same_path_and_hash_are_independent_across_chatbots(self, client, platform_token):
         from app import accounts_store
 
-        other_company = accounts_store.create_company("Pytest 隔離測試 - 另一家公司", None)
+        other_chatbot = accounts_store.create_chatbot("Pytest 隔離測試 - 另一家公司", None)
         path = "pytest_isolation_shared_path.md"
         content = "# 隔離測試\n\n## 小節\n兩家公司各自上傳同樣的路徑跟內容。\n"
         headers = {"Authorization": f"Bearer {platform_token}"}
         try:
-            # 公司 A（client fixture 預設的 test_company）新增這個路徑
+            # 公司 A（client fixture 預設的 test_chatbot）新增這個路徑
             resp_a = client.put(
                 f"/api/admin/documents/{path}",
                 data={"tags": ["a"], "client_sha256": _sha256(content)},
@@ -375,11 +375,11 @@ class TestCompanyIsolation:
             )
             assert resp_a.status_code == 200
 
-            # 公司 B 上傳一模一樣的路徑＋內容：因為 company_id 不同，應該視為全新的 new
+            # 公司 B 上傳一模一樣的路徑＋內容：因為 chatbot_id 不同，應該視為全新的 new
             # （不是 linked、也不會被視為已存在），content_changed 為 True。
             resp_b = client.put(
                 f"/api/admin/documents/{path}",
-                params={"company_id": other_company["id"]},
+                params={"chatbot_id": other_chatbot["id"]},
                 data={"tags": ["b"], "client_sha256": _sha256(content)},
                 files=_md_file(content, filename=path),
             )
@@ -389,7 +389,7 @@ class TestCompanyIsolation:
             # 公司 A 的列表看不到公司 B 的標籤，反之亦然（各自只看到自己那份，tags 不同）
             list_a = client.get("/api/admin/documents").json()["documents"]
             list_b = client.get(
-                "/api/admin/documents", params={"company_id": other_company["id"]}
+                "/api/admin/documents", params={"chatbot_id": other_chatbot["id"]}
             ).json()["documents"]
             docs_a = {d["path"]: d for d in list_a}
             docs_b = {d["path"]: d for d in list_b}
@@ -397,32 +397,32 @@ class TestCompanyIsolation:
             assert docs_b[path]["tags"] == ["b"]
         finally:
             client.delete(f"/api/admin/documents/{path}")
-            client.delete(f"/api/admin/documents/{path}", params={"company_id": other_company["id"]})
-            accounts_store.delete_company(other_company["id"])
+            client.delete(f"/api/admin/documents/{path}", params={"chatbot_id": other_chatbot["id"]})
+            accounts_store.delete_chatbot(other_chatbot["id"])
 
-    def test_purge_company_clears_documents_and_vectors(self, client, platform_token):
+    def test_purge_chatbot_clears_documents_and_vectors(self, client, platform_token):
         from app import accounts_store
-        from app.rag.documents_store import list_documents as _list_documents, purge_company
+        from app.rag.documents_store import list_documents as _list_documents, purge_chatbot
         from app.rag.engine import get_retriever
 
-        purge_company_target = accounts_store.create_company("Pytest 待刪除公司", None)
+        purge_chatbot_target = accounts_store.create_chatbot("Pytest 待刪除公司", None)
         path = "pytest_purge_target.md"
         content = "# 待刪除\n\n## 小節\n這份文件所屬的公司會被整個刪除。\n"
 
         upload_resp = client.put(
             f"/api/admin/documents/{path}",
-            params={"company_id": purge_company_target["id"]},
+            params={"chatbot_id": purge_chatbot_target["id"]},
             data={"tags": [], "client_sha256": _sha256(content)},
             files=_md_file(content, filename=path),
         )
         assert upload_resp.status_code == 200
         assert upload_resp.json()["chunk_count"] > 0
 
-        # 刪除前：list_documents(company_id) 應該看得到這筆
-        assert len(_list_documents(purge_company_target["id"])) == 1
+        # 刪除前：list_documents(chatbot_id) 應該看得到這筆
+        assert len(_list_documents(purge_chatbot_target["id"])) == 1
 
-        purge_company(purge_company_target["id"], get_retriever().index)
-        accounts_store.delete_company(purge_company_target["id"])
+        purge_chatbot(purge_chatbot_target["id"], get_retriever().index)
+        accounts_store.delete_chatbot(purge_chatbot_target["id"])
 
         # 刪除後：文件記錄清空
-        assert _list_documents(purge_company_target["id"]) == []
+        assert _list_documents(purge_chatbot_target["id"]) == []
