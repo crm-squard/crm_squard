@@ -2,14 +2,20 @@
 # 使用 Artifact Registry (europe-west1) 建置與部署至 Cloud Run
 
 steps:
-  # 1. 建置 Backend 容器鏡像
+  # 1. 建置 Backend 容器鏡像（先 pull 上一版當 cache，requirements 沒變就不用重新
+  # pip install，省掉大部分 build 時間；第一次跑（image 還不存在）pull 會失敗，用
+  # || true 吞掉繼續跑無 cache 的 build）
   - id: 'backend-build'
     name: 'gcr.io/cloud-builders/docker'
+    entrypoint: bash
     args:
-      - 'build'
-      - '-t'
-      - 'europe-west1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/crm-backend:latest'
-      - './sourcecode/backend'
+      - '-c'
+      - |
+        docker pull europe-west1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/crm-backend:latest || true
+        docker build \
+          --cache-from europe-west1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/crm-backend:latest \
+          -t europe-west1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/crm-backend:latest \
+          ./sourcecode/backend
 
   # 2. 推送 Backend 鏡像至 Artifact Registry
   - id: 'backend-push'
@@ -65,7 +71,9 @@ steps:
       - '-c'
       - |
         URL=$$(cat /workspace/backend_url.txt)
+        docker pull europe-west1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/crm-chat-widget:latest || true
         docker build \
+          --cache-from europe-west1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/crm-chat-widget:latest \
           --build-arg VITE_API_BASE_URL=$$URL \
           -t europe-west1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/crm-chat-widget:latest \
           ./sourcecode/chat-widget
@@ -109,11 +117,15 @@ steps:
   - id: 'corp-backend-build'
     name: 'gcr.io/cloud-builders/docker'
     waitFor: ['chat-widget-url']
+    entrypoint: bash
     args:
-      - 'build'
-      - '-t'
-      - 'europe-west1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/corp-backend:latest'
-      - './sourcecode/corp-backend'
+      - '-c'
+      - |
+        docker pull europe-west1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/corp-backend:latest || true
+        docker build \
+          --cache-from europe-west1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/corp-backend:latest \
+          -t europe-west1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/corp-backend:latest \
+          ./sourcecode/corp-backend
 
   # 8. 推送 Corp Backend 鏡像至 Artifact Registry
   - id: 'corp-backend-push'
@@ -162,7 +174,9 @@ steps:
         URL=$$(cat /workspace/backend_url.txt)
         CORP_URL=$$(cat /workspace/corp_backend_url.txt)
         WIDGET_URL=$$(cat /workspace/widget_url.txt)
+        docker pull europe-west1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/crm-frontend:latest || true
         docker build \
+          --cache-from europe-west1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/crm-frontend:latest \
           --build-arg VITE_API_BASE_URL=$$URL \
           --build-arg VITE_API_CORP_URL=$$CORP_URL \
           --build-arg VITE_CHAT_WIDGET_URL=$$WIDGET_URL/chat-widget.js \
@@ -204,7 +218,9 @@ steps:
         BACKEND_URL=$$(cat /workspace/backend_url.txt)
         CORP_URL=$$(cat /workspace/corp_backend_url.txt)
         WIDGET_URL=$$(cat /workspace/widget_url.txt)
+        docker pull europe-west1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/crm-admin-frontend:latest || true
         docker build \
+          --cache-from europe-west1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/crm-admin-frontend:latest \
           --build-arg VITE_ADMIN_API_URL=$$CORP_URL \
           --build-arg VITE_RAG_API_URL=$$BACKEND_URL \
           --build-arg VITE_GOOGLE_CLIENT_ID=${_GOOGLE_CLIENT_ID} \
@@ -238,6 +254,9 @@ steps:
 options:
   logging: CLOUD_LOGGING_ONLY
   substitutionOption: 'ALLOW_LOOSE'
+  # 提高 build machine 規格：pip install／npm build 這種 CPU-bound 步驟明顯加快，
+  # 成本增加不多（只在 build 期間計費）
+  machineType: 'E2_HIGHCPU_8'
 
 substitutions:
   # 正式站 corp-frontend 固定顯示 CRMsquard 這家商家的聊天機器人／RAG 知識庫
