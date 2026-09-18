@@ -48,7 +48,7 @@ from app.schemas import (
     WidgetTheme,
 )
 from app.agent import get_agent
-from app.orders import get_order, init_db as init_orders_db
+from app.orders import get_order, search_order, init_db as init_orders_db
 from app.chat_log import init_db as init_chat_log_db, log_chat
 from app.summary import summarize_day
 from app.providers import is_configured
@@ -725,29 +725,76 @@ async def _handle_chat(
     text: str, history: list, provider: str, chatbot_id: str | None = None
 ) -> ChatResponse:
     if not text:
+
         return ChatResponse(type="text", text="請輸入您的問題。")
 
+    # 店家資訊：固定資料，不經過 Gemini / RAG
+    if text.strip() == "店家資訊":
+        return ChatResponse(
+            type="text",
+            text=(
+                "🏪 CRM 智慧客服\n\n"
+                "📍 地址：福爾摩沙省有夠偏縣找不到鄉問路村大馬路田邊小巷罵罵號\n"
+                "☎ 客服電話：02-XXXXXXXX\n"
+                "🕒 營業時間：週一～週五 09:00–18:00\n"
+                "🌐 官方網站：https://crm-squard-main-frontend-821217334800.europe-west1.run.app/"
+            ),
+        )
+
     match = ORDER_CODE_PATTERN.search(text.upper())
+
     if match or "訂單" in text:
         if match is None:
             return ChatResponse(
                 type="text",
-                text="請提供訂單編號（例如 A12345 或 ORD-500001）以便查詢。",
+                text=(
+                    "請提供訂單編號與電話號碼以便查詢。\n"
+                    "例如：ORD-510155 980281157"
+                ),
             )
+
         code = match.group(0)
-        chatbot = _lookup_chatbot(chatbot_id)
-        if not chatbot or not chatbot.get("mcp_url"):
-            # 沒有對應公司，或公司沒填 mcp_url：這家服務沒開訂單查詢功能，不落到 SQLite
-            # fallback（那是全域 demo 資料，跟任何一家真的公司無關，不該冒充出現）。
+
+        # 訂單編號後面的第一個內容，原樣當作電話號碼。
+        # backend 不檢查、不補 0、不修改電話格式，
+        # 實際是否符合由 corp-backend / Firestore 判斷。
+        remaining_text = text[match.end():].strip()
+        if not remaining_text:
             return ChatResponse(
                 type="text",
-                text="此服務目前尚未提供訂單查詢功能，如需協助請聯繫客服（0800-123-456）。",
+                text=(
+                    "請同時提供訂單編號與電話號碼。\n"
+                    f"例如：{code} 980281157"
+                ),
             )
-        order = await get_order(code, chatbot["mcp_url"])
+
+        phone_number = remaining_text.split()[0]
+
+        chatbot = _lookup_chatbot(chatbot_id)
+        if not chatbot or not chatbot.get("mcp_url"):
+            return ChatResponse(
+                type="text",
+                text="目前無法使用訂單查詢服務，請聯繫真人客服（0800-123-456）。",
+            )
+
+        try:
+            order = await search_order(
+                code,
+                phone_number,
+                chatbot["mcp_url"],
+            )
+        except Exception:
+            return ChatResponse(
+                type="text",
+                text=(
+                    "訂單查詢服務暫時無法使用，"
+                    "請稍後再試或聯繫真人客服（0800-123-456）。"
+                ),
+            )
         if order is None:
             return ChatResponse(
                 type="text",
-                text=f"查無訂單編號 {code}，請確認編號是否正確，或聯繫真人客服（0800-123-456）。",
+                text="查無訂單，請確認訂單編號與電話號碼是否正確。",
             )
         return ChatResponse(
             type="order",

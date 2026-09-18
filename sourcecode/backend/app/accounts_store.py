@@ -63,6 +63,13 @@ def _ensure_schema() -> None:
         conn.execute(sql_text(
             "ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS quick_replies TEXT"
         ))
+        # LINE Messaging API 設定
+        conn.execute(sql_text(
+            "ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS line_channel_secret TEXT"
+        ))
+        conn.execute(sql_text(
+            "ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS line_channel_access_token TEXT"
+        ))
         conn.execute(sql_text(
             """
             CREATE TABLE IF NOT EXISTS accounts (
@@ -333,6 +340,8 @@ def _row_to_chatbot(row) -> dict:
         "mcp_url": row.mcp_url,
         "welcome_message": row.welcome_message,
         "quick_replies": json.loads(row.quick_replies) if row.quick_replies else None,
+        "line_channel_secret": getattr(row, "line_channel_secret", None),
+        "line_channel_access_token": getattr(row, "line_channel_access_token", None),
         "created_at": row.created_at.isoformat() if row.created_at is not None else None,
         # 只有透過 list_chatbots_visible_to() 查出來的公司才有這個欄位（SELECT 裡有多帶
         # your_role）；get_chatbot()／create_chatbot()／update_chatbot() 回傳的公司資訊
@@ -403,7 +412,8 @@ def get_chatbot(chatbot_id: str) -> Optional[dict]:
     with engine.connect() as conn:
         row = conn.execute(
             sql_text(
-                "SELECT id, name, mcp_url, welcome_message, quick_replies, created_at "
+                "SELECT id, name, mcp_url, welcome_message, quick_replies, "
+                "line_channel_secret, line_channel_access_token, created_at "
                 "FROM chatbots WHERE id = :id"
             ),
             {"id": chatbot_id},
