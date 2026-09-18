@@ -152,3 +152,51 @@ async def get_order(code: str, mcp_url: str):
         # 保留這層當最後防線。
         logger.warning(f"corp-backend MCP 查詢訂單失敗，改用本機 SQLite fallback: {e}")
         return _get_order_from_sqlite(code)
+
+
+async def search_order(code: str, phone_number: str, mcp_url: str):
+    """透過 corp-backend MCP，以訂單編號與電話號碼查詢訂單。"""
+
+    http_client = create_mcp_http_client()
+
+    async with streamable_http_client(
+        mcp_url,
+        http_client=http_client,
+    ) as (read, write):
+        async with ClientSession(read, write) as session:
+            await session.initialize()
+
+            result = await session.call_tool(
+                "search_order",
+                {
+                    "order_id": code.upper(),
+                    "phone_number": phone_number,
+                },
+            )
+
+    if result.is_error:
+        raise RuntimeError(
+            f"corp-backend MCP search_order 回傳錯誤: {result.content}"
+        )
+
+    if result.structured_content is not None:
+        order = result.structured_content.get(
+            "result",
+            result.structured_content,
+        )
+    elif result.content:
+        order = json.loads(result.content[0].text)
+    else:
+        order = None
+
+    if order is None:
+        return None
+
+    status_str = str(order.get("Status", "")).strip().lower()
+    stage = _CORP_STATUS_TO_STAGE.get(status_str, 0)
+
+    return {
+        "status": stage,
+        "eta": order.get("OrderDate"),
+        "items": order.get("ProductName"),
+    }

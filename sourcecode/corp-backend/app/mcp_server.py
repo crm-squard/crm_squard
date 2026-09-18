@@ -49,6 +49,22 @@ def get_order(order_id: str) -> dict | None:
 
 
 @mcp.tool()
+def search_order(order_id: str, phone_number: str) -> dict | None:
+    """依訂單編號與電話號碼查詢訂單，兩者必須完全符合。找不到或電話不符時回傳 None。"""
+    try:
+        doc = crud.get_document(collection_name=COLLECTION_ORDERS, doc_id=order_id)
+    except Exception as e:
+        logger.error(f"MCP search_order 讀取 Firebase 訂單失敗: {e}")
+        raise MCPError(code=INTERNAL_ERROR, message=f"讀取 Firebase 訂單失敗: {order_id}") from e
+    if not doc:
+        return None
+    if doc.data.get("PhoneNumber") != phone_number:
+        return None
+
+    return {"id": doc.id, **doc.data}
+
+
+@mcp.tool()
 def list_orders(limit: int = 100, order_by: str | None = None) -> dict:
     """查詢訂單列表，回應格式同 GET /Order（count + orders）。"""
     try:
