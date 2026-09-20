@@ -217,3 +217,24 @@ async def test_tool_log_records_nothing_when_llm_calls_no_tool(monkeypatch, comp
 
     assert resp.json()["text"] == "不需要工具，直接回答"
     assert chat_log.get_tool_calls_for_chatbot(company["id"]) == []
+
+
+async def test_unconfigured_gemini_key_is_reported_as_such_not_as_connection_failure(monkeypatch, company):
+    """真實 bug：provider 沒設金鑰是設定問題，不能被誤報成「MCP 連線失敗」。"""
+    company_server = FakeCompanyServer()
+
+    @company_server.mcp.tool()
+    def some_tool() -> str:
+        return "x"
+
+    _route_mcp_to(monkeypatch, company_server)
+
+    def _not_configured(provider):
+        raise providers.ProviderNotConfigured("尚未設定 google 的 API key")
+
+    monkeypatch.setattr(providers, "_get_config", _not_configured)
+
+    async with company_server.mcp.session_manager.run():
+        resp = await _chat("@mcp 你好", company["id"])
+
+    assert resp.json()["text"] == "尚未設定 google 的 API key"

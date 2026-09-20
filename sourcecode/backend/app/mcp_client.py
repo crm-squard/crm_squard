@@ -150,6 +150,11 @@ async def open_mcp_session(mcp_url: str, mcp_token: str | None):
     開一段到公司 MCP server 的短連線。無狀態模式下進入 Client 不會送任何請求，連線失敗
     （連不上、逾時、被拒絕）要到第一次請求時才會出現，而且 anyio 會把原因包成巢狀的
     ExceptionGroup 在離開時拋出，這裡統一展開並轉成 McpClientError，呼叫端只需要處理一種例外。
+
+    但呼叫端自己在 with 區塊內丟出的例外（例如 LLM provider 沒設金鑰）不是 MCP 通訊問題，
+    必須原樣往外拋，不能被誤標成「連線失敗」。區分方式：先記下 with 區塊內拋出的例外——
+    一般的 Exception（且不是 McpClientError）就是呼叫端自己的錯誤；連線失敗時 with 區塊內看到的
+    是 CancelledError（anyio 取消了正在等待的請求）或本模組已轉成 McpClientError 的例外。
     """
     client = Client(
         _open_transport(mcp_url, mcp_token),
@@ -157,10 +162,17 @@ async def open_mcp_session(mcp_url: str, mcp_token: str | None):
         client_info=MCP_CLIENT_INFO,
         read_timeout_seconds=settings.MCP_TIMEOUT_SECONDS,
     )
+    body_error: BaseException | None = None
     try:
         async with client:
-            yield McpSession(client)
+            try:
+                yield McpSession(client)
+            except BaseException as e:
+                body_error = e
+                raise
     except Exception as e:
+        if isinstance(body_error, Exception) and not isinstance(body_error, McpClientError):
+            raise body_error from None
         leaves = list(_leaf_exceptions(e))
         for leaf in leaves:
             if isinstance(leaf, McpClientError):

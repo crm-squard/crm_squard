@@ -228,11 +228,25 @@ async def test_slow_tool_call_times_out_quickly_and_is_reported_to_llm(monkeypat
         assert elapsed < 2, f"應該在逾時設定（0.3 秒）附近就中斷，實際等了 {elapsed:.1f} 秒"
 
 
-async def test_caller_own_error_inside_session_is_not_swallowed(monkeypatch):
-    """呼叫端 with 區塊內自己的錯誤（不是 MCP 通訊問題）不能被吞掉或改寫成別的意思。"""
-    async with running_server(monkeypatch):
-        with pytest.raises(Exception) as excinfo:
-            async with open_mcp_session(BASE_URL, "t"):
-                raise ValueError("呼叫端自己的錯誤")
+async def test_caller_own_error_inside_session_is_raised_unchanged(monkeypatch):
+    """呼叫端 with 區塊內自己的錯誤（不是 MCP 通訊問題）必須原樣拋出，不能被誤標成 McpClientError。"""
 
-        assert "呼叫端自己的錯誤" in str(excinfo.value)
+    class CallerError(Exception):
+        pass
+
+    async with running_server(monkeypatch):
+        with pytest.raises(CallerError) as excinfo:
+            async with open_mcp_session(BASE_URL, "t") as session:
+                await session.list_tools()  # 連線本身是好的
+                raise CallerError("呼叫端自己的錯誤")
+
+        assert type(excinfo.value) is CallerError
+        assert not isinstance(excinfo.value, McpClientError)
+
+
+async def test_caller_own_error_before_any_request_is_raised_unchanged(monkeypatch):
+    """就算還沒送出任何 MCP 請求，呼叫端的錯誤也一樣要原樣拋出（真實 bug：Gemini 沒設金鑰）。"""
+    async with running_server(monkeypatch):
+        with pytest.raises(ValueError):
+            async with open_mcp_session(BASE_URL, "t"):
+                raise ValueError("尚未設定金鑰")
