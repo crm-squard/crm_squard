@@ -67,3 +67,50 @@ async def test_get_order_falls_back_to_sqlite_when_mcp_unavailable(monkeypatch):
     assert order["status"] == expected["status"]
     assert order["eta"] == expected["eta"]
     assert order["items"] == expected["items"]
+
+
+async def test_get_order_via_mcp_is_stateless_and_self_describing(monkeypatch):
+    """
+    走真正的 MCP 呼叫（進程內的 ASGI server，不需要啟動 corp-backend），驗證無狀態協定：
+    不做 initialize 握手、不帶 Mcp-Session-Id，且每個請求自己帶協定版本與 client 資訊／能力，
+    這樣任何一台 corp-backend 實例都能單獨處理請求，可以水平擴充。
+    """
+    import httpx2
+    from mcp.client import Client
+    from mcp.client.streamable_http import streamable_http_client
+    from mcp.server.mcpserver import MCPServer
+
+    import app.orders as orders_module
+
+    fake_corp_backend = MCPServer(name="fake-corp-backend")
+
+    @fake_corp_backend.tool()
+    def get_order(order_id: str) -> dict:
+        return {"Status": "Shipped", "OrderDate": "2026-09-01", "ProductName": "測試商品"}
+
+    mcp_app = fake_corp_backend.streamable_http_app(streamable_http_path="/", json_response=True, stateless_http=True)
+    seen_requests = []
+
+    async def recording_app(scope, receive, send):
+        if scope["type"] == "http":
+            headers = dict(scope["headers"])
+            seen_requests.append({"session_id": headers.get(b"mcp-session-id"), "version": headers.get(b"mcp-protocol-version")})
+        await mcp_app(scope, receive, send)
+
+    # Client 要在 async with 裡才會連線，這裡只需要換掉 transport，其餘參數（mode、client_info）照原樣傳入
+    def _client_factory(url, **kwargs):
+        http_client = httpx2.AsyncClient(transport=httpx2.ASGITransport(app=recording_app))
+        captured_kwargs.update(kwargs)
+        return Client(streamable_http_client(url, http_client=http_client), **kwargs)
+
+    captured_kwargs = {}
+    monkeypatch.setattr(orders_module, "Client", _client_factory)
+
+    async with fake_corp_backend.session_manager.run():
+        order = await orders_module._get_order_via_mcp("a12345", "http://localhost:8001/")
+
+    assert order == {"status": 2, "eta": "2026-09-01", "items": "測試商品"}
+    assert captured_kwargs["mode"] == "2026-07-28"
+    assert seen_requests, "應該至少送出一個 MCP 請求"
+    assert all(r["session_id"] is None for r in seen_requests)
+    assert all(r["version"] == b"2026-07-28" for r in seen_requests)

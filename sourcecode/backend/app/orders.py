@@ -16,13 +16,21 @@ import logging
 import sqlite3
 from contextlib import contextmanager
 
-from mcp.client.session import ClientSession
-from mcp.client.streamable_http import create_mcp_http_client, streamable_http_client
+from mcp.client import Client
 from mcp.shared.exceptions import MCPError
+from mcp_types import Implementation
 
 from app.config import settings
 
 logger = logging.getLogger("backend.orders")
+
+# 固定使用 2026-07-28 的無狀態協定：不做 initialize 握手、不帶 Mcp-Session-Id，
+# 協定版本與 client 資訊／capabilities 由 SDK 放進每個請求的 _meta 與 header，
+# 所以任何一台 corp-backend 實例都能獨立處理單一請求，可直接放在 load balancer 後面水平擴充。
+# 不用 mode="auto"：它會先多送一次 server/discover，而這裡每次查詢都是一段短連線，
+# 等於每次多一趟往返；MCP 連不上或版本不符時本來就會退回 SQLite fallback（見 get_order）。
+MCP_PROTOCOL_MODE = "2026-07-28"
+MCP_CLIENT_INFO = Implementation(name="crm-backend", version="1.0.0")
 
 # mcp_url 改成每家公司各自在 chatbots.mcp_url 設定（見 app/accounts_store.py），
 # 呼叫端（app/main.py）要先查出公司有沒有設定，沒設定就不該呼叫這裡——
@@ -95,26 +103,18 @@ def _get_order_from_sqlite(code: str):
 async def _get_order_via_mcp(code: str, mcp_url: str):
     """
     透過 MCP Streamable HTTP 呼叫 corp-backend 的 get_order tool。
-    stateless_http 模式下不用維護長連線，每次查詢開一段短連線，函式結束就自動關閉。
 
-    mcp==2.0.0b2（v2 beta）備註：跟官方 migration guide 描述的不同，
-    `streamable_http_client()` 回傳的仍是 `(read_stream, write_stream)` 這種底層 stream
-    tuple（而非直接可用的 session 物件），實測過還是要照 v1 的方式包一層
-    `ClientSession(read, write)` 並呼叫 `await session.initialize()` 完成 handshake，
-    跳過這步 `call_tool()` 會因為沒有協定版本可用而失敗。這點已在改版時實測驗證過，
-    並非沿用舊寫法未更新。
+    無狀態模式（見 MCP_PROTOCOL_MODE）：進入 Client 時不送任何請求，`call_tool()` 就是這次
+    查詢唯一的一個 HTTP POST，版本與能力資訊已隨請求帶上，沒有 session 需要維護或清理。
 
-    `create_mcp_http_client()` 是 SDK 提供的 httpx2.AsyncClient 便利建構函式，預設開啟
-    follow_redirects=True；corp-backend 把 MCP app mount 在 "/mcp"（見 app/main.py），
+    mcp==2.0.0b2（v2 beta）備註：`Client` 內部用 `create_mcp_http_client()` 建立 httpx2 client，
+    預設開啟 follow_redirects=True；corp-backend 把 MCP app mount 在 "/mcp"（見 app/main.py），
     Starlette 對到子路徑 "/" 的請求（也就是 mcp_url 不帶結尾斜線時）
     會先回 307 導到 "/mcp/"，沒有 follow_redirects 的話 POST 會直接失敗
-    （實測驗證過，並非理論推測）。若改用手動建立的 httpx2.AsyncClient 記得也要開這個選項。
+    （實測驗證過，並非理論推測）。
     """
-    http_client = create_mcp_http_client()
-    async with streamable_http_client(mcp_url, http_client=http_client) as (read, write):
-        async with ClientSession(read, write) as session:
-            await session.initialize()
-            result = await session.call_tool("get_order", {"order_id": code.upper()})
+    async with Client(mcp_url, mode=MCP_PROTOCOL_MODE, client_info=MCP_CLIENT_INFO) as client:
+        result = await client.call_tool("get_order", {"order_id": code.upper()})
 
     # v2 的欄位命名從 camelCase 改成 snake_case：isError -> is_error、
     # structuredContent -> structured_content。工具內主動 raise MCPError 的情況
