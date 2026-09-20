@@ -59,7 +59,21 @@ GCP_PROJECT_ID=your-gcp-project-id
 # 憑證載入 (任選一種方式)
 FIREBASE_CREDENTIALS_PATH=./path/to/serviceAccountKey.json
 # FIREBASE_CREDENTIALS_JSON={"type": "service_account", ...}
+
+# MCP endpoint 的 Bearer 金鑰（各自獨立，未設定時對應 endpoint 回 503）
+MCP_API_KEY=<隨機字串>
+MCP_ADMIN_API_KEY=<另一組隨機字串>
 ```
+
+### MCP endpoint
+
+| 路徑 | tools | 金鑰 | 使用者 |
+|---|---|---|---|
+| `/mcp` | `get_order`（唯讀） | `MCP_API_KEY` | 聊天後端（LLM） |
+| `/mcp-admin` | `list_orders`、`create_order`、`update_order`、`delete_order` | `MCP_ADMIN_API_KEY` | 管理用途，聊天後端不使用 |
+
+請求需帶 `Authorization: Bearer <金鑰>`；`list_orders` 會回傳所有訂單、沒有租戶隔離，所以不放在 `/mcp`。
+測試：`pip install -r requirements-dev.txt` 後在本目錄執行 `python -m pytest tests`。
 
 ---
 
