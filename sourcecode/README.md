@@ -1,12 +1,12 @@
-# 智慧CRM系統 — 顧客查詢產品資訊 / 訂單查詢 Demo
+# 智慧CRM系統 — 顧客查詢產品資訊 / MCP 查詢 Demo
 
-對應「智慧CRM系統功能提案」#1（顧客查詢產品資訊，RAG）與 #2（顧客查詢訂單）的完整可運行專案。
-單一聊天視窗，後端依訊息內容自動判斷是產品問題還是訂單查詢。
+對應「智慧CRM系統功能提案」#1（顧客查詢產品資訊，RAG）的完整可運行專案，並可透過公司自己的 MCP server 擴充查詢功能（例如訂單）。
+單一聊天視窗，訊息以 `@mcp` 開頭時由 LLM 透過該公司的 MCP tools 回答，其他訊息走 RAG。
 
 ```
 使用者輸入 → [後端 /api/chat]
-                 ├─ 偵測到訂單編號 → 查詢訂單資料（#2）
-                 └─ 一般問題 → ProductQueryAgent：向量化 → 查詢RAG資料庫 → LLM生成回答（#1）
+                 ├─ 以 @mcp 開頭 → LLM 透過公司 MCP server 的 tools 回答（Gemini）
+                 └─ 其他問題 → ProductQueryAgent：向量化 → 查詢RAG資料庫 → LLM生成回答（#1）
 ```
 
 ## 專案結構
@@ -17,7 +17,8 @@ crm-rag-project/
 │   ├── app/
 │   │   ├── main.py          # API 入口 /api/chat
 │   │   ├── agent.py         # ProductQueryAgent（對應提案 #1 流程 01~04）
-│   │   ├── orders.py        # 模擬訂單資料（對應提案 #2）
+│   │   ├── mcp_client.py    # 通用 MCP client（2026-07-28 無狀態協定）
+│   │   ├── mcp_chat.py      # @mcp 對話路徑
 │   │   ├── documents.py     # 知識庫來源（讀取 app/data/ 底下的產品文案 + 保固/退換貨/運送付款/FAQ 政策文件）
 │   │   ├── llm.py           # Qwen2.5 載入與生成
 │   │   └── rag/              # chunking / embedding / Chroma 向量資料庫
@@ -138,7 +139,7 @@ npm run dev
 
 - 「無線滑鼠支援多少 DPI？」→ 觸發 #1 產品問答（RAG + LLM）
 - 「智慧手錶有什麼特別功能？」→ 觸發 #1 產品問答，回答會提到隱藏的彩蛋錶面
-- 「查詢訂單 A12345」→ 觸發 #2 訂單查詢（回傳配送進度時間軸）
+- 「@mcp 幫我查訂單 A12345」→ 由 LLM 透過該公司 MCP server 的 tools 查詢（需先在後台設定 MCP URL 與金鑰，且使用 Gemini 模型）
 
 ## 之後可以延伸的部分
 
@@ -146,4 +147,4 @@ npm run dev
   不在本專案範圍內，可作為獨立的後續模組開發
 - 向量資料庫已改用持久化模式（`chromadb.PersistentClient`，索引存在 `backend/chroma_data/`），服務重啟不需要重新 embed；
   若 `documents.py` 知識庫內容有更動，需手動刪除 `backend/chroma_data/` 目錄以重建索引
-- 訂單資料目前是寫死在 `backend/app/orders.py` 的模擬資料，之後可換成真實訂單資料庫查詢
+- 訂單等查詢功能由各公司的 MCP server 提供（範例見 `corp-backend`），backend 不再內建模擬訂單資料

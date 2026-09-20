@@ -104,6 +104,7 @@ export const ui = {
     "p-6 max-[620px]:p-3.5 [&_h2]:mt-0 [&_h2]:mb-1 [&_h2]:text-lg [&_h2]:text-admin-heading-secondary [&_h2:not(:first-child)]:mt-7",
   ),
   marginTop4: tw("mt-4"),
+  inlineActions: tw("flex flex-wrap items-center gap-2"),
   fullWidth: tw("w-full [&>.ant-space-item]:w-full"),
   preWrap: tw("mt-4 whitespace-pre-wrap"),
   headingTag: tw(

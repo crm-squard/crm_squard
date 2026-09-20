@@ -23,6 +23,8 @@ export interface ChatbotInfo {
   mcp_url: string | null;
   welcome_message: string | null;
   quick_replies: string[] | null;
+  // 只表示有沒有設定 MCP 金鑰，金鑰本身不會出現在這個型別（見 getChatbotMcpToken）。
+  has_mcp_token?: boolean;
   created_at: string;
   // 目前登入帳號在這家公司的身分；platform 帳號沒有這個概念，固定是 null。
   your_role?: ChatbotRole | null;

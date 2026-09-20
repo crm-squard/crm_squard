@@ -24,8 +24,36 @@ Widget 呼叫時必須帶入企業客戶識別 Header：`X-Client-ID: <assigned-
 回應以 `type` 判別：
 
 - `product`：包含 `text`，可包含 `source` 與 `sources`。
-- `order`：包含 `code`、`status`、`eta` 與 `items`。
+- `order`：包含 `code`、`status`、`eta` 與 `items`。**後端目前不會產生這個型別**（訂單專屬的分流已移除），保留在契約中是為了前端相容，之後若要用結構化卡片呈現 MCP 結果可再啟用。
 - `text`：包含 `text`，用於提示、查無資料或可理解的錯誤訊息。
+
+## `@mcp` 對話（透過公司 MCP server 回答）
+
+`POST /api/chat` 的 `message` 以 `@mcp` 開頭（忽略大小寫與前置空白）時，不走 RAG，改把去掉 `@mcp` 之後的
+問題，連同該公司 `mcp_url` 的 `tools/list` 交給 LLM，由 LLM 自己決定要不要呼叫、呼叫哪個 tool，最後
+整理成文字。回應一律是 `type: text`。
+
+- 目前只支援 `provider: google`（Gemini）；其他 provider（含 `local`）會回提示文字。
+- backend 不認識任何特定 tool（沒有寫死的名稱、參數或回傳欄位）：公司的 MCP server 新增 tool 後不需修改 backend。
+- 協定使用 MCP 2026-07-28 無狀態模式：不做 `initialize` 握手、不帶 `Mcp-Session-Id`，每個請求自帶協定版本與
+  client 資訊；每家公司使用自己的 Bearer 金鑰（`chatbots.mcp_token`）。
+- 預設只會把「非寫入型」tool 交給 LLM（`annotations.destructive_hint` 為 true 或 `read_only_hint` 為 false 的會被隱藏，
+  `MCP_ALLOW_WRITE_TOOLS=true` 才會放行）；聊天訊息是不受信任的輸入，權限邊界仍以 MCP server 端拆分與認證為準。
+- LLM 最多連續呼叫 `MCP_MAX_TOOL_ROUNDS`（預設 3）輪 tool；tool 回傳內容超過 `MCP_TOOL_RESULT_MAX_CHARS`（預設 4000）字會被截斷。
+- 所有失敗（沒有 `mcp_url`、provider 不支援、MCP server 連不上或金鑰無效、逾時）都回 `type: text` 的可理解訊息，
+  不退回 RAG、不回 HTTP 5xx。
+- 每次 LLM 呼叫的 tool 會寫入 `mcp_tool_log`（公司、tool 名稱、參數、是否失敗）；**不記 tool 回傳內容**，
+  但參數可能含顧客資訊（例如訂單編號），目前沒有保留期限，需依隱私規範另行處理。
+- 沒有 `@mcp` 前綴的訊息一律走 RAG + LLM，就算內容長得像訂單編號。
+
+### 公司的 MCP 金鑰
+
+- `POST /api/admin/chatbots`、`PUT /api/admin/chatbots/{chatbot_id}` 可帶 `mcp_token`；`PUT` 不帶代表不變更，
+  空字串代表清除。
+- 金鑰不會出現在 `ChatbotInfo`／列表／`/api/auth/me` 回應，這些回應只有布林值 `has_mcp_token`。
+- `GET /api/admin/chatbots/{chatbot_id}/mcp-token`：回傳 `{ "mcp_token": "..." | null }`，權限同其他公司管理端點
+  （platform 帳號或綁定該公司的帳號，否則 403），每次呼叫都會寫入稽核紀錄（`reveal_mcp_token`）。
+  稽核紀錄只記「有沒有動到金鑰」，不記金鑰內容。金鑰目前以明文存在資料庫，因為必須能還原才能送給 MCP server。
 
 ## 其他端點
 
@@ -130,4 +158,4 @@ Form 欄位：`tags`（可重複的同名欄位，對應 `list[str]`，不帶則
 
 - 新增必填欄位、移除欄位、改名或改變 `type` 語意，均視為破壞性變更，必須同步修改前端與文件並清楚標示。
 - 新增可選欄位時，舊呼叫端仍須能正常運作。
-- 訂單編號目前採 1 個英文字母加 5 位數字，例如 `A12345`。
+- 新增可選欄位 `has_mcp_token`（`ChatbotInfo`）與 `mcp_token`（建立／更新公司請求）時，舊呼叫端仍可正常運作。

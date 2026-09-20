@@ -53,5 +53,5 @@ npm run inject:target
 ```
 
 `data-client-id` 是公開的企業客戶識別碼，不是登入或授權憑證。此值現在對應後端 `chatbots` 表的
-chatbot_id（透過 `/api/admin/chatbots` 建立/查詢），沒有對應 chatbot 時聊天功能仍可用，但訂單查詢／RAG
+chatbot_id（透過 `/api/admin/chatbots` 建立/查詢），沒有對應 chatbot 時聊天功能仍可用，但 `@mcp` 查詢／RAG
 檢索會查不到任何資料。正式資料隔離仍須由後端驗證客戶狀態並限制資料範圍。

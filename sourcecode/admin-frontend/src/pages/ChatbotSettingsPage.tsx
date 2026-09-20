@@ -11,7 +11,11 @@ import { Navigate, useNavigate } from "react-router-dom";
 import AdminPageLayout from "../components/AdminPageLayout";
 import { useAuth } from "../auth/AuthContext";
 import { ui } from "../uiStyles";
-import { deleteChatbot, updateChatbot } from "../api/chatbots";
+import {
+  deleteChatbot,
+  getChatbotMcpToken,
+  updateChatbot,
+} from "../api/chatbots";
 import { createAccount, deleteAccount, listAccounts } from "../api/accounts";
 import { listAuditLog, type AuditLogEntry } from "../api/auditLog";
 import type { Account } from "../api/auth";
@@ -19,6 +23,7 @@ import type { Account } from "../api/auth";
 const ACTION_LABELS: Record<string, string> = {
   create_chatbot: "建立商家服務",
   update_chatbot: "更新商家設定",
+  reveal_mcp_token: "查看 MCP 金鑰",
   delete_chatbot: "刪除商家服務",
   create_account: "新增帳號",
   delete_account: "移除帳號",
@@ -33,18 +38,15 @@ const { TextArea } = Input;
 interface ChatbotSettingsForm {
   name: string;
   mcp_url?: string;
+  mcp_token?: string;
   welcome_message?: string;
   quick_replies?: string;
 }
 
-const DEFAULT_QUICK_REPLIES = [
-  "無線滑鼠支援多少 DPI？",
-  "查詢訂單 A12345",
-  "退貨要幾天內申請？",
-];
+const DEFAULT_QUICK_REPLIES = ["無線滑鼠支援多少 DPI？", "退貨要幾天內申請？"];
 
 /**
- * 公司資訊設定頁面：MCP URL（訂單查詢用）跟聊天機器人開頭語從原本 select-chatbot 頁面
+ * 公司資訊設定頁面：MCP 連線設定（URL 與金鑰，訊息以 @mcp 開頭時使用）跟聊天機器人開頭語從原本 select-chatbot 頁面
  * 的就地編輯移過來這裡，select-chatbot 頁面只留商家名稱跟識別碼，操作對象一律是
  * AuthContext 目前選定的公司（跟 RagPage 一樣的模式，不用另外帶 chatbot_id 路由參數）。
  */
@@ -63,6 +65,10 @@ export default function ChatbotSettingsPage() {
   const [accountForm] = Form.useForm<{ email: string }>();
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  // 金鑰明文只在使用者按下「查看金鑰」後才向後端取得，預設不載入、不顯示；切換公司時清掉。
+  const [revealedMcpToken, setRevealedMcpToken] = useState<string | null>(null);
+  const [revealingToken, setRevealingToken] = useState(false);
+  const [clearingToken, setClearingToken] = useState(false);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [addingAccount, setAddingAccount] = useState(false);
   const [auditEntries, setAuditEntries] = useState<AuditLogEntry[]>([]);
@@ -83,6 +89,10 @@ export default function ChatbotSettingsPage() {
   useEffect(() => {
     loadAccounts();
   }, [loadAccounts]);
+
+  useEffect(() => {
+    setRevealedMcpToken(null);
+  }, [selectedChatbotId]);
 
   useEffect(() => {
     if (!token || !selectedChatbotId) return;
@@ -128,15 +138,48 @@ export default function ChatbotSettingsPage() {
       await updateChatbot(token, selectedChatbotId, {
         name: values.name,
         mcp_url: values.mcp_url ?? "",
+        // 金鑰欄位留空代表不變更（空字串在後端是「清除」，改由專用的清除按鈕處理）
+        ...(values.mcp_token ? { mcp_token: values.mcp_token } : {}),
         welcome_message: values.welcome_message ?? "",
         quick_replies: quickReplies,
       });
+      form.setFieldValue("mcp_token", "");
+      setRevealedMcpToken(null);
       await refreshMe();
       messageApi.success("已儲存 Chatbot 設定");
     } catch (err) {
       messageApi.error(err instanceof Error ? err.message : "儲存失敗");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleRevealMcpToken() {
+    if (!token || !selectedChatbotId) return;
+    setRevealingToken(true);
+    try {
+      setRevealedMcpToken(
+        (await getChatbotMcpToken(token, selectedChatbotId)) ?? "",
+      );
+    } catch (err) {
+      messageApi.error(err instanceof Error ? err.message : "查看金鑰失敗");
+    } finally {
+      setRevealingToken(false);
+    }
+  }
+
+  async function handleClearMcpToken() {
+    if (!token || !selectedChatbotId) return;
+    setClearingToken(true);
+    try {
+      await updateChatbot(token, selectedChatbotId, { mcp_token: "" });
+      setRevealedMcpToken(null);
+      await refreshMe();
+      messageApi.success("已清除 MCP 金鑰");
+    } catch (err) {
+      messageApi.error(err instanceof Error ? err.message : "清除金鑰失敗");
+    } finally {
+      setClearingToken(false);
     }
   }
 
@@ -195,7 +238,7 @@ export default function ChatbotSettingsPage() {
   return (
     <AdminPageLayout
       title="Chatbot 設定"
-      description="管理目前選定商家的基本資訊、訂單查詢 MCP URL、聊天機器人開頭語與開場快速提問。"
+      description="管理目前選定商家的基本資訊、MCP 連線設定（URL 與金鑰）、聊天機器人開頭語與開場快速提問。"
       beforeHeader={contextHolder}
     >
       <Card>
@@ -217,11 +260,58 @@ export default function ChatbotSettingsPage() {
               </Form.Item>
               <Form.Item
                 name="mcp_url"
-                label="訂單查詢 MCP URL"
-                extra="沒有填寫時，這家商家的聊天機器人不支援訂單查詢，RAG 知識庫問答不受影響。"
+                label="MCP URL"
+                extra="使用者訊息以 @mcp 開頭時，聊天機器人會透過這個位址的 MCP server 呼叫查詢功能（目前僅支援 Gemini 模型）。沒有填寫時 @mcp 不可用，RAG 知識庫問答不受影響。"
               >
                 <Input placeholder="例如 http://localhost:8001/mcp" />
               </Form.Item>
+              <Form.Item
+                name="mcp_token"
+                label="MCP 金鑰"
+                extra="呼叫這家商家的 MCP server 時使用的 Bearer 金鑰。留空表示不變更；已設定的金鑰可用下方按鈕查看（每次查看都會寫入稽核紀錄）。"
+              >
+                <Input.Password
+                  autoComplete="new-password"
+                  placeholder={
+                    chatbot.has_mcp_token
+                      ? "已設定，留空表示不變更"
+                      : "尚未設定"
+                  }
+                />
+              </Form.Item>
+              {chatbot.has_mcp_token ? (
+                <Form.Item>
+                  <div className={ui.inlineActions}>
+                    {revealedMcpToken === null ? (
+                      <Button
+                        loading={revealingToken}
+                        onClick={handleRevealMcpToken}
+                      >
+                        查看金鑰
+                      </Button>
+                    ) : (
+                      <>
+                        <Text code copyable>
+                          {revealedMcpToken}
+                        </Text>
+                        <Button onClick={() => setRevealedMcpToken(null)}>
+                          隱藏
+                        </Button>
+                      </>
+                    )}
+                    <Popconfirm
+                      title="確定要清除這家商家的 MCP 金鑰嗎？"
+                      description="清除後 @mcp 會因為金鑰無效而無法連線，直到重新設定。"
+                      onConfirm={handleClearMcpToken}
+                      okButtonProps={{ danger: true }}
+                    >
+                      <Button danger loading={clearingToken}>
+                        清除金鑰
+                      </Button>
+                    </Popconfirm>
+                  </div>
+                </Form.Item>
+              ) : null}
               <Form.Item
                 name="welcome_message"
                 label="聊天機器人開頭語"
@@ -229,19 +319,17 @@ export default function ChatbotSettingsPage() {
               >
                 <TextArea
                   rows={3}
-                  placeholder="您好，我是線上客服，可以問我任何產品的規格、特色，或是輸入訂單編號查詢配送狀態喔。"
+                  placeholder="您好，我是線上客服，可以問我任何產品的規格、特色，或是退換貨政策喔。"
                 />
               </Form.Item>
               <Form.Item
                 name="quick_replies"
                 label="開場快速提問"
-                extra="一行一個，顯示在聊天視窗剛打開時的快速提問按鈕；全部清空時使用系統預設的三個問題。"
+                extra="一行一個，顯示在聊天視窗剛打開時的快速提問按鈕；全部清空時使用系統預設的問題。"
               >
                 <TextArea
                   rows={3}
-                  placeholder={
-                    "無線滑鼠支援多少 DPI？\n查詢訂單 A12345\n退貨要幾天內申請？"
-                  }
+                  placeholder={"無線滑鼠支援多少 DPI？\n退貨要幾天內申請？"}
                 />
               </Form.Item>
               <Button type="primary" htmlType="submit" loading={saving}>
@@ -293,7 +381,9 @@ export default function ChatbotSettingsPage() {
             >
               <List.Item.Meta
                 title={acc.email}
-                description={acc.chatbot_role === "primary" ? "主帳號" : "協作帳號"}
+                description={
+                  acc.chatbot_role === "primary" ? "主帳號" : "協作帳號"
+                }
               />
             </List.Item>
           )}
