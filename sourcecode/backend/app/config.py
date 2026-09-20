@@ -26,8 +26,16 @@ class Settings:
     # 對話紀錄 SQLite 檔案路徑，供未來「管理者摘要當日提問」功能使用
     CHAT_LOG_DB_PATH: str = os.getenv("CHAT_LOG_DB_PATH", "./chat_log.db")
 
-    # 訂單資料 SQLite 檔案路徑；MCP 查不到 corp-backend 時的 fallback 資料來源
-    ORDERS_DB_PATH: str = os.getenv("ORDERS_DB_PATH", "./orders.db")
+    # MCP（訊息以 @mcp 開頭時，LLM 透過公司的 mcp_url 呼叫 tool，見 app/mcp_client.py）
+    # 單次 MCP 請求的逾時秒數，避免公司的 MCP server 太慢拖住整個聊天請求
+    MCP_TIMEOUT_SECONDS: float = float(os.getenv("MCP_TIMEOUT_SECONDS", "10"))
+    # tool 回傳內容交給 LLM 前的字數上限，避免一個 tool 回傳整批資料塞爆 context
+    MCP_TOOL_RESULT_MAX_CHARS: int = int(os.getenv("MCP_TOOL_RESULT_MAX_CHARS", "4000"))
+    # 聊天使用者輸入的文字會影響 LLM 選 tool（prompt injection），預設只讓 LLM 看到「非寫入型」tool；
+    # 公司的 MCP server 明確要提供寫入型 tool 給聊天使用時才打開，見 mcp_client._is_exposed_to_llm()
+    MCP_ALLOW_WRITE_TOOLS: bool = os.getenv("MCP_ALLOW_WRITE_TOOLS", "false").lower() == "true"
+    # 一次 @mcp 對話，LLM 最多連續呼叫 tool 幾輪，超過就直接要求它用現有資訊回答
+    MCP_MAX_TOOL_ROUNDS: int = int(os.getenv("MCP_MAX_TOOL_ROUNDS", "3"))
 
     # 多輪對話最多保留幾輪（一輪 = 一則使用者訊息 + 一則機器人回覆），避免 context 太長讓本地小模型變慢
     MAX_HISTORY_TURNS: int = 4

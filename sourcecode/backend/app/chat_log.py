@@ -3,6 +3,7 @@
 
 先用 SQLite（單檔案，不需要額外服務），流量大到需要多台伺服器共用時再換 Postgres 等方案。
 """
+import json
 import sqlite3
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -19,6 +20,18 @@ CREATE TABLE IF NOT EXISTS chat_log (
     response_text TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_chat_log_created_at ON chat_log (created_at);
+
+-- @mcp 對話中 LLM 實際呼叫過的 MCP tool（稽核用：哪家公司、呼叫了哪個 tool、帶了什麼參數）。
+-- 只記參數，不記 tool 回傳內容（回傳可能含顧客資料）。arguments 是 JSON 字串。
+CREATE TABLE IF NOT EXISTS mcp_tool_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    created_at TEXT NOT NULL,
+    chatbot_id TEXT,
+    tool_name TEXT NOT NULL,
+    arguments TEXT NOT NULL,
+    is_error INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_mcp_tool_log_chatbot_id ON mcp_tool_log (chatbot_id, created_at);
 """
 
 
@@ -63,6 +76,41 @@ def log_chat(
             (datetime.now(timezone.utc).isoformat(), client_ip, message, response_type, response_text, chatbot_id),
         )
         conn.commit()
+
+
+def log_tool_calls(chatbot_id: str | None, tool_calls) -> None:
+    """
+    記錄一次 @mcp 對話裡 LLM 呼叫過的每個 tool。chat_log.db 可能是舊版留下來的檔案，
+    沒有 mcp_tool_log 表，所以每次寫入前用 IF NOT EXISTS 確保存在（冪等）。
+    寫入失敗不應該影響聊天功能本身，呼叫端負責 try/except。
+    """
+    if not tool_calls:
+        return
+    now = datetime.now(timezone.utc).isoformat()
+    with _connect() as conn:
+        conn.executescript(_SCHEMA)
+        conn.executemany(
+            "INSERT INTO mcp_tool_log (created_at, chatbot_id, tool_name, arguments, is_error) VALUES (?, ?, ?, ?, ?)",
+            [
+                (now, chatbot_id, c.name, json.dumps(c.arguments, ensure_ascii=False), int(c.is_error))
+                for c in tool_calls
+            ],
+        )
+        conn.commit()
+
+
+def get_tool_calls_for_chatbot(chatbot_id: str, limit: int = 100) -> list[dict]:
+    with _connect() as conn:
+        conn.executescript(_SCHEMA)
+        rows = conn.execute(
+            "SELECT created_at, tool_name, arguments, is_error FROM mcp_tool_log "
+            "WHERE chatbot_id = ? ORDER BY id DESC LIMIT ?",
+            (chatbot_id, limit),
+        ).fetchall()
+    return [
+        {"created_at": r[0], "tool_name": r[1], "arguments": json.loads(r[2]), "is_error": bool(r[3])}
+        for r in rows
+    ]
 
 
 def get_messages_for_date(date: str, chatbot_id: str) -> list[str]:

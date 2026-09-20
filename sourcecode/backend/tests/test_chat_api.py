@@ -1,16 +1,11 @@
 """
-測試 /api/chat 端點的訂單查詢路徑（main.py 的 _handle_chat，比對 ORDER_CODE_PATTERN 那段）。
+測試 /api/chat 端點的分流（main.py 的 _handle_chat）。
 
 用 FastAPI TestClient 當黑箱測試，確保：
-- 訊息帶到有效訂單編號時，回傳 type="order" 的結構化格式（code/status/eta/items），
-  這個格式前端拿來畫出貨時間軸卡片，不能被破壞。
-- 訊息帶到查無此訂單的編號時，依 main.py 目前實際的邏輯回傳 type="text" 的提示訊息
-  （不是 404、不是丟例外），並包含訂單編號方便使用者確認。
-- 訂單查詢改用公司自訂的 mcp_url（見 app/orders.py、app/main.py）：chatbot_id（也就是
-  X-Client-ID header）對不到任何公司、或公司沒填 mcp_url 時，直接回覆「尚未提供訂單查詢
-  功能」的文字，不會落到本機 SQLite demo 資料（那是全域資料，跟任何一家真的公司無關）；
-  只有公司有填 mcp_url 才會走原本的 MCP／SQLite fallback 邏輯。這裡的測試在 corp-backend
-  沒有啟動的情況下跑，所以「有 mcp_url」的情境驗證的實際上也是 SQLite fallback 路徑。
+- 訊息以 `@mcp` 開頭時走 MCP 路徑（app/mcp_chat.py），各種「不能用」的情況（沒有對應公司、公司沒填
+  mcp_url、provider 不支援 tool calling、連不上 MCP server）都回傳可理解的文字，不是 500、也不會
+  悄悄退回 RAG。完整的 tool 呼叫流程見 tests/test_mcp_chat.py。
+- 沒有 `@mcp` 的訊息一律走原本的 RAG + LLM，就算內容長得像訂單編號也一樣（不再有訂單專屬的正則分流）。
 """
 import pytest
 from fastapi.testclient import TestClient
@@ -18,19 +13,14 @@ from fastapi.testclient import TestClient
 from app import accounts_store
 from app.config import settings
 from app.main import app, _chatbot_request_log, _request_log
-from tests.conftest import SEED_ORDERS, NON_EXISTENT_ORDER_CODE
 
 CLIENT_HEADERS = {"X-Client-ID": "client_test"}
 
 
 @pytest.fixture
-def order_chatbot():
-    """有填 mcp_url 的測試公司，用來驗證「公司有開訂單查詢功能」的路徑。
-    mcp_url 指向一個不存在的位址即可——這裡驗證的重點是「有沒有嘗試查詢並 fallback」，
-    不是真的接到 corp-backend（corp-backend 沒有另外啟動）。"""
-    chatbot = accounts_store.create_chatbot(
-        "Pytest Order Chatbot", "http://localhost:9/mcp"
-    )
+def mcp_chatbot():
+    """有填 mcp_url 的測試公司。mcp_url 指向一個沒人監聽的位址：這裡的測試不需要真的連到 MCP server。"""
+    chatbot = accounts_store.create_chatbot("Pytest MCP Chatbot", "http://localhost:9/mcp")
     yield chatbot
     accounts_store.delete_chatbot(chatbot["id"])
 
@@ -55,110 +45,69 @@ def client():
         yield c
 
 
-def test_chat_with_valid_order_code_returns_order_card(client, order_chatbot):
-    code = "A12345"
-    expected = SEED_ORDERS[code]
-
-    resp = client.post(
+def _post_chat(client, message, chatbot_id=None, provider="google"):
+    return client.post(
         "/api/chat",
-        json={"message": code, "history": [], "provider": "google"},
-        headers=_client_headers(order_chatbot["id"]),
+        json={"message": message, "history": [], "provider": provider},
+        headers=_client_headers(chatbot_id) if chatbot_id else CLIENT_HEADERS,
     )
 
-    assert resp.status_code == 200
-    body = resp.json()
-    assert body["type"] == "order"
-    assert body["code"] == code
-    assert body["status"] == expected["status"]
-    assert body["eta"] == expected["eta"]
-    assert body["items"] == expected["items"]
 
-
-def test_chat_with_order_keyword_and_valid_code(client, order_chatbot):
-    """訊息夾雜文字（含「訂單」二字）也要能解析出正確的訂單編號並回傳一致的結構。"""
-    code = "C55210"
-    expected = SEED_ORDERS[code]
-
-    resp = client.post(
-        "/api/chat",
-        json={"message": f"請幫我查一下訂單 {code} 的狀態", "history": [], "provider": "google"},
-        headers=_client_headers(order_chatbot["id"]),
-    )
-
-    assert resp.status_code == 200
-    body = resp.json()
-    assert body["type"] == "order"
-    assert body["code"] == code
-    assert body["status"] == expected["status"]
-    assert body["eta"] == expected["eta"]
-    assert body["items"] == expected["items"]
-
-
-def test_chat_with_unknown_order_code_returns_text_message(client, order_chatbot):
-    """
-    依 main.py 目前實際邏輯：找不到訂單時回傳 type="text"，
-    text 內容包含查無此訂單的提示與該訂單編號，不是丟 4xx 例外。
-    """
-    resp = client.post(
-        "/api/chat",
-        json={"message": NON_EXISTENT_ORDER_CODE, "history": [], "provider": "google"},
-        headers=_client_headers(order_chatbot["id"]),
-    )
+def test_mcp_command_without_chatbot_returns_not_enabled_message(client):
+    """X-Client-ID 對不到任何公司（"client_test" 不是合法 UUID）時，@mcp 回覆尚未開啟，不是 500。"""
+    resp = _post_chat(client, "@mcp 幫我查訂單 A12345")
 
     assert resp.status_code == 200
     body = resp.json()
     assert body["type"] == "text"
-    assert body["code"] is None
-    assert NON_EXISTENT_ORDER_CODE in body["text"]
-    assert "查無訂單編號" in body["text"]
+    assert "尚未開啟 MCP 功能" in body["text"]
 
 
-def test_chat_with_order_code_but_no_chatbot_returns_not_supported_message(client):
-    """
-    X-Client-ID 對不到任何公司（例如 widget 沒串接真的 chatbot_id，或本測試檔預設的
-    "client_test" 不是合法 UUID）時，訂單查詢要回覆「尚未提供」的文字，不能落到 SQLite
-    demo 資料裝作查得到——即使輸入的是 SEED_ORDERS 裡真的存在的編號。
-    """
-    resp = client.post(
-        "/api/chat",
-        json={"message": "A12345", "history": [], "provider": "google"},
-        headers=CLIENT_HEADERS,
-    )
+def test_mcp_command_when_chatbot_has_no_mcp_url_returns_not_enabled_message(client, test_chatbot):
+    resp = _post_chat(client, "@mcp 幫我查訂單 A12345", test_chatbot["id"])
 
-    assert resp.status_code == 200
-    body = resp.json()
-    assert body["type"] == "text"
-    assert "尚未提供訂單查詢功能" in body["text"]
+    assert resp.json()["type"] == "text"
+    assert "尚未開啟 MCP 功能" in resp.json()["text"]
 
 
-def test_chat_with_order_code_but_chatbot_has_no_mcp_url_returns_not_supported_message(
-    client, test_chatbot
-):
-    """chatbot_id 查得到公司，但該公司沒填 mcp_url：一樣視為沒開這個功能。"""
-    resp = client.post(
-        "/api/chat",
-        json={"message": "A12345", "history": [], "provider": "google"},
-        headers=_client_headers(test_chatbot["id"]),
-    )
+def test_mcp_command_with_empty_question_prompts_for_question(client, mcp_chatbot):
+    resp = _post_chat(client, "  @MCP  ", mcp_chatbot["id"])
+
+    assert resp.json()["type"] == "text"
+    assert "請在 @mcp 後面輸入您的問題" in resp.json()["text"]
+
+
+def test_mcp_command_with_unsupported_provider_says_so(client, mcp_chatbot):
+    resp = _post_chat(client, "@mcp 查庫存", mcp_chatbot["id"], provider="local")
+
+    assert resp.json()["type"] == "text"
+    assert "僅支援 Gemini" in resp.json()["text"]
+
+
+def test_mcp_command_when_mcp_server_unreachable_returns_friendly_text(client, mcp_chatbot):
+    """公司的 MCP server 連不上：回友善文字，不退回 RAG、不丟 500。"""
+    resp = _post_chat(client, "@mcp 查庫存", mcp_chatbot["id"])
 
     assert resp.status_code == 200
-    body = resp.json()
-    assert body["type"] == "text"
-    assert "尚未提供訂單查詢功能" in body["text"]
+    assert resp.json()["type"] == "text"
+    assert "暫時無法連線" in resp.json()["text"]
 
 
-def test_chat_with_order_keyword_but_no_code_prompts_for_code(client):
-    """含「訂單」二字但抓不到符合格式的編號時，要提示使用者補訂單編號，而不是當成查無此訂單。"""
-    resp = client.post(
-        "/api/chat",
-        json={"message": "我想查訂單狀態", "history": [], "provider": "google"},
-        headers=CLIENT_HEADERS,
-    )
+@pytest.mark.parametrize("message", ["A12345", "我想查訂單 ORD-500001", "我想查訂單狀態", "請幫我 @mcp 查"])
+def test_messages_without_leading_mcp_go_to_rag_even_if_they_look_like_orders(client, monkeypatch, message):
+    """不再有訂單專屬的正則分流：沒有以 @mcp 開頭的訊息一律走 RAG + LLM。"""
+    from app import main as main_module
 
-    assert resp.status_code == 200
-    body = resp.json()
-    assert body["type"] == "text"
-    assert "訂單編號" in body["text"]
+    class FakeAgent:
+        def generate_answer(self, text, history=None, provider="google", chatbot_id=None):
+            return f"RAG 回答：{text}", []
+
+    monkeypatch.setattr(main_module, "get_agent", lambda: FakeAgent())
+
+    resp = _post_chat(client, message)
+
+    assert resp.json()["type"] == "text"
+    assert resp.json()["text"] == f"RAG 回答：{message}"
 
 
 @pytest.mark.parametrize("path", ["/api/providers", "/api/widget/config"])
@@ -211,7 +160,7 @@ def test_widget_config_returns_customizable_defaults(client):
     assert resp.status_code == 200
     assert resp.json() == {
         "brandName": "線上客服",
-        "welcomeMessage": "您好，我是線上客服，可以問我任何產品的規格、特色，或是輸入訂單編號查詢配送狀態喔。",
+        "welcomeMessage": "您好，我是線上客服，可以問我任何產品的規格、特色，或是退換貨政策喔。",
         "logoUrl": None,
         "theme": {
             "primaryColor": "#315b7d",
@@ -219,7 +168,7 @@ def test_widget_config_returns_customizable_defaults(client):
             "textColor": "#17212b",
             "borderRadius": 20,
         },
-        "quickReplies": ["無線滑鼠支援多少 DPI？", "查詢訂單 A12345", "退貨要幾天內申請？"],
+        "quickReplies": ["無線滑鼠支援多少 DPI？", "退貨要幾天內申請？"],
     }
 
 

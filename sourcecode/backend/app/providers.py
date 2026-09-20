@@ -12,6 +12,8 @@ API key／要用的模型名稱存在 settings.LLM_KEYS_PATH 指到的 JSON 檔�
 import os
 import json
 import threading
+from dataclasses import dataclass
+from typing import Any, Awaitable, Callable
 
 from app.config import settings
 
@@ -168,3 +170,186 @@ def generate_with_provider(provider: str, messages: list[dict], max_new_tokens: 
     if provider not in _DISPATCH:
         raise ValueError(f"未知的 LLM provider：{provider}")
     return _DISPATCH[provider](messages, max_new_tokens)
+
+
+# ---- Tool calling（讓 LLM 自己決定要不要呼叫 MCP tool，見 app/mcp_chat.py） ----
+#
+# 目前只實作 Gemini（google）：實際使用的線上 provider 只有它；本地小模型（MiniCPM／Qwen 2B）
+# 沒辦法可靠地選 tool，明確不支援，由呼叫端提示使用者改用其他模型。
+
+
+class ToolCallingNotSupported(Exception):
+    """這個 provider 目前不支援 tool calling。"""
+
+
+@dataclass
+class ToolCallRecord:
+    """LLM 這次實際呼叫過的 tool，給對話紀錄（稽核）使用。"""
+    name: str
+    arguments: dict
+    result: str
+    is_error: bool
+
+
+def supports_tool_calling(provider: str) -> bool:
+    return provider == "google"
+
+
+def _json_schema_to_gemini(schema: dict, defs: dict, depth: int = 0) -> dict:
+    """
+    把 MCP tool 的 JSON Schema 轉成 Gemini 接受的 OpenAPI 子集。
+    MCP server 用 pydantic 產生的 schema 會有 $defs／$ref、anyOf（Optional）、title、default，
+    Gemini SDK 會直接拒絕這些欄位；這裡展開 $ref、把 Optional 轉成 nullable、丟掉不支援的欄位。
+    """
+    if depth > 8:  # 遞迴保護（自我引用的 schema），太深就退成字串
+        return {"type": "string"}
+
+    if "$ref" in schema:
+        target = defs.get(schema["$ref"].split("/")[-1], {})
+        return _json_schema_to_gemini(target, defs, depth + 1)
+
+    options = schema.get("anyOf") or schema.get("oneOf")
+    if options:
+        non_null = [o for o in options if o.get("type") != "null"]
+        nullable = len(non_null) != len(options)
+        if len(non_null) == 1:
+            converted = _json_schema_to_gemini(non_null[0], defs, depth + 1)
+        else:
+            # 真正的多型別聯集 Gemini 無法表達，退成字串讓 LLM 自己以文字帶入
+            converted = {"type": "string"}
+        if nullable:
+            converted["nullable"] = True
+        if schema.get("description") and "description" not in converted:
+            converted["description"] = schema["description"]
+        return converted
+
+    schema_type = schema.get("type")
+    if isinstance(schema_type, list):  # ["string", "null"] 寫法
+        nullable = "null" in schema_type
+        schema_type = next((t for t in schema_type if t != "null"), "string")
+    else:
+        nullable = False
+    if schema_type not in ("string", "number", "integer", "boolean", "array", "object"):
+        schema_type = "object" if "properties" in schema else "string"
+
+    out: dict[str, Any] = {"type": schema_type}
+    if nullable:
+        out["nullable"] = True
+    if schema.get("description"):
+        out["description"] = schema["description"]
+    if schema_type == "string" and schema.get("enum") and all(isinstance(v, str) for v in schema["enum"]):
+        out["enum"] = schema["enum"]
+    if schema_type == "object":
+        properties = {
+            name: _json_schema_to_gemini(sub, defs, depth + 1)
+            for name, sub in (schema.get("properties") or {}).items()
+        }
+        out["properties"] = properties
+        required = [r for r in schema.get("required", []) if r in properties]
+        if required:
+            out["required"] = required
+    if schema_type == "array":
+        out["items"] = _json_schema_to_gemini(schema.get("items") or {"type": "string"}, defs, depth + 1)
+    return out
+
+
+def _to_gemini_function_declaration(tool) -> dict:
+    declaration: dict[str, Any] = {"name": tool.name, "description": tool.description or tool.name}
+    parameters = _json_schema_to_gemini(tool.input_schema or {}, (tool.input_schema or {}).get("$defs", {}))
+    # 沒有參數的 tool：Gemini 不接受「properties 為空的 object」，必須整個省略 parameters
+    if parameters.get("properties"):
+        declaration["parameters"] = parameters
+    return declaration
+
+
+ToolCaller = Callable[[str, dict], Awaitable[Any]]  # (tool 名稱, 參數) -> McpToolResult
+
+
+def _gemini_function_calls(response) -> list:
+    candidates = getattr(response, "candidates", None)
+    if not candidates:
+        return []
+    return [p.function_call for p in candidates[0].content.parts if p.function_call and p.function_call.name]
+
+
+def _gemini_text(response) -> str:
+    candidates = getattr(response, "candidates", None)
+    if not candidates:
+        return ""
+    return "".join(p.text for p in candidates[0].content.parts if p.text)
+
+
+async def _run_gemini_tool_loop(
+    chat, message: str, tools: list, call_tool: ToolCaller, max_new_tokens: int, max_rounds: int,
+) -> tuple[str, list[ToolCallRecord]]:
+    """
+    Gemini 的 tool 迴圈：送出問題 → 若模型要呼叫 tool 就執行並把結果送回 → 重複，直到模型直接給出文字答案。
+    最多 max_rounds 輪；最後一輪把 function calling 關掉（mode NONE），強迫它用手上的資訊回答，
+    避免無限迴圈。chat 是 Gemini 的 ChatSession（測試時可換成假物件）。
+    """
+    import google.generativeai as genai
+
+    known_tools = {t.name for t in tools}
+    records: list[ToolCallRecord] = []
+    generation_config = genai.types.GenerationConfig(max_output_tokens=max_new_tokens)
+
+    response = await chat.send_message_async(message, generation_config=generation_config)
+    for round_number in range(1, max_rounds + 1):
+        calls = _gemini_function_calls(response)
+        if not calls:
+            break
+
+        response_parts = []
+        for call in calls:
+            arguments = genai.protos.FunctionCall.to_dict(call).get("args") or {}
+            if call.name not in known_tools:
+                # 模型編造了不存在的 tool 名稱：不送去 server，直接回報錯誤讓它改用其他方式回答
+                result_text, is_error = f"沒有名為 {call.name} 的工具。", True
+            else:
+                result = await call_tool(call.name, arguments)
+                result_text, is_error = result.text, result.is_error
+            records.append(ToolCallRecord(call.name, arguments, result_text, is_error))
+            payload = {"error": result_text} if is_error else {"result": result_text}
+            response_parts.append(
+                genai.protos.Part(function_response=genai.protos.FunctionResponse(name=call.name, response=payload))
+            )
+
+        kwargs: dict[str, Any] = {"generation_config": generation_config}
+        if round_number == max_rounds:
+            kwargs["tool_config"] = {"function_calling_config": {"mode": "NONE"}}
+        response = await chat.send_message_async(response_parts, **kwargs)
+
+    return _gemini_text(response), records
+
+
+async def generate_with_tools(
+    provider: str, messages: list[dict], tools: list, call_tool: ToolCaller,
+    max_new_tokens: int = 2048, max_rounds: int | None = None,
+) -> tuple[str, list[ToolCallRecord]]:
+    """
+    讓 LLM 使用 tools（app.mcp_client.McpTool 清單）回答，回傳（最終文字答案, 實際呼叫過的 tool 紀錄）。
+    messages 格式同 generate_with_provider()；最後一則必須是使用者的問題。
+    """
+    if not supports_tool_calling(provider):
+        raise ToolCallingNotSupported(f"{provider} 不支援 tool calling")
+
+    import google.generativeai as genai
+
+    config = _get_config("google")
+    genai.configure(api_key=config["api_key"])
+    system_prompt, rest = _split_system(messages)
+    if not rest:
+        return "", []
+    model = genai.GenerativeModel(
+        config.get("model", "gemini-3.1-flash-lite"),
+        system_instruction=system_prompt or None,
+        tools=[{"function_declarations": [_to_gemini_function_declaration(t) for t in tools]}] if tools else None,
+    )
+    *history, last = rest
+    chat = model.start_chat(history=[
+        {"role": "model" if h["role"] == "assistant" else "user", "parts": [h["content"]]}
+        for h in history
+    ])
+    return await _run_gemini_tool_loop(
+        chat, last["content"], tools, call_tool, max_new_tokens, max_rounds or settings.MCP_MAX_TOOL_ROUNDS
+    )
