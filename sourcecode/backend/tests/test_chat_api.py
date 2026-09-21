@@ -90,7 +90,7 @@ def test_mcp_command_with_empty_question_prompts_for_question(client, mcp_chatbo
     resp = _post_chat(client, "  @MCP  ", mcp_chatbot["id"])
 
     assert resp.json()["type"] == "text"
-    assert "請在 @mcp 後面輸入您的問題" in resp.json()["text"]
+    assert "請在 @MCP 後面輸入您的問題" in resp.json()["text"]
 
 
 def test_mcp_command_with_unsupported_provider_says_so(client, mcp_chatbot):
@@ -115,7 +115,7 @@ def test_messages_without_leading_mcp_go_to_rag_even_if_they_look_like_orders(cl
     from app import main as main_module
 
     class FakeAgent:
-        def generate_answer(self, text, history=None, provider="google", chatbot_id=None):
+        def generate_answer(self, text, history=None, provider="google", chatbot_id=None, top_k=None, use_rerank=False):
             return f"RAG 回答：{text}", []
 
     monkeypatch.setattr(main_module, "get_agent", lambda: FakeAgent())

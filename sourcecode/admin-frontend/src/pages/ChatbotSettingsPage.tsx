@@ -2,9 +2,11 @@ import Button from "antd/es/button";
 import Card from "antd/es/card";
 import Form from "antd/es/form";
 import Input from "antd/es/input";
+import InputNumber from "antd/es/input-number";
 import List from "antd/es/list";
 import message from "antd/es/message";
 import Popconfirm from "antd/es/popconfirm";
+import Switch from "antd/es/switch";
 import Typography from "antd/es/typography";
 import { useCallback, useEffect, useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
@@ -39,14 +41,24 @@ interface ChatbotSettingsForm {
   name: string;
   mcp_url?: string;
   mcp_token?: string;
+  mcp_trigger_name?: string;
   welcome_message?: string;
   quick_replies?: string;
+  rag_top_k?: number;
+  rerank_enabled?: boolean;
 }
+
+// 跟後端 settings.RAG_DEFAULT_TOP_K／RAG_MAX_TOP_K 一致（後端才是最終檢查）
+const DEFAULT_RAG_TOP_K = 5;
+const MAX_RAG_TOP_K = 10;
+
+// 跟後端 accounts_store.DEFAULT_MCP_TRIGGER_NAME 一致
+const DEFAULT_MCP_TRIGGER_NAME = "MCP";
 
 const DEFAULT_QUICK_REPLIES = ["無線滑鼠支援多少 DPI？", "退貨要幾天內申請？"];
 
 /**
- * 公司資訊設定頁面：MCP 連線設定（URL 與金鑰，訊息以 @mcp 開頭時使用）跟聊天機器人開頭語從原本 select-chatbot 頁面
+ * 公司資訊設定頁面：MCP 連線設定（URL、金鑰與機器人名稱，訊息以 @名稱 開頭時使用）跟聊天機器人開頭語從原本 select-chatbot 頁面
  * 的就地編輯移過來這裡，select-chatbot 頁面只留商家名稱跟識別碼，操作對象一律是
  * AuthContext 目前選定的公司（跟 RagPage 一樣的模式，不用另外帶 chatbot_id 路由參數）。
  */
@@ -62,6 +74,11 @@ export default function ChatbotSettingsPage() {
   } = useAuth();
   const [messageApi, contextHolder] = message.useMessage();
   const [form] = Form.useForm<ChatbotSettingsForm>();
+  // 即時反映輸入中的名稱，讓說明文字顯示的觸發詞跟實際會生效的一致
+  const triggerNameInput = Form.useWatch("mcp_trigger_name", form);
+  const triggerName =
+    (triggerNameInput ?? "").trim().replace(/^[@＠]+/, "") ||
+    DEFAULT_MCP_TRIGGER_NAME;
   const [accountForm] = Form.useForm<{ email: string }>();
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -126,10 +143,13 @@ export default function ChatbotSettingsPage() {
       form.setFieldsValue({
         name: chatbot.name,
         mcp_url: chatbot.mcp_url ?? "",
+        mcp_trigger_name: chatbot.mcp_trigger_name ?? DEFAULT_MCP_TRIGGER_NAME,
         welcome_message: chatbot.welcome_message ?? "",
         quick_replies: (chatbot.quick_replies ?? DEFAULT_QUICK_REPLIES).join(
           "\n",
         ),
+        rag_top_k: chatbot.rag_top_k ?? DEFAULT_RAG_TOP_K,
+        rerank_enabled: chatbot.rerank_enabled ?? false,
       });
     }
   }, [chatbot, form]);
@@ -148,10 +168,18 @@ export default function ChatbotSettingsPage() {
       await updateChatbot(token, selectedChatbotId, {
         name: values.name,
         mcp_url: values.mcp_url ?? "",
+        // 留空＝回到預設 MCP（後端把空字串當成「重設」）
+        mcp_trigger_name: values.mcp_trigger_name ?? "",
         // 金鑰欄位留空代表不變更（空字串在後端是「清除」，改由專用的清除按鈕處理）
         ...(values.mcp_token ? { mcp_token: values.mcp_token } : {}),
         welcome_message: values.welcome_message ?? "",
         quick_replies: quickReplies,
+        rag_top_k: values.rag_top_k ?? DEFAULT_RAG_TOP_K,
+        // 只有開關真的被改動才送出：伺服器不支援 rerank 時，後端會拒絕「開啟」，
+        // 若資料庫裡本來就是開啟（本機與正式共用資料庫），每次儲存都帶 true 會讓整個儲存失敗。
+        ...(!!values.rerank_enabled !== !!chatbot?.rerank_enabled
+          ? { rerank_enabled: !!values.rerank_enabled }
+          : {}),
       });
       form.setFieldValue("mcp_token", "");
       setRevealedMcpToken(null);
@@ -271,9 +299,27 @@ export default function ChatbotSettingsPage() {
               <Form.Item
                 name="mcp_url"
                 label="MCP URL"
-                extra="使用者訊息以 @mcp 開頭時，聊天機器人會透過這個位址的 MCP server 呼叫查詢功能（支援 Gemini 與本地模型）。沒有填寫時 @mcp 不可用，RAG 知識庫問答不受影響。"
+                extra={`使用者訊息以 @${triggerName} 開頭時，聊天機器人會透過這個位址的 MCP server 呼叫查詢功能（支援 Gemini 與本地模型）。沒有填寫時 @${triggerName} 不可用，RAG 知識庫問答不受影響。`}
               >
                 <Input placeholder="例如 http://localhost:8001/mcp" />
+              </Form.Item>
+              <Form.Item
+                name="mcp_trigger_name"
+                label="MCP 機器人名稱"
+                extra={`顧客在聊天視窗輸入「@${triggerName} 你的問題」就會啟動 MCP 功能（不分大小寫）。預設是 ${DEFAULT_MCP_TRIGGER_NAME}；留空會回到預設。名稱不能包含空白或 @，最多 20 字。`}
+                rules={[
+                  { max: 20, message: "名稱最多 20 個字" },
+                  {
+                    pattern: /^[^\s@＠]*$/,
+                    message: "名稱不能包含空白或 @",
+                  },
+                ]}
+              >
+                <Input
+                  addonBefore="@"
+                  placeholder={DEFAULT_MCP_TRIGGER_NAME}
+                  maxLength={20}
+                />
               </Form.Item>
               <Form.Item
                 name="mcp_token"
@@ -311,7 +357,7 @@ export default function ChatbotSettingsPage() {
                     )}
                     <Popconfirm
                       title="確定要清除這家商家的 MCP 金鑰嗎？"
-                      description="清除後 @mcp 會因為金鑰無效而無法連線，直到重新設定。"
+                      description={`清除後 @${triggerName} 會因為金鑰無效而無法連線，直到重新設定。`}
                       onConfirm={handleClearMcpToken}
                       okButtonProps={{ danger: true }}
                     >
@@ -340,6 +386,30 @@ export default function ChatbotSettingsPage() {
                 <TextArea
                   rows={3}
                   placeholder={"無線滑鼠支援多少 DPI？\n退貨要幾天內申請？"}
+                />
+              </Form.Item>
+              <Form.Item
+                name="rag_top_k"
+                label="檢索片段數（k）"
+                extra={`每次回答時，從知識庫挑幾段內容交給 AI 參考（1～${MAX_RAG_TOP_K}，預設 ${DEFAULT_RAG_TOP_K}）。`}
+                rules={[{ required: true, message: "請輸入片段數" }]}
+              >
+                <InputNumber min={1} max={MAX_RAG_TOP_K} precision={0} />
+              </Form.Item>
+              <Form.Item
+                name="rerank_enabled"
+                label="重排序（rerank）"
+                valuePropName="checked"
+                extra={
+                  chatbot.rerank_available
+                    ? "先從知識庫撈一批候選（預設 20 段），再用重排序模型挑出最相關的 k 段。每段候選都要跑一次模型，每次回答會多花約 5 秒，且效果尚未經過評估。"
+                    : "這個環境不支援重排序（正式環境無法使用），目前一律使用一般檢索。"
+                }
+              >
+                <Switch
+                  disabled={
+                    !chatbot.rerank_available && !chatbot.rerank_enabled
+                  }
                 />
               </Form.Item>
               <Button type="primary" htmlType="submit" loading={saving}>

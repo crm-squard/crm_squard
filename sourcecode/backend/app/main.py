@@ -21,6 +21,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.exc import IntegrityError
 
 from app import accounts_store, auth
+from app.accounts_store import DEFAULT_MCP_TRIGGER_NAME
 from app.config import settings
 from app.schemas import (
     AccountCreateRequest,
@@ -51,6 +52,7 @@ from app.schemas import (
 from app.agent import get_agent
 from app.chat_log import init_db as init_chat_log_db, log_chat, log_tool_calls
 from app.mcp_chat import answer_with_mcp, parse_mcp_command
+from app.rag import reranker
 from app.summary import summarize_day
 from app.providers import is_configured
 from app.line_webhook import create_line_router
@@ -488,7 +490,8 @@ def create_chatbot(req: ChatbotCreateRequest, account: dict = Depends(auth.requi
     綁定），這裡綁定純粹是為了在「這家公司」的視角下如實記錄跟顯示創建者。
     """
     chatbot = accounts_store.create_chatbot(
-        req.name, req.mcp_url, req.welcome_message, req.quick_replies, req.mcp_token
+        req.name, req.mcp_url, req.welcome_message, req.quick_replies, req.mcp_token,
+        mcp_trigger_name=req.mcp_trigger_name,
     )
     accounts_store.bind_chatbot(account["id"], chatbot["id"], role="primary")
     accounts_store.record_audit(
@@ -511,12 +514,18 @@ def update_chatbot(
     chatbot_id: str, req: ChatbotUpdateRequest, account: dict = Depends(auth.require_chatbot_access)
 ):
     """
-    更新公司資訊（name／mcp_url／welcome_message／quick_replies）：platform 帳號或綁定
+    更新公司資訊（name／mcp_url／mcp_trigger_name／welcome_message／quick_replies／rag_top_k／rerank_enabled）：platform 帳號或綁定
     這家公司的商家帳號都能改，對應「公司資訊頁面可設定 MCP URL、聊天機器人開頭語、
     開場快速提問」的需求。
     """
+    if req.rerank_enabled and not reranker.is_supported():
+        # 這台伺服器（例如 Cloud Run 正式環境）不能 rerank：拒絕開啟，避免資料庫裡留下一個
+        # 「已開啟但永遠不會生效」的設定。關閉（false）不受影響，任何環境都能關。
+        raise HTTPException(status_code=400, detail="這個環境不支援重排序（rerank），無法開啟。")
     chatbot = accounts_store.update_chatbot(
-        chatbot_id, req.name, req.mcp_url, req.welcome_message, req.quick_replies, req.mcp_token
+        chatbot_id, req.name, req.mcp_url, req.welcome_message, req.quick_replies, req.mcp_token,
+        rag_top_k=req.rag_top_k, rerank_enabled=req.rerank_enabled,
+        mcp_trigger_name=req.mcp_trigger_name,
     )
     if chatbot is None:
         raise HTTPException(status_code=404, detail="查無這家公司。")
@@ -525,6 +534,8 @@ def update_chatbot(
         detail={
             "name": req.name, "mcp_url": req.mcp_url, "welcome_message": req.welcome_message,
             "quick_replies": req.quick_replies,
+            "rag_top_k": req.rag_top_k, "rerank_enabled": req.rerank_enabled,
+            "mcp_trigger_name": req.mcp_trigger_name,
             # 金鑰內容絕不寫進稽核紀錄，只記這次有沒有動到它（None＝沒改、空字串＝清除）
             "mcp_token_changed": req.mcp_token is not None,
         },
@@ -795,11 +806,15 @@ async def _handle_chat(
             ),
         )
 
-    # 訊息以 @mcp 開頭：交給該公司 MCP server 的 tools 處理（LLM 自己選 tool、整理成文字），
-    # 不走 RAG；其他訊息維持原本的 RAG + LLM。見 app/mcp_chat.py。
-    mcp_question = parse_mcp_command(text)
+    # 訊息以「@<MCP 機器人名稱>」開頭（沒設定名稱時是 @MCP）：交給該公司 MCP server 的 tools 處理
+    # （LLM 自己選 tool、整理成文字），不走 RAG；其他訊息維持原本的 RAG + LLM。見 app/mcp_chat.py。
+    # 查不到公司時用預設名稱，讓 @MCP 仍能得到「尚未開啟」的提示，而不是被當成一般問題。
+    chatbot = _lookup_chatbot(chatbot_id)
+    mcp_question = parse_mcp_command(
+        text, chatbot["mcp_trigger_name"] if chatbot else DEFAULT_MCP_TRIGGER_NAME
+    )
     if mcp_question is not None:
-        result = await answer_with_mcp(mcp_question, history, provider, _lookup_chatbot(chatbot_id))
+        result = await answer_with_mcp(mcp_question, history, provider, chatbot)
         try:
             log_tool_calls(chatbot_id, result.tool_calls)
         except Exception as e:
@@ -808,7 +823,13 @@ async def _handle_chat(
         return ChatResponse(type="text", text=result.text)
 
     agent = get_agent()
-    answer, retrieved = agent.generate_answer(text, history=history, provider=provider, chatbot_id=chatbot_id)
+    # 讀這家公司在後台設定的 k 與 rerank 偏好；查不到公司（沒帶或不合法的 X-Client-ID）就用系統預設。
+    # rerank 偏好只是「想開」，伺服器不支援時（例如 Cloud Run）檢索層會靜默退回一般向量檢索。
+    answer, retrieved = agent.generate_answer(
+        text, history=history, provider=provider, chatbot_id=chatbot_id,
+        top_k=chatbot["rag_top_k"] if chatbot else None,
+        use_rerank=bool(chatbot and chatbot["rerank_enabled"]),
+    )
     if not retrieved:
         # 沒有實際檢索結果（查無資訊、provider 未設定或呼叫失敗）：這是提示/錯誤訊息，不是
         # 根據知識庫生成的產品/政策回答，依 contracts.md 的分類該用 type: text，且不該帶無關的 source。

@@ -1,5 +1,5 @@
 """
-`@mcp` 對話路徑：使用者訊息以 `@mcp` 開頭時，不走 RAG，而是把問題連同該公司 MCP server
+`@mcp` 對話路徑：使用者訊息以 `@<MCP 機器人名稱>` 開頭時（預設 `@MCP`，名稱可在後台設定），不走 RAG，而是把問題連同該公司 MCP server
 目前提供的 tools 交給 LLM，讓它自己決定要不要呼叫、呼叫哪個 tool，最後整理成文字回答。
 
 這裡完全不認識任何特定功能（訂單、產品、庫存……）：能做什麼由公司的 MCP server 決定，
@@ -10,6 +10,7 @@ import re
 from dataclasses import dataclass, field
 
 from app import accounts_store
+from app.accounts_store import DEFAULT_MCP_TRIGGER_NAME
 from app.mcp_client import McpClientError, McpToolResult, open_mcp_session
 from app.providers import (
     ProviderNotConfigured,
@@ -20,10 +21,12 @@ from app.providers import (
 
 logger = logging.getLogger("backend.mcp_chat")
 
-# 訊息開頭（忽略大小寫與前置空白）是 @mcp 才觸發；用「開頭」而不是「包含」，避免使用者在
-# 一般問題裡提到這個字就誤觸發。後面用 lookahead 而不是 \b：「@mcp查訂單」（中文緊接在後面）
-# 也要能觸發，但「@mcpx」這種不同的字不行。
-_MCP_TRIGGER = re.compile(r"^\s*@mcp(?![A-Za-z0-9_])", re.IGNORECASE)
+# 訊息開頭（忽略大小寫與前置空白）是「@名稱」才觸發；用「開頭」而不是「包含」，避免使用者在
+# 一般問題裡提到這個字就誤觸發。名稱後面用 lookahead 而不是 \b：「@mcp查訂單」（中文緊接在後面）
+# 也要能觸發，但「@mcpx」這種不同的字不行。@ 同時收全形＠：中文輸入法常直接打出全形。
+# 名稱是公司自訂的任意文字，一律 re.escape 後才組進正規表示式。
+def _build_trigger(name: str) -> re.Pattern:
+    return re.compile(rf"^\s*[@＠]{re.escape(name)}(?![A-Za-z0-9_])", re.IGNORECASE)
 
 MCP_SYSTEM_PROMPT = (
     "你是客服助理，可以使用提供的工具查詢資料來回答顧客的問題。規則：\n"
@@ -33,7 +36,7 @@ MCP_SYSTEM_PROMPT = (
     "4. 用繁體中文簡潔地回答。"
 )
 
-MSG_EMPTY_QUESTION = "請在 @mcp 後面輸入您的問題，例如：@mcp 幫我查訂單 A12345。"
+MSG_EMPTY_QUESTION = "請在 @{name} 後面輸入您的問題，例如：@{name} 幫我查訂單 A12345。"
 MSG_NOT_ENABLED = "此服務目前尚未開啟 MCP 功能，如需協助請聯繫客服（0800-123-456）。"
 MSG_PROVIDER_UNSUPPORTED = "此功能目前僅支援 Gemini 與本地模型，請切換模型後再試。"
 MSG_NO_TOOLS = "此服務目前沒有可用的查詢功能，如需協助請聯繫客服（0800-123-456）。"
@@ -48,9 +51,9 @@ class McpChatResult:
     tool_calls: list[ToolCallRecord] = field(default_factory=list)
 
 
-def parse_mcp_command(text: str) -> str | None:
-    """訊息以 @mcp 開頭時回傳去掉 @mcp 之後的問題（可能是空字串）；不是 @mcp 訊息回傳 None。"""
-    match = _MCP_TRIGGER.match(text)
+def parse_mcp_command(text: str, trigger_name: str = DEFAULT_MCP_TRIGGER_NAME) -> str | None:
+    """訊息以「@名稱」開頭時回傳去掉它之後的問題（可能是空字串）；不是 MCP 訊息回傳 None。"""
+    match = _build_trigger(trigger_name).match(text)
     if match is None:
         return None
     return text[match.end():].strip()
@@ -85,7 +88,8 @@ async def answer_with_mcp(
     悄悄換成別的來源回答反而會誤導。
     """
     if not question:
-        return McpChatResult(MSG_EMPTY_QUESTION)
+        name = (chatbot or {}).get("mcp_trigger_name") or DEFAULT_MCP_TRIGGER_NAME
+        return McpChatResult(MSG_EMPTY_QUESTION.format(name=name))
     if not chatbot or not chatbot.get("mcp_url"):
         return McpChatResult(MSG_NOT_ENABLED)
     if not supports_tool_calling(provider):

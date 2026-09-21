@@ -39,6 +39,28 @@ def test_parse_mcp_command(text, expected):
     assert parse_mcp_command(text) == expected
 
 
+@pytest.mark.parametrize(
+    "text,expected",
+    [
+        ("@阿柴 查訂單", "查訂單"),
+        ("＠阿柴 查訂單", "查訂單"),  # 全形 ＠（中文輸入法）
+        ("  @阿柴查訂單 A1", "查訂單 A1"),
+        ("@阿柴", ""),
+        ("@mcp 查訂單", None),  # 改名之後預設的 @mcp 不再觸發
+        ("請幫我 @阿柴 查", None),
+    ],
+)
+def test_parse_mcp_command_with_custom_name(text, expected):
+    assert parse_mcp_command(text, "阿柴") == expected
+
+
+def test_parse_mcp_command_treats_name_as_literal_text_not_regex():
+    """名稱是使用者自訂的文字：含正規表示式特殊字元時不能被當成語法。"""
+    assert parse_mcp_command("@a.b 查", "a.b") == "查"
+    assert parse_mcp_command("@axb 查", "a.b") is None
+    assert parse_mcp_command("@(x 查", "(x") == "查"
+
+
 @pytest.fixture(autouse=True)
 def _reset_rate_limit():
     _request_log.clear()
@@ -238,3 +260,45 @@ async def test_unconfigured_gemini_key_is_reported_as_such_not_as_connection_fai
         resp = await _chat("@mcp 你好", company["id"])
 
     assert resp.json()["text"] == "尚未設定 google 的 API key"
+
+
+async def test_custom_trigger_name_starts_mcp_and_default_name_stops_working(monkeypatch, company):
+    """公司把 MCP 機器人名稱設成「阿柴」：@阿柴 走 MCP，原本的 @mcp 變成一般 RAG 問題。"""
+    from app import main as main_module
+
+    accounts_store.update_chatbot(company["id"], None, None, mcp_trigger_name="阿柴")
+    company_server = FakeCompanyServer()
+
+    @company_server.mcp.tool()
+    def check_stock(sku: str) -> dict:
+        """查詢庫存數量"""
+        return {"sku": sku, "in_stock": 7}
+
+    _route_mcp_to(monkeypatch, company_server)
+    fake_chat = _install_fake_gemini(
+        monkeypatch,
+        _response(_call("check_stock", sku="SKU-9")),
+        _response(_text("SKU-9 目前有 7 件庫存")),
+    )
+
+    class FakeAgent:
+        def generate_answer(self, text, **kwargs):
+            return f"RAG 回答：{text}", []
+
+    monkeypatch.setattr(main_module, "get_agent", lambda: FakeAgent())
+
+    async with company_server.mcp.session_manager.run():
+        via_name = await _chat("@阿柴 幫我查 SKU-9 的庫存", company["id"])
+        via_default = await _chat("@mcp 幫我查 SKU-9 的庫存", company["id"])
+
+    assert via_name.json()["text"] == "SKU-9 目前有 7 件庫存"
+    assert fake_chat.sent[0][0] == "幫我查 SKU-9 的庫存"  # 名稱本身不會進到給 LLM 的問題裡
+    assert via_default.json()["text"] == "RAG 回答：@mcp 幫我查 SKU-9 的庫存"
+
+
+async def test_empty_question_prompt_uses_custom_trigger_name(company):
+    accounts_store.update_chatbot(company["id"], None, None, mcp_trigger_name="阿柴")
+
+    resp = await _chat("@阿柴", company["id"])
+
+    assert "請在 @阿柴 後面輸入您的問題" in resp.json()["text"]

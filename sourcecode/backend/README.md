@@ -107,6 +107,68 @@ Supabase 專案預設就有 `vector` extension 可用；`PGVectorStore.from_para
 -p 5432:5432 pgvector/pgvector:pg16`），只要裝了 `vector` extension、把 `RAG_PG_*` 指過去
 即可，不需要改程式碼。
 
+### RAG 重排序（reranker，選用）
+
+向量檢索先撈一批候選，再用 **Qwen3-Reranker-0.6B**（ONNX INT8）逐一判斷「這段有沒有回答問題」，
+重排後只留前 k 名給 LLM。實作在 `app/rag/reranker.py`，用 `onnxruntime` 在同一個 Python 行程內執行
+（跟 `app/rag/onnx_embedding.py` 同樣做法），不需要編譯任何東西、沒有子行程。
+
+**模型**：Hugging Face `n24q02m/Qwen3-Reranker-0.6B-ONNX` 的 `onnx/model_yesno_quantized.onnx`
+（約 600 MB）加 `tokenizer.json`，第一次啟用時由 `huggingface_hub` 自動下載到 Hugging Face 快取。
+- 授權 Apache-2.0，可商用。但這是**個人維護的社群轉檔**，不是 Qwen 官方發布，上線前請自行評估。
+- **一定要用 YesNo 版**：完整版會輸出整個詞表，推論要吃約 12 GB 記憶體；YesNo 版只輸出
+  `[no, yes]` 兩個 logit，約 600 MB。輸出索引 0 是 no、索引 1 是 yes（已用真實模型驗證）。
+- 每份候選各跑一次（batch=1），所以延遲隨候選數線性增加。
+
+**兩層開關，正式環境不會啟用**
+
+1. **伺服器能力**（`reranker.is_supported()`）：必須同時滿足 `RERANK_ENABLED=true`、**不在 Cloud Run
+   上**（Cloud Run 一定會設 `K_SERVICE`，即使誤設 `RERANK_ENABLED=true` 也一律停用）、且
+   `onnxruntime`／`tokenizers` 已安裝。不支援時連模型都不會下載，模型也不會進 Docker 映像檔
+   （`.dockerignore` 排除了 `*.onnx`、`*.gguf`）。
+2. **每家公司的偏好**：後台「Chatbot 設定」頁的「重排序」開關（`chatbots.rerank_enabled`，預設關閉）。
+
+為什麼不能只靠頁面不讓勾：**本機與正式環境共用同一個資料庫**，在本機勾了 rerank 會存進資料庫，正式
+環境也讀得到。所以兩層都成立才會生效；資料庫裡是「開」但伺服器不支援時，檢索**靜默退回一般向量檢索
+top-k**，不報錯、行為與沒開一樣。伺服器不支援時，後台開關會停用並顯示說明，直接呼叫 API 想開啟也會被
+`400` 拒絕（關閉任何環境都允許）。
+
+**檢索片段數 k**：每次送給 LLM 的片段數，系統預設 **5**（`RAG_DEFAULT_TOP_K`），每家公司可在後台
+「Chatbot 設定」頁調整（`chatbots.rag_top_k`，1～10），有沒有開 rerank 都適用。開啟 rerank 時，向量
+檢索先撈 `RERANK_CANDIDATES`（預設 20）筆候選，重排後只留 k 筆。
+
+**設定（`.env`，都是伺服器層級）**
+
+| 變數 | 預設 | 說明 |
+|---|---|---|
+| `RERANK_ENABLED` | `false` | 總開關；正式環境不要設 |
+| `RERANK_CANDIDATES` | `20` | 開啟 rerank 時向量檢索撈幾筆候選（上限 100） |
+| `RAG_DEFAULT_TOP_K` | `5` | k 的系統預設值 |
+| `RERANK_INSTRUCTION` | Qwen 官方預設說明 | 給 reranker 的任務說明，見下方注意事項 |
+| `RERANK_TIMEOUT_SECONDS` | `15` | 單次 rerank 的總時間預算，超過就退回純向量排序 |
+| `RERANK_MAX_DOC_TOKENS` | `512` | 每份候選最多保留的 token 數 |
+| `RERANK_MAX_CONCURRENCY` | `1` | 同時進行的 rerank 數；每次都會吃滿 CPU |
+| `RERANK_ONNX_THREADS` | `0` | onnxruntime 執行緒數，0＝自動；實測調整沒有明顯幫助 |
+
+**行為與限制**
+- 任何失敗（模型載入失敗、推論出錯、超過時間預算）都會印 `[rerank Error]` 並退回原本向量檢索的
+  排序，聊天不會中斷；模型載入失敗只會印一次，修正設定後需重啟服務。
+- 回傳給前端的 `sources[].distance` 仍是向量距離；reranker 分數（P(yes)，0～1）只放在內部的
+  `rerank_score`，不進 API 回應。
+- 改動了 `chatbots` 表：新增可為 NULL 的 `rag_top_k`（INTEGER）與 `rerank_enabled`（BOOLEAN）兩欄，
+  由 `accounts_store._ensure_schema()` 啟動時以 `ADD COLUMN IF NOT EXISTS` 補上；NULL 代表用系統
+  預設（k=5、rerank 關閉），既有公司不需回填，舊版程式不受影響。
+- `RAG_NO_INFO_THRESHOLD`（provider=local 的「查無資料」門檻）是用向量距離校準的，改成取回傳
+  chunk 中最小的向量距離判斷；開啟 rerank 後這個門檻沒有重新校準過。
+- **延遲（Apple Silicon CPU，`app/data` 的產品 chunk 平均約 260 字）**：每筆約 0.25 秒，與執行緒數
+  無關。50 筆約 12 秒、20 筆約 5 秒、10 筆約 2.4 秒；一般向量檢索約 0.24 秒。所以預設候選數是 20，
+  想多撈一些召回率可以調高，但每多 10 筆約多 2.5 秒。
+- **任務說明會大幅影響排序**：實測同一批資料，自己改寫成客服情境的說明，「最安靜的滑鼠」把靜音滑鼠
+  排到第 5 名、「有賣鍵盤嗎」把螢幕排在鍵盤前面；換回官方預設說明就正常。所以預設用官方那句，要客製
+  請先用真實問題比較。
+- **排序品質尚未量化評估**：只用少數幾個問題人工看過。沒有評測集證明比純向量檢索好。
+- 正式環境（Cloud Run）不啟用，見上方「兩層開關」。
+
 ## 知識庫文件管理
 
 下列 API 依賴 llamaindex 引擎的 pgvector 索引（唯一支援的引擎）。

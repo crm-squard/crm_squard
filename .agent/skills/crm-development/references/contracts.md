@@ -29,9 +29,16 @@ Widget 呼叫時必須帶入企業客戶識別 Header：`X-Client-ID: <assigned-
 
 ## `@mcp` 對話（透過公司 MCP server 回答）
 
-`POST /api/chat` 的 `message` 以 `@mcp` 開頭（忽略大小寫與前置空白）時，不走 RAG，改把去掉 `@mcp` 之後的
+`POST /api/chat` 的 `message` 以 `@<MCP 機器人名稱>` 開頭（忽略大小寫與前置空白）時，不走 RAG，改把去掉該前綴之後的
 問題，連同該公司 `mcp_url` 的 `tools/list` 交給 LLM，由 LLM 自己決定要不要呼叫、呼叫哪個 tool，最後
 整理成文字。回應一律是 `type: text`。
+
+- 觸發名稱是每家公司的設定 `chatbots.mcp_trigger_name`（後台「Chatbot 設定」的「MCP 機器人名稱」），預設 `MCP`
+  （即 `@MCP`）。設成「阿柴」後只有 `@阿柴` 會觸發，原本的 `@mcp` 變成一般 RAG 問題。`@` 也接受全形 `＠`。
+- `ChatbotInfo.mcp_trigger_name` 一律回傳實際生效的名稱（沒設定就是 `MCP`）。`POST`／`PUT /api/admin/chatbots`
+  可帶 `mcp_trigger_name`：最多 20 字、不能含空白或 `@`（前後空白與開頭的 `@` 會被去掉），違反回 `422`；
+  `PUT` 不帶＝不變更，空字串＝回到預設 `MCP`。
+- 查不到公司（沒帶或不合法的 `X-Client-ID`）時用預設名稱 `MCP` 判斷。
 
 - 支援 `provider: google`（Gemini）與 `provider: local`（本地 MLX 上的 Qwen，僅限 Apple Silicon 開發機）；其他 provider 會回提示文字。
   本地 2B 小模型選 tool 的準確度不如 Gemini：缺少必填參數時它會拿空字串呼叫 tool，所以呼叫前一律先檢查必填參數，
@@ -46,7 +53,7 @@ Widget 呼叫時必須帶入企業客戶識別 Header：`X-Client-ID: <assigned-
   不退回 RAG、不回 HTTP 5xx。
 - 每次 LLM 呼叫的 tool 會寫入 `mcp_tool_log`（公司、tool 名稱、參數、是否失敗）；**不記 tool 回傳內容**，
   但參數可能含顧客資訊（例如訂單編號），目前沒有保留期限，需依隱私規範另行處理。
-- 沒有 `@mcp` 前綴的訊息一律走 RAG + LLM，就算內容長得像訂單編號。
+- 沒有 `@<名稱>` 前綴的訊息一律走 RAG + LLM，就算內容長得像訂單編號。
 
 ### 公司的 MCP 金鑰
 
@@ -56,6 +63,23 @@ Widget 呼叫時必須帶入企業客戶識別 Header：`X-Client-ID: <assigned-
 - `GET /api/admin/chatbots/{chatbot_id}/mcp-token`：回傳 `{ "mcp_token": "..." | null }`，權限同其他公司管理端點
   （platform 帳號或綁定該公司的帳號，否則 403），每次呼叫都會寫入稽核紀錄（`reveal_mcp_token`）。
   稽核紀錄只記「有沒有動到金鑰」，不記金鑰內容。金鑰目前以明文存在資料庫，因為必須能還原才能送給 MCP server。
+
+## 公司的 RAG 檢索設定
+
+`ChatbotInfo`（`GET /api/admin/chatbots`、`GET /api/auth/me`、`POST`／`PUT /api/admin/chatbots`）新增三個欄位：
+
+- `rag_top_k`（整數，預設 `5`）：每次檢索送給 LLM 的片段數，1～10。
+- `rerank_enabled`（布林，預設 `false`）：這家公司在後台勾選的偏好，存在共用資料庫。
+- `rerank_available`（布林）：這台**伺服器**能不能做 rerank（不是公司屬性，每筆公司資料的值都一樣）。
+  正式環境（Cloud Run）固定為 `false`。
+
+`PUT /api/admin/chatbots/{chatbot_id}` 可帶 `rag_top_k`（1～10，超出範圍回 `422`）與 `rerank_enabled`，
+不帶代表不變更。**`rerank_enabled: true` 只在伺服器支援時才能設**，否則回 `400`；`false` 任何環境都允許。
+
+`POST /api/chat` 會讀取該公司（`X-Client-ID`）的設定：`rag_top_k` 決定送給 LLM 的片段數；
+`rerank_enabled` 為 true 且伺服器支援時才會 rerank。**資料庫裡是 true 但伺服器不支援（例如正式環境）
+時，靜默退回一般向量檢索 top-k**，不報錯。查不到公司時用系統預設（k=5、不 rerank）。
+回應的 `sources[].distance` 一律是向量距離，rerank 分數不進 API 回應。
 
 ## 其他端點
 

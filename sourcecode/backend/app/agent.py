@@ -57,8 +57,10 @@ class ProductQueryAgent:
     def receive_query(self, query: str) -> str:
         return query.strip()
 
-    def retrieve_from_kb(self, query: str, top_k: int = 3, chatbot_id: str | None = None):
-        return self.retriever.retrieve(query, top_k=top_k, chatbot_id=chatbot_id)
+    def retrieve_from_kb(
+        self, query: str, top_k: int | None = None, chatbot_id: str | None = None, use_rerank: bool = False
+    ):
+        return self.retriever.retrieve(query, top_k=top_k, chatbot_id=chatbot_id, use_rerank=use_rerank)
 
     def _build_retrieval_query(self, query: str, history) -> str:
         if not history:
@@ -87,9 +89,10 @@ class ProductQueryAgent:
         query: str,
         history=None,
         provider: str = "google",
-        top_k: int = 3,
+        top_k: int | None = None,
         max_new_tokens: int = 2048,
         chatbot_id: str | None = None,
+        use_rerank: bool = False,
     ):
         """
         history：之前幾輪對話 [{"role": "user"|"assistant", "content": ...}, ...]，
@@ -97,6 +100,9 @@ class ProductQueryAgent:
         provider：要用哪個 LLM 回答，見 app/providers.py 的 PROVIDERS。
         chatbot_id：多租戶 RAG 隔離用，穿透到 retrieve_from_kb() -> retriever.retrieve()，
         見 app/rag/llamaindex_engine.py 的說明。
+        top_k：送給 LLM 的片段數，None 用系統預設（settings.RAG_DEFAULT_TOP_K，5）；每家公司
+        可在後台調整，由 main.py 讀出來傳入。use_rerank：該公司是否開啟 rerank（伺服器不支援時
+        會被靜默忽略）。
         max_new_tokens 預設拉高到 2048（原本 512）：本地小模型 openbmb/MiniCPM5-2B 是
         混合推理模型，app/llm.py 預設用 enable_thinking=False 關掉思考過程直接回答，
         正常情況下用不到這麼多 token；拉高只是留安全餘裕，避免關閉思考失效或換成
@@ -110,13 +116,17 @@ class ProductQueryAgent:
         """
         clean_query = self.receive_query(query)
         retrieval_query = self._build_retrieval_query(clean_query, history)
-        retrieved_chunks = self.retrieve_from_kb(retrieval_query, top_k=top_k, chatbot_id=chatbot_id)
+        retrieved_chunks = self.retrieve_from_kb(
+            retrieval_query, top_k=top_k, chatbot_id=chatbot_id, use_rerank=use_rerank
+        )
 
         if not retrieved_chunks:
             return NO_INFO_ANSWER, []
         if provider == "local":
             threshold = settings.RAG_NO_INFO_THRESHOLD
-            if retrieved_chunks[0]["distance"] > threshold:
+            # 取所有 chunk 中最小的距離：沒有 rerank 時第一筆就是最小值，行為不變；
+            # 開啟 rerank 後第一筆是 rerank 分數最高的，向量距離不一定最小。
+            if min(r["distance"] for r in retrieved_chunks) > threshold:
                 return NO_INFO_ANSWER, []
 
         user_prompt = self._build_prompt(clean_query, retrieved_chunks)

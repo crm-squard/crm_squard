@@ -11,3 +11,6 @@ __pycache__
 chroma_data/
 llamaindex_data/
 *.db
+# RAG reranker 的模型只給本機開發用，正式環境不啟用（見 README「RAG 重排序」），模型檔不進映像檔
+*.onnx
+*.gguf
