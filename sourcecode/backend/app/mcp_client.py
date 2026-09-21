@@ -11,6 +11,7 @@ Bearer 金鑰（chatbots.mcp_token）。
 """
 import json
 import logging
+from urllib.parse import urlsplit, urlunsplit
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from typing import Any
@@ -56,18 +57,31 @@ class McpToolResult:
     is_error: bool = False
 
 
+def normalize_mcp_url(mcp_url: str) -> str:
+    """
+    路徑結尾補上 "/"。corp-backend 把 MCP app mount 在 "/mcp"，沒有結尾斜線的請求會先被轉址到 "/mcp/"。
+    在 Cloud Run 上這個轉址的 Location 會是 http://（HTTPS 在前端終止，程式看到的是 http），
+    client 跟著轉到 http 後又被 Cloud Run 前端再轉一次，POST 與金鑰在過程中失效，最後整個請求失敗
+    （本機沒有 HTTPS 前端所以不會發生）。直接用帶斜線的網址就完全不會轉址，公司設定填 /mcp 或 /mcp/ 都可以。
+    """
+    parts = urlsplit(mcp_url.strip())
+    if parts.path and not parts.path.endswith("/"):
+        parts = parts._replace(path=parts.path + "/")
+    return urlunsplit(parts)
+
+
 def _open_transport(mcp_url: str, mcp_token: str | None):
     """
     建立到公司 MCP server 的 transport。獨立成函式，測試才能把它換成進程內的 ASGI app。
-    `create_mcp_http_client()` 預設開啟 follow_redirects：corp-backend 把 MCP app mount 在 "/mcp"，
-    mcp_url 不帶結尾斜線時 Starlette 會先回 307 導到 "/mcp/"，沒有 follow_redirects 的話 POST 會失敗。
+    `create_mcp_http_client()` 預設開啟 follow_redirects，作為 URL 沒帶斜線時的保底；
+    但主要靠 normalize_mcp_url() 事先補上斜線避開轉址（轉址在 Cloud Run 上會壞掉，見該函式說明）。
     """
     headers = {"Authorization": f"Bearer {mcp_token}"} if mcp_token else None
     http_client = create_mcp_http_client(
         headers=headers,
         timeout=httpx2.Timeout(settings.MCP_TIMEOUT_SECONDS),
     )
-    return streamable_http_client(mcp_url, http_client=http_client)
+    return streamable_http_client(normalize_mcp_url(mcp_url), http_client=http_client)
 
 
 def _is_exposed_to_llm(tool) -> bool:

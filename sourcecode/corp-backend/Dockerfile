@@ -25,4 +25,7 @@ COPY . .
 EXPOSE 8001
 
 # 使用 shell 形式啟動，確保傳遞 PORT 變數給 uvicorn
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8001}"]
+# --proxy-headers / --forwarded-allow-ips='*'：Cloud Run 的 HTTPS 在前端終止，容器內看到的是 http。
+# 沒有信任 X-Forwarded-Proto 的話，Starlette 的轉址（例如 /mcp → /mcp/）會給出 http:// 的 Location，
+# client 跟著轉會壞掉（POST 與金鑰失效）。Cloud Run 的前端是唯一能連到容器的來源，信任所有轉發標頭是安全的。
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8001} --proxy-headers --forwarded-allow-ips='*'"]
