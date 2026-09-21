@@ -250,3 +250,34 @@ async def test_caller_own_error_before_any_request_is_raised_unchanged(monkeypat
         with pytest.raises(ValueError):
             async with open_mcp_session(BASE_URL, "t"):
                 raise ValueError("尚未設定金鑰")
+
+
+@pytest.mark.parametrize(
+    "url,expected",
+    [
+        ("https://svc-123.europe-west1.run.app/mcp", "https://svc-123.europe-west1.run.app/mcp/"),
+        ("https://svc-123.europe-west1.run.app/mcp/", "https://svc-123.europe-west1.run.app/mcp/"),  # 已有斜線不重複加
+        ("http://localhost:8001/mcp", "http://localhost:8001/mcp/"),
+        ("  https://h.run.app/mcp  ", "https://h.run.app/mcp/"),  # 前後空白
+        ("https://h.run.app/mcp?x=1", "https://h.run.app/mcp/?x=1"),  # 保留查詢字串
+        ("https://h.run.app/a/b", "https://h.run.app/a/b/"),
+        ("https://h.run.app", "https://h.run.app"),  # 沒有路徑就不動
+    ],
+)
+def test_normalize_mcp_url_adds_trailing_slash(url, expected):
+    """真實問題：沒有結尾斜線會先被轉址到錯誤的 http://（Cloud Run），請求就失敗；補斜線可完全避開轉址。"""
+    assert mcp_client.normalize_mcp_url(url) == expected
+
+
+def test_transport_is_opened_with_the_normalized_url(monkeypatch):
+    seen = {}
+
+    def fake_streamable_http_client(url, http_client=None):
+        seen["url"] = url
+        return object()
+
+    monkeypatch.setattr(mcp_client, "streamable_http_client", fake_streamable_http_client)
+
+    mcp_client._open_transport("https://svc.run.app/mcp", "tok")
+
+    assert seen["url"] == "https://svc.run.app/mcp/"
