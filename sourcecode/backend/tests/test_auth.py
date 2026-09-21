@@ -432,3 +432,21 @@ class TestPerChatbotRole:
             accounts_store.delete_account(primary["id"])
             accounts_store.delete_account(collaborator["id"])
             accounts_store.delete_chatbot(other_chatbot["id"])
+
+
+def test_verify_google_id_token_tolerates_small_clock_skew(monkeypatch):
+    """本機時鐘比 Google 慢幾秒不該讓登入失敗（真實發生過：Token used too early）。"""
+    from google.oauth2 import id_token as google_id_token
+
+    from app import auth
+
+    captured = {}
+
+    def fake_verify(token, request, audience=None, clock_skew_in_seconds=0):
+        captured["skew"] = clock_skew_in_seconds
+        return {"email": "someone@example.com"}
+
+    monkeypatch.setattr(google_id_token, "verify_oauth2_token", fake_verify)
+
+    assert auth.verify_google_id_token("fake-token") == "someone@example.com"
+    assert captured["skew"] == auth.GOOGLE_TOKEN_CLOCK_SKEW_SECONDS >= 5

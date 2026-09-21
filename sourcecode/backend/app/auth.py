@@ -15,6 +15,12 @@ from app import accounts_store
 from app.config import settings
 
 
+# 允許本機時鐘與 Google 伺服器有幾秒誤差：token 的 iat／nbf 是 Google 伺服器的時間，
+# 本機（尤其是沒開自動校時的開發機）時鐘稍慢就會被判成「Token used too early」而登入失敗。
+# 只放寬 10 秒，不影響 token 的有效期限判斷；正式環境（Cloud Run）時鐘有校時，用不到這個容差。
+GOOGLE_TOKEN_CLOCK_SKEW_SECONDS = 10
+
+
 def verify_google_id_token(id_token_str: str) -> str:
     """
     驗證 Google ID token，回傳 email。驗證失敗（簽章不對、過期、aud 不符）一律拋
@@ -28,7 +34,10 @@ def verify_google_id_token(id_token_str: str) -> str:
 
     try:
         payload = google_id_token.verify_oauth2_token(
-            id_token_str, google_requests.Request(), settings.GOOGLE_CLIENT_ID
+            id_token_str,
+            google_requests.Request(),
+            settings.GOOGLE_CLIENT_ID,
+            clock_skew_in_seconds=GOOGLE_TOKEN_CLOCK_SKEW_SECONDS,
         )
     except Exception as e:
         raise ValueError(f"Google ID token 驗證失敗：{e}")
