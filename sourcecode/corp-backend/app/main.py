@@ -1,11 +1,14 @@
 from contextlib import AsyncExitStack, asynccontextmanager
 import logging
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.firebase_client import initialize_firebase
 from app.mcp_auth import BearerAuthMiddleware
+from mcp.server.transport_security import TransportSecuritySettings
+
 from app.mcp_server import mcp, mcp_admin
 from app.routers import firestore, health, orders, products
 
@@ -22,7 +25,29 @@ logger = logging.getLogger("corp-backend")
 # v1（FastMCP）時 json_response/stateless_http 是建構子參數；v2（MCPServer）的建構子
 # 不再接受這些參數，改成呼叫 streamable_http_app() 時才指定。streamable_http_path="/"
 # 是因為下面 app.mount 已經加了 "/mcp"、"/mcp-admin" 前綴，避免變成 "/mcp/mcp"。
-_MCP_APP_KWARGS = dict(streamable_http_path="/", json_response=True, stateless_http=True)
+def build_mcp_transport_security() -> TransportSecuritySettings | None:
+    """
+    MCP SDK 的 Host header 檢查（防 DNS rebinding）：這是給「跑在使用者本機、被瀏覽器網頁攻擊」的服務用的。
+    - 設了 MCP_ALLOWED_HOSTS：只放行這些 Host（另外保留 localhost 方便本機測試）。
+    - 在 Cloud Run 上（有 K_SERVICE）且沒設定：停用。遠端服務的邊界是 Bearer 金鑰（見 app/mcp_auth.py），
+      攻擊者的網頁拿不到金鑰；不停用的話 Host 是 *.run.app，所有已通過認證的請求都會被回 421。
+    - 其他（本機）：回傳 None，維持 SDK 預設（只放行 localhost）。
+    """
+    if settings.MCP_ALLOWED_HOSTS:
+        hosts = [h.strip() for h in settings.MCP_ALLOWED_HOSTS.split(",") if h.strip()]
+        return TransportSecuritySettings(
+            enable_dns_rebinding_protection=True,
+            allowed_hosts=[*hosts, "localhost:*", "127.0.0.1:*"],
+        )
+    if os.getenv("K_SERVICE"):
+        return TransportSecuritySettings(enable_dns_rebinding_protection=False)
+    return None
+
+
+_MCP_APP_KWARGS = dict(
+    streamable_http_path="/", json_response=True, stateless_http=True,
+    transport_security=build_mcp_transport_security(),
+)
 mcp_asgi_app = mcp.streamable_http_app(**_MCP_APP_KWARGS)
 mcp_admin_asgi_app = mcp_admin.streamable_http_app(**_MCP_APP_KWARGS)
 
