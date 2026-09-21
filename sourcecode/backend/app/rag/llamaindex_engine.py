@@ -88,20 +88,34 @@ class LlamaIndexRetriever:
         from app.rag.documents_store import seed_if_empty
         seed_if_empty(self.index)
 
-    def retrieve(self, query: str, top_k: int = 3, chatbot_id: str | None = None) -> list[dict]:
+    def retrieve(
+        self, query: str, top_k: int | None = None, chatbot_id: str | None = None, use_rerank: bool = False
+    ) -> list[dict]:
         """
         chatbot_id：多租戶 RAG 隔離的強制過濾條件（見 app/rag/documents_store.py 的
         chatbot_id 隔離說明）。用 LlamaIndex 的 MetadataFilters 帶進 retriever，讓 pgvector
         在 SQL 層面就篩掉其他公司的向量，不是查出來後再用程式碼過濾（避免因為
         similarity_top_k 篩選發生在過濾之前，導致其他公司的資料擠掉真正該回傳的結果）。
         chatbot_id 為 None（呼叫端還沒有公司概念）時维持舊行為，不加過濾條件。
+
+        top_k：最後回傳幾筆，None 用系統預設 settings.RAG_DEFAULT_TOP_K（5）。
+        use_rerank：這家公司有沒有在後台開啟 rerank。true 且這台伺服器支援時（reranker.is_supported()），
+        先用向量檢索撈 RERANK_CANDIDATES 筆候選（同樣帶 chatbot_id 過濾），交給 reranker 重排後只回傳
+        前 top_k 筆；不支援（例如 Cloud Run）或 reranker 載入失敗時，靜默退回一般的向量檢索 top_k，
+        不報錯。見 app/rag/reranker.py。
         """
+        # 延遲 import：不支援 rerank 的部署不需要載入 reranker 模組
+        from app.rag.reranker import get_candidate_count, get_reranker, rerank_chunks
+
+        top_k = top_k or settings.RAG_DEFAULT_TOP_K
+        reranker = get_reranker() if use_rerank else None
+        fetch_k = max(get_candidate_count(), top_k) if reranker else top_k
         filters = None
         if chatbot_id is not None:
             filters = MetadataFilters(
                 filters=[MetadataFilter(key="chatbot_id", value=chatbot_id, operator=FilterOperator.EQ)]
             )
-        retriever = self.index.as_retriever(similarity_top_k=top_k, filters=filters)
+        retriever = self.index.as_retriever(similarity_top_k=fetch_k, filters=filters)
         nodes = retriever.retrieve(query)
         retrieved = []
         for n in nodes:
@@ -116,4 +130,6 @@ class LlamaIndexRetriever:
                 "category": meta.get("category", ""),
                 "distance": 1 - score,
             })
+        if reranker:
+            return rerank_chunks(query, retrieved, reranker, top_k)
         return retrieved

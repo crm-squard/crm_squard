@@ -25,6 +25,12 @@ export interface ChatbotInfo {
   quick_replies: string[] | null;
   // 只表示有沒有設定 MCP 金鑰，金鑰本身不會出現在這個型別（見 getChatbotMcpToken）。
   has_mcp_token?: boolean;
+  // RAG 檢索設定：k 是送給 LLM 的片段數（預設 5）；rerank_enabled 是這家公司勾選的偏好。
+  rag_top_k?: number;
+  rerank_enabled?: boolean;
+  // 「伺服器」能不能做 rerank（正式環境 Cloud Run 固定為 false），不是公司屬性；
+  // false 時設定頁把開關停用，不能開啟。
+  rerank_available?: boolean;
   created_at: string;
   // 目前登入帳號在這家公司的身分；platform 帳號沒有這個概念，固定是 null。
   your_role?: ChatbotRole | null;

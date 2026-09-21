@@ -62,6 +62,40 @@ class Settings:
     # 用來判斷要不要跳過 LLM 直接回「查無此資訊」，見 app/agent.py 的說明。
     RAG_NO_INFO_THRESHOLD: float = 0.30
 
+    # 每次檢索「送給 LLM 的片段數 k」的系統預設值（有沒有開 rerank 都一樣）；每家公司可以在後台
+    # 「Chatbot 設定」頁各自調整（chatbots.rag_top_k），範圍 1～RAG_MAX_TOP_K。
+    RAG_DEFAULT_TOP_K: int = int(os.getenv("RAG_DEFAULT_TOP_K", "5"))
+    RAG_MAX_TOP_K: int = 10
+
+    # RAG 重排序（Qwen3-Reranker-0.6B ONNX INT8，見 app/rag/reranker.py）。
+    # RERANK_ENABLED 是「這台伺服器允許使用 rerank」的總開關，預設關閉；正式環境（Cloud Run）
+    # 不啟用，程式會強制停用。真正決定「這次檢索要不要 rerank」的是每家公司在後台的設定
+    # （chatbots.rerank_enabled），而且必須這個總開關開著又不在 Cloud Run 上才會生效，
+    # 見 reranker.is_supported()。
+    # 開啟 rerank 時：向量檢索先撈 RERANK_CANDIDATES 筆，rerank 後只留 k 筆給 LLM。
+    RERANK_ENABLED: bool = os.getenv("RERANK_ENABLED", "false").lower() == "true"
+    # 預設 20：每筆候選都要跑一次模型（本機約 0.25 秒），50 筆要 12 秒太慢，20 筆約 5 秒
+    RERANK_CANDIDATES: int = int(os.getenv("RERANK_CANDIDATES", "20"))
+    RERANK_MODEL_REPO: str = os.getenv("RERANK_MODEL_REPO", "n24q02m/Qwen3-Reranker-0.6B-ONNX")
+    # 必須是 YesNo 版（輸出只有 [no, yes] 兩個 logit）；完整版會輸出整個詞表，推論要吃約 12 GB 記憶體
+    RERANK_MODEL_FILE: str = os.getenv("RERANK_MODEL_FILE", "onnx/model_yesno_quantized.onnx")
+    # 給 reranker 的任務說明。預設用 Qwen 官方模型卡的那句：實測同一批產品資料，自己改寫成
+    # 「客服問題／商店政策」版本的說明，排序反而變差（「最安靜的滑鼠」把靜音滑鼠排到第 5 名、
+    # 「有賣鍵盤嗎」把螢幕排在鍵盤前面），換回官方說明就正常了。要客製前請先用真實問題比較。
+    RERANK_INSTRUCTION: str = os.getenv(
+        "RERANK_INSTRUCTION",
+        "Given a web search query, retrieve relevant passages that answer the query.",
+    )
+    # 每次 rerank 的總時間預算（秒），超過就放棄、退回純向量排序
+    RERANK_TIMEOUT_SECONDS: float = float(os.getenv("RERANK_TIMEOUT_SECONDS", "15"))
+    # 問題與每份候選文件最多保留幾個 token，避免超長內容拖慢推論
+    RERANK_MAX_QUERY_TOKENS: int = int(os.getenv("RERANK_MAX_QUERY_TOKENS", "256"))
+    RERANK_MAX_DOC_TOKENS: int = int(os.getenv("RERANK_MAX_DOC_TOKENS", "512"))
+    # onnxruntime 的執行緒數，0 表示由 onnxruntime 自己決定（通常是實體核心數）
+    RERANK_ONNX_THREADS: int = int(os.getenv("RERANK_ONNX_THREADS", "0"))
+    # 同時進行的 rerank 呼叫數上限，見 reranker.OnnxQwen3Reranker
+    RERANK_MAX_CONCURRENCY: int = int(os.getenv("RERANK_MAX_CONCURRENCY", "1"))
+
     # 多租戶帳號（Google 登入）：前端拿到的 Google ID token 要用這個 OAuth Client ID 驗證
     # 簽發對象，避免拿到別的應用程式簽的 token 也被接受。Phase 1 還沒有前端串接，這裡先
     # 留設定值供 app/auth.py 使用，本機測試靠 monkeypatch 繞過真的驗證。

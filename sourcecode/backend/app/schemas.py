@@ -139,6 +139,13 @@ class LoginResponse(BaseModel):
     account: AccountInfo
 
 
+def _rerank_available() -> bool:
+    # 延遲 import：schemas 被大量模組載入，不要讓它在 import 時就拉進 reranker 的相依套件
+    from app.rag.reranker import is_supported
+
+    return is_supported()
+
+
 class ChatbotInfo(BaseModel):
     id: str
     name: str
@@ -147,6 +154,13 @@ class ChatbotInfo(BaseModel):
     quick_replies: Optional[List[str]] = None
     # 只表示有沒有設定 MCP 金鑰；金鑰本身不出現在這個回應（見 GET /api/admin/chatbots/{id}/mcp-token）
     has_mcp_token: bool = False
+    # RAG 檢索設定：k 是送給 LLM 的片段數；rerank_enabled 是這家公司在後台勾選的偏好（存在共用
+    # 資料庫），不代表一定會生效。
+    rag_top_k: int = 5
+    rerank_enabled: bool = False
+    # 這台「伺服器」能不能做 rerank（總開關、非 Cloud Run、binary 存在，見 reranker.is_supported()）。
+    # 不是公司的屬性，但放在每筆公司資料裡，前端不用另外多打一支 API；後台頁面據此決定要不要停用開關。
+    rerank_available: bool = Field(default_factory=lambda: _rerank_available())
     created_at: Optional[str] = None
     # 目前登入帳號在這家公司的身分（'primary'／'secondary'），只有 /api/auth/me 對 tenant
     # 角色回傳時才有值；platform 角色沒有「依公司而變」的身分，固定是 None。
@@ -182,6 +196,10 @@ class ChatbotUpdateRequest(BaseModel):
     mcp_token: Optional[str] = Field(default=None, max_length=500)
     welcome_message: Optional[str] = Field(default=None, max_length=500)
     quick_replies: Optional[List[str]] = Field(default=None, max_length=10)
+    # 送給 LLM 的片段數 k（1～10）；不帶＝不變更
+    rag_top_k: Optional[int] = Field(default=None, ge=1, le=10)
+    # true 只在伺服器支援 rerank 時才能設（否則 400）；false（關閉）任何環境都允許；不帶＝不變更
+    rerank_enabled: Optional[bool] = None
 
 
 class AccountCreateRequest(BaseModel):

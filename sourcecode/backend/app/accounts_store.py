@@ -76,6 +76,15 @@ def _ensure_schema() -> None:
         conn.execute(sql_text(
             "ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS line_channel_access_token TEXT"
         ))
+        # RAG 檢索設定（後台「Chatbot 設定」頁可調）。兩個欄位都允許 NULL，NULL 代表「用系統預設」
+        # （rag_top_k → settings.RAG_DEFAULT_TOP_K；rerank_enabled → 關閉），所以既有公司不需要回填。
+        # 這個資料庫本機與正式環境共用，正式環境跑的舊版程式只會 SELECT 自己認得的欄位，加欄位不影響它。
+        conn.execute(sql_text(
+            "ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS rag_top_k INTEGER"
+        ))
+        conn.execute(sql_text(
+            "ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS rerank_enabled BOOLEAN"
+        ))
         conn.execute(sql_text(
             """
             CREATE TABLE IF NOT EXISTS accounts (
@@ -351,6 +360,9 @@ def _row_to_chatbot(row) -> dict:
         "welcome_message": row.welcome_message,
         "quick_replies": json.loads(row.quick_replies) if row.quick_replies else None,
         "has_mcp_token": bool(row.has_mcp_token),
+        # NULL（從沒設定過）→ 系統預設；k 是「送給 LLM 的片段數」，見 settings.RAG_DEFAULT_TOP_K
+        "rag_top_k": row.rag_top_k or settings.RAG_DEFAULT_TOP_K,
+        "rerank_enabled": bool(row.rerank_enabled),
         "line_channel_secret": getattr(row, "line_channel_secret", None),
         "line_channel_access_token": getattr(row, "line_channel_access_token", None),
         "created_at": row.created_at.isoformat() if row.created_at is not None else None,
@@ -373,7 +385,8 @@ def create_chatbot(
                 """
                 INSERT INTO chatbots (name, mcp_url, welcome_message, quick_replies, mcp_token)
                 VALUES (:name, :mcp_url, :welcome_message, :quick_replies, :mcp_token)
-                RETURNING id, name, mcp_url, welcome_message, quick_replies, created_at, """
+                RETURNING id, name, mcp_url, welcome_message, quick_replies, rag_top_k, rerank_enabled,
+                          created_at, """
             + _HAS_MCP_TOKEN_SQL
             ),
             {
@@ -388,6 +401,7 @@ def create_chatbot(
 def update_chatbot(
     chatbot_id: str, name: Optional[str], mcp_url: Optional[str], welcome_message: Optional[str] = None,
     quick_replies: Optional[list[str]] = None, mcp_token: Optional[str] = None,
+    rag_top_k: Optional[int] = None, rerank_enabled: Optional[bool] = None,
 ) -> Optional[dict]:
     """
     只更新有帶值的欄位（None 代表「這次沒有要改這個欄位」，不是「要清空」）——
@@ -395,6 +409,8 @@ def update_chatbot(
     呼叫端不用先查目前值再整包送回來。quick_replies 是清單，先序列化成 JSON 字串再跟其他
     欄位一樣用 COALESCE 判斷「這次有沒有要改」。
     mcp_token 也是同樣規則；要清除金鑰時傳空字串（None 代表不改）。
+    rag_top_k／rerank_enabled 同樣是 None＝不改；rerank_enabled 傳 False 是「明確關閉」，
+    COALESCE 只在參數為 NULL 時才保留舊值，False 不會被當成「沒帶」。
     """
     _ensure_schema()
     engine = get_engine()
@@ -407,15 +423,19 @@ def update_chatbot(
                     mcp_url = COALESCE(:mcp_url, mcp_url),
                     welcome_message = COALESCE(:welcome_message, welcome_message),
                     quick_replies = COALESCE(:quick_replies, quick_replies),
-                    mcp_token = COALESCE(:mcp_token, mcp_token)
+                    mcp_token = COALESCE(:mcp_token, mcp_token),
+                    rag_top_k = COALESCE(:rag_top_k, rag_top_k),
+                    rerank_enabled = COALESCE(:rerank_enabled, rerank_enabled)
                 WHERE id = :id
-                RETURNING id, name, mcp_url, welcome_message, quick_replies, created_at, """
+                RETURNING id, name, mcp_url, welcome_message, quick_replies, rag_top_k, rerank_enabled,
+                          created_at, """
             + _HAS_MCP_TOKEN_SQL
             ),
             {
                 "id": chatbot_id, "name": name, "mcp_url": mcp_url, "welcome_message": welcome_message,
                 "quick_replies": json.dumps(quick_replies) if quick_replies is not None else None,
                 "mcp_token": mcp_token,
+                "rag_top_k": rag_top_k, "rerank_enabled": rerank_enabled,
             },
         ).fetchone()
     return _row_to_chatbot(row) if row is not None else None
@@ -427,7 +447,7 @@ def get_chatbot(chatbot_id: str) -> Optional[dict]:
     with engine.connect() as conn:
         row = conn.execute(
             sql_text(
-                "SELECT id, name, mcp_url, welcome_message, quick_replies, "
+                "SELECT id, name, mcp_url, welcome_message, quick_replies, rag_top_k, rerank_enabled, "
                 "line_channel_secret, line_channel_access_token, created_at, "
                 + _HAS_MCP_TOKEN_SQL + " FROM chatbots WHERE id = :id"
             ),
@@ -474,14 +494,15 @@ def list_chatbots_visible_to(account: dict) -> list[dict]:
     engine = get_engine()
     if account["role"] in PLATFORM_ROLES:
         sql = sql_text(
-            "SELECT id, name, mcp_url, welcome_message, quick_replies, created_at, "
+            "SELECT id, name, mcp_url, welcome_message, quick_replies, rag_top_k, rerank_enabled, created_at, "
             + _HAS_MCP_TOKEN_SQL + ", NULL AS your_role FROM chatbots ORDER BY created_at"
         )
         params = {}
     else:
         sql = sql_text(
             """
-            SELECT c.id, c.name, c.mcp_url, c.welcome_message, c.quick_replies, c.created_at,
+            SELECT c.id, c.name, c.mcp_url, c.welcome_message, c.quick_replies, c.rag_top_k, c.rerank_enabled,
+                   c.created_at,
                    (c.mcp_token IS NOT NULL AND c.mcp_token <> '') AS has_mcp_token,
                    ca.role AS your_role
             FROM chatbots c

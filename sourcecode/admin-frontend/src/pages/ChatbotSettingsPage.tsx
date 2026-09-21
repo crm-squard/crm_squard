@@ -2,9 +2,11 @@ import Button from "antd/es/button";
 import Card from "antd/es/card";
 import Form from "antd/es/form";
 import Input from "antd/es/input";
+import InputNumber from "antd/es/input-number";
 import List from "antd/es/list";
 import message from "antd/es/message";
 import Popconfirm from "antd/es/popconfirm";
+import Switch from "antd/es/switch";
 import Typography from "antd/es/typography";
 import { useCallback, useEffect, useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
@@ -41,7 +43,13 @@ interface ChatbotSettingsForm {
   mcp_token?: string;
   welcome_message?: string;
   quick_replies?: string;
+  rag_top_k?: number;
+  rerank_enabled?: boolean;
 }
+
+// 跟後端 settings.RAG_DEFAULT_TOP_K／RAG_MAX_TOP_K 一致（後端才是最終檢查）
+const DEFAULT_RAG_TOP_K = 5;
+const MAX_RAG_TOP_K = 10;
 
 const DEFAULT_QUICK_REPLIES = ["無線滑鼠支援多少 DPI？", "退貨要幾天內申請？"];
 
@@ -130,6 +138,8 @@ export default function ChatbotSettingsPage() {
         quick_replies: (chatbot.quick_replies ?? DEFAULT_QUICK_REPLIES).join(
           "\n",
         ),
+        rag_top_k: chatbot.rag_top_k ?? DEFAULT_RAG_TOP_K,
+        rerank_enabled: chatbot.rerank_enabled ?? false,
       });
     }
   }, [chatbot, form]);
@@ -152,6 +162,12 @@ export default function ChatbotSettingsPage() {
         ...(values.mcp_token ? { mcp_token: values.mcp_token } : {}),
         welcome_message: values.welcome_message ?? "",
         quick_replies: quickReplies,
+        rag_top_k: values.rag_top_k ?? DEFAULT_RAG_TOP_K,
+        // 只有開關真的被改動才送出：伺服器不支援 rerank 時，後端會拒絕「開啟」，
+        // 若資料庫裡本來就是開啟（本機與正式共用資料庫），每次儲存都帶 true 會讓整個儲存失敗。
+        ...(!!values.rerank_enabled !== !!chatbot?.rerank_enabled
+          ? { rerank_enabled: !!values.rerank_enabled }
+          : {}),
       });
       form.setFieldValue("mcp_token", "");
       setRevealedMcpToken(null);
@@ -340,6 +356,30 @@ export default function ChatbotSettingsPage() {
                 <TextArea
                   rows={3}
                   placeholder={"無線滑鼠支援多少 DPI？\n退貨要幾天內申請？"}
+                />
+              </Form.Item>
+              <Form.Item
+                name="rag_top_k"
+                label="檢索片段數（k）"
+                extra={`每次回答時，從知識庫挑幾段內容交給 AI 參考（1～${MAX_RAG_TOP_K}，預設 ${DEFAULT_RAG_TOP_K}）。`}
+                rules={[{ required: true, message: "請輸入片段數" }]}
+              >
+                <InputNumber min={1} max={MAX_RAG_TOP_K} precision={0} />
+              </Form.Item>
+              <Form.Item
+                name="rerank_enabled"
+                label="重排序（rerank）"
+                valuePropName="checked"
+                extra={
+                  chatbot.rerank_available
+                    ? "先從知識庫撈一批候選（預設 20 段），再用重排序模型挑出最相關的 k 段。每段候選都要跑一次模型，每次回答會多花約 5 秒，且效果尚未經過評估。"
+                    : "這個環境不支援重排序（正式環境無法使用），目前一律使用一般檢索。"
+                }
+              >
+                <Switch
+                  disabled={
+                    !chatbot.rerank_available && !chatbot.rerank_enabled
+                  }
                 />
               </Form.Item>
               <Button type="primary" htmlType="submit" loading={saving}>

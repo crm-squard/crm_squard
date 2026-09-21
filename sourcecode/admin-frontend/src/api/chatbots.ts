@@ -65,6 +65,10 @@ export async function updateChatbot(
     mcp_token?: string;
     welcome_message?: string;
     quick_replies?: string[];
+    // 送給 LLM 的片段數（1～10）；不帶＝不變更
+    rag_top_k?: number;
+    // true 只在伺服器支援時才能設（否則後端回 400）；不帶＝不變更
+    rerank_enabled?: boolean;
   },
 ): Promise<ChatbotInfo> {
   const response = await fetch(

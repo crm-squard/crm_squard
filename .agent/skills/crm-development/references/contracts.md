@@ -57,6 +57,23 @@ Widget 呼叫時必須帶入企業客戶識別 Header：`X-Client-ID: <assigned-
   （platform 帳號或綁定該公司的帳號，否則 403），每次呼叫都會寫入稽核紀錄（`reveal_mcp_token`）。
   稽核紀錄只記「有沒有動到金鑰」，不記金鑰內容。金鑰目前以明文存在資料庫，因為必須能還原才能送給 MCP server。
 
+## 公司的 RAG 檢索設定
+
+`ChatbotInfo`（`GET /api/admin/chatbots`、`GET /api/auth/me`、`POST`／`PUT /api/admin/chatbots`）新增三個欄位：
+
+- `rag_top_k`（整數，預設 `5`）：每次檢索送給 LLM 的片段數，1～10。
+- `rerank_enabled`（布林，預設 `false`）：這家公司在後台勾選的偏好，存在共用資料庫。
+- `rerank_available`（布林）：這台**伺服器**能不能做 rerank（不是公司屬性，每筆公司資料的值都一樣）。
+  正式環境（Cloud Run）固定為 `false`。
+
+`PUT /api/admin/chatbots/{chatbot_id}` 可帶 `rag_top_k`（1～10，超出範圍回 `422`）與 `rerank_enabled`，
+不帶代表不變更。**`rerank_enabled: true` 只在伺服器支援時才能設**，否則回 `400`；`false` 任何環境都允許。
+
+`POST /api/chat` 會讀取該公司（`X-Client-ID`）的設定：`rag_top_k` 決定送給 LLM 的片段數；
+`rerank_enabled` 為 true 且伺服器支援時才會 rerank。**資料庫裡是 true 但伺服器不支援（例如正式環境）
+時，靜默退回一般向量檢索 top-k**，不報錯。查不到公司時用系統預設（k=5、不 rerank）。
+回應的 `sources[].distance` 一律是向量距離，rerank 分數不進 API 回應。
+
 ## 其他端點
 
 - `GET /health`：回傳 `{ "status": "ok" }`。
