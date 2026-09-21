@@ -145,6 +145,8 @@ class ChatbotInfo(BaseModel):
     mcp_url: Optional[str] = None
     welcome_message: Optional[str] = None
     quick_replies: Optional[List[str]] = None
+    # 只表示有沒有設定 MCP 金鑰；金鑰本身不出現在這個回應（見 GET /api/admin/chatbots/{id}/mcp-token）
+    has_mcp_token: bool = False
     created_at: Optional[str] = None
     # 目前登入帳號在這家公司的身分（'primary'／'secondary'），只有 /api/auth/me 對 tenant
     # 角色回傳時才有值；platform 角色沒有「依公司而變」的身分，固定是 None。
@@ -160,9 +162,14 @@ class ChatbotListResponse(BaseModel):
     chatbots: List[ChatbotInfo]
 
 
+class McpTokenResponse(BaseModel):
+    mcp_token: Optional[str] = None
+
+
 class ChatbotCreateRequest(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     mcp_url: Optional[str] = Field(default=None, max_length=500)
+    mcp_token: Optional[str] = Field(default=None, max_length=500)
     welcome_message: Optional[str] = Field(default=None, max_length=500)
     quick_replies: Optional[List[str]] = Field(default=None, max_length=10)
 
@@ -171,6 +178,8 @@ class ChatbotUpdateRequest(BaseModel):
     # 只更新有帶值的欄位；沒帶的欄位維持不變（不是清空），見 accounts_store.update_chatbot()。
     name: Optional[str] = Field(default=None, min_length=1, max_length=200)
     mcp_url: Optional[str] = Field(default=None, max_length=500)
+    # 空字串代表清除金鑰；不帶（None）代表不修改
+    mcp_token: Optional[str] = Field(default=None, max_length=500)
     welcome_message: Optional[str] = Field(default=None, max_length=500)
     quick_replies: Optional[List[str]] = Field(default=None, max_length=10)
 

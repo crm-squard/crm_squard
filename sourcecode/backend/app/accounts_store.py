@@ -63,6 +63,12 @@ def _ensure_schema() -> None:
         conn.execute(sql_text(
             "ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS quick_replies TEXT"
         ))
+        # mcp_token：這家公司 MCP server 的 Bearer 金鑰（backend 呼叫該公司 mcp_url 時帶上）。
+        # 必須能還原成明文才能送出，所以不能像 session token 那樣只存 hash；因此絕不放進
+        # 任何列表／一般回應，只有專用的 get_chatbot_mcp_token() 與其管理端點能讀出來。
+        conn.execute(sql_text(
+            "ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS mcp_token TEXT"
+        ))
         # LINE Messaging API 設定
         conn.execute(sql_text(
             "ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS line_channel_secret TEXT"
@@ -333,6 +339,10 @@ def is_chatbot_primary(account: dict, chatbot_id: str) -> bool:
     return get_chatbot_role(account["id"], chatbot_id) == "primary"
 
 
+# has_mcp_token 只表示「有沒有設定」，金鑰本身不放進一般查詢結果（見 _ensure_schema 的說明）。
+_HAS_MCP_TOKEN_SQL = "(mcp_token IS NOT NULL AND mcp_token <> '') AS has_mcp_token"
+
+
 def _row_to_chatbot(row) -> dict:
     return {
         "id": str(row.id),
@@ -340,6 +350,7 @@ def _row_to_chatbot(row) -> dict:
         "mcp_url": row.mcp_url,
         "welcome_message": row.welcome_message,
         "quick_replies": json.loads(row.quick_replies) if row.quick_replies else None,
+        "has_mcp_token": bool(row.has_mcp_token),
         "line_channel_secret": getattr(row, "line_channel_secret", None),
         "line_channel_access_token": getattr(row, "line_channel_access_token", None),
         "created_at": row.created_at.isoformat() if row.created_at is not None else None,
@@ -352,7 +363,7 @@ def _row_to_chatbot(row) -> dict:
 
 def create_chatbot(
     name: str, mcp_url: Optional[str], welcome_message: Optional[str] = None,
-    quick_replies: Optional[list[str]] = None,
+    quick_replies: Optional[list[str]] = None, mcp_token: Optional[str] = None,
 ) -> dict:
     _ensure_schema()
     engine = get_engine()
@@ -360,14 +371,15 @@ def create_chatbot(
         row = conn.execute(
             sql_text(
                 """
-                INSERT INTO chatbots (name, mcp_url, welcome_message, quick_replies)
-                VALUES (:name, :mcp_url, :welcome_message, :quick_replies)
-                RETURNING id, name, mcp_url, welcome_message, quick_replies, created_at
-                """
+                INSERT INTO chatbots (name, mcp_url, welcome_message, quick_replies, mcp_token)
+                VALUES (:name, :mcp_url, :welcome_message, :quick_replies, :mcp_token)
+                RETURNING id, name, mcp_url, welcome_message, quick_replies, created_at, """
+            + _HAS_MCP_TOKEN_SQL
             ),
             {
                 "name": name, "mcp_url": mcp_url, "welcome_message": welcome_message,
                 "quick_replies": json.dumps(quick_replies) if quick_replies is not None else None,
+                "mcp_token": mcp_token or None,
             },
         ).fetchone()
     return _row_to_chatbot(row)
@@ -375,13 +387,14 @@ def create_chatbot(
 
 def update_chatbot(
     chatbot_id: str, name: Optional[str], mcp_url: Optional[str], welcome_message: Optional[str] = None,
-    quick_replies: Optional[list[str]] = None,
+    quick_replies: Optional[list[str]] = None, mcp_token: Optional[str] = None,
 ) -> Optional[dict]:
     """
     只更新有帶值的欄位（None 代表「這次沒有要改這個欄位」，不是「要清空」）——
     公司資訊頁面可能只改名稱、只改 mcp_url、只改 welcome_message／quick_replies，或同時改，
     呼叫端不用先查目前值再整包送回來。quick_replies 是清單，先序列化成 JSON 字串再跟其他
     欄位一樣用 COALESCE 判斷「這次有沒有要改」。
+    mcp_token 也是同樣規則；要清除金鑰時傳空字串（None 代表不改）。
     """
     _ensure_schema()
     engine = get_engine()
@@ -393,14 +406,16 @@ def update_chatbot(
                 SET name = COALESCE(:name, name),
                     mcp_url = COALESCE(:mcp_url, mcp_url),
                     welcome_message = COALESCE(:welcome_message, welcome_message),
-                    quick_replies = COALESCE(:quick_replies, quick_replies)
+                    quick_replies = COALESCE(:quick_replies, quick_replies),
+                    mcp_token = COALESCE(:mcp_token, mcp_token)
                 WHERE id = :id
-                RETURNING id, name, mcp_url, welcome_message, quick_replies, created_at
-                """
+                RETURNING id, name, mcp_url, welcome_message, quick_replies, created_at, """
+            + _HAS_MCP_TOKEN_SQL
             ),
             {
                 "id": chatbot_id, "name": name, "mcp_url": mcp_url, "welcome_message": welcome_message,
                 "quick_replies": json.dumps(quick_replies) if quick_replies is not None else None,
+                "mcp_token": mcp_token,
             },
         ).fetchone()
     return _row_to_chatbot(row) if row is not None else None
@@ -413,12 +428,26 @@ def get_chatbot(chatbot_id: str) -> Optional[dict]:
         row = conn.execute(
             sql_text(
                 "SELECT id, name, mcp_url, welcome_message, quick_replies, "
-                "line_channel_secret, line_channel_access_token, created_at "
-                "FROM chatbots WHERE id = :id"
+                "line_channel_secret, line_channel_access_token, created_at, "
+                + _HAS_MCP_TOKEN_SQL + " FROM chatbots WHERE id = :id"
             ),
             {"id": chatbot_id},
         ).fetchone()
     return _row_to_chatbot(row) if row is not None else None
+
+
+def get_chatbot_mcp_token(chatbot_id: str) -> Optional[str]:
+    """
+    唯一會讀出 MCP 金鑰明文的函式：只給兩個地方用——backend 呼叫該公司 MCP server 時帶上，
+    以及管理端點讓有權限的帳號查看。沒設定（NULL 或空字串）一律回 None。
+    """
+    _ensure_schema()
+    engine = get_engine()
+    with engine.connect() as conn:
+        row = conn.execute(
+            sql_text("SELECT mcp_token FROM chatbots WHERE id = :id"), {"id": chatbot_id}
+        ).fetchone()
+    return (row.mcp_token or None) if row is not None else None
 
 
 def delete_chatbot(chatbot_id: str) -> bool:
@@ -446,13 +475,14 @@ def list_chatbots_visible_to(account: dict) -> list[dict]:
     if account["role"] in PLATFORM_ROLES:
         sql = sql_text(
             "SELECT id, name, mcp_url, welcome_message, quick_replies, created_at, "
-            "NULL AS your_role FROM chatbots ORDER BY created_at"
+            + _HAS_MCP_TOKEN_SQL + ", NULL AS your_role FROM chatbots ORDER BY created_at"
         )
         params = {}
     else:
         sql = sql_text(
             """
             SELECT c.id, c.name, c.mcp_url, c.welcome_message, c.quick_replies, c.created_at,
+                   (c.mcp_token IS NOT NULL AND c.mcp_token <> '') AS has_mcp_token,
                    ca.role AS your_role
             FROM chatbots c
             JOIN chatbot_accounts ca ON ca.chatbot_id = c.id

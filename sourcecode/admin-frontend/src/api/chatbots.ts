@@ -24,6 +24,7 @@ export async function createChatbot(
   params: {
     name: string;
     mcp_url?: string;
+    mcp_token?: string;
     welcome_message?: string;
     quick_replies?: string[];
   },
@@ -60,6 +61,8 @@ export async function updateChatbot(
   params: {
     name?: string;
     mcp_url?: string;
+    // 不帶＝不變更；空字串＝清除金鑰
+    mcp_token?: string;
     welcome_message?: string;
     quick_replies?: string[];
   },
@@ -77,4 +80,18 @@ export async function updateChatbot(
   );
   await throwIfNotOk(response);
   return (await response.json()) as ChatbotInfo;
+}
+
+/** 查看這家公司的 MCP 金鑰明文；每次查看後端都會寫入稽核紀錄。 */
+export async function getChatbotMcpToken(
+  token: string,
+  chatbotId: string,
+): Promise<string | null> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/admin/chatbots/${encodeURIComponent(chatbotId)}/mcp-token`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+  await throwIfNotOk(response);
+  const data = (await response.json()) as { mcp_token: string | null };
+  return data.mcp_token;
 }

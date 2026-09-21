@@ -17,6 +17,12 @@ class Settings(BaseSettings):
     FIREBASE_CREDENTIALS_PATH: Optional[str] = None
     FIREBASE_CREDENTIALS_JSON: Optional[str] = None
 
+    # MCP endpoint 的 Bearer 金鑰：/mcp（唯讀 tools，給聊天後端 LLM 使用）與
+    # /mcp-admin（管理／寫入 tools，聊天後端不使用）各自獨立一把，避免拿到唯讀金鑰
+    # 就能呼叫寫入 tool。任何一把沒設定時，對應 endpoint 一律拒絕（fail closed）。
+    MCP_API_KEY: Optional[str] = None
+    MCP_ADMIN_API_KEY: Optional[str] = None
+
     # 產品圖片 Storage URL
     PRODUCT_IMAGE_BASE_URL: str = "https://storage.googleapis.com/crm_squard_product_image"
 

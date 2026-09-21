@@ -7,9 +7,15 @@
 | 輸入 | 預期行為 |
 |---|---|
 | `無線滑鼠支援多少 DPI？` | 回傳 `type: product`，包含文字回答與可用的來源資訊 |
-| `查詢訂單 A12345` | 回傳 `type: order`，包含訂單編號、狀態、到貨資訊與商品 |
-| `我要查訂單` | 回傳 `type: text`，提示訂單編號格式 |
-| 不存在的合法格式訂單編號 | 回傳 `type: text`，提供查無訂單的可理解訊息 |
+| `查詢訂單 A12345`（沒有 `@mcp`） | 走 RAG + LLM，不會查訂單；回傳 `type: product` 或 `text` |
+| `@mcp 幫我查 SKU-9 的庫存`（公司有設定 `mcp_url`、provider 為 Gemini 或 local） | LLM 透過公司 MCP server 的 tools 回答，回傳 `type: text`；呼叫過的 tool 記錄在 `mcp_tool_log` |
+| `@mcp`（後面沒有問題） | 回傳 `type: text`，提示要在 `@mcp` 後面輸入問題 |
+| `@mcp ...` 但公司沒有 `mcp_url`，或 `X-Client-ID` 對不到公司 | 回傳 `type: text`，說明尚未開啟 MCP 功能 |
+| `@mcp ...` 但 provider 不支援 tool calling（例如 `openai`） | 回傳 `type: text`，提示改用 Gemini 或本地模型 |
+| `@mcp 查訂單 ORD-1`（缺少 tool 的必填參數，例如電話） | 不會用空值呼叫 MCP server；模型改為向顧客詢問缺少的資訊 |
+| `@mcp ...` 但公司的 MCP server 連不上或金鑰無效 | 回傳 `type: text` 的友善訊息，不退回 RAG，不回 HTTP 5xx |
+| `請幫我 @mcp 查`（`@mcp` 不在開頭） | 一般問題，走 RAG + LLM |
+| 公司的 MCP server 新增 tool | backend 不需修改；下一次 `@mcp` 對話 LLM 即可使用該 tool |
 
 ## 請求驗證
 
@@ -26,6 +32,6 @@
 
 ## 前端
 
-- `product`、`order` 與 `text` 三種回應都能顯示正確元件。
+- `product`、`order` 與 `text` 三種回應都能顯示正確元件（後端目前只會產生 `product` 與 `text`，`order` 為保留的相容型別）。
 - 訂單卡片不加入送給 LLM 的文字歷史；產品與一般文字回覆可保留上下文。
 - 後端錯誤時顯示可理解的錯誤狀態，送出流程不應永久卡住。

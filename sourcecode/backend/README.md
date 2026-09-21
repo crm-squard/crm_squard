@@ -1,6 +1,6 @@
 # Backend — 智慧CRM系統 API
 
-FastAPI 服務，提供 `/api/chat`，對應提案 #1（產品問答 RAG）與 #2（訂單查詢），
+FastAPI 服務，提供 `/api/chat`，對應提案 #1（產品問答 RAG），並支援 `@mcp` 開頭的訊息由 LLM 透過公司 MCP server 的 tools 回答，
 另外有管理者用的 `/api/admin/summary`（當日提問摘要）跟 `/api/providers`（可用 LLM 清單）。
 
 ## 環境需求
@@ -150,8 +150,8 @@ metadata，含 `content_hash`/`uploaded_at`/`file_size_bytes`）就是唯一資�
 // response（產品問題）
 { "type": "product", "text": "...", "source": "Wireless Mouse（無線滑鼠）", "sources": [...] }
 
-// response（訂單查詢）
-{ "type": "order", "code": "A12345", "status": 2, "eta": "8月28日", "items": "..." }
+// response（@mcp 對話，一律是文字；例如 message 為 "@mcp 幫我查訂單 A12345"）
+{ "type": "text", "text": "您的訂單 A12345 已出貨……" }
 ```
 
 ### `GET /api/providers`

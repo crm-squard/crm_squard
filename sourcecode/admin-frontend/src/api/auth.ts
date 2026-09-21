@@ -23,6 +23,8 @@ export interface ChatbotInfo {
   mcp_url: string | null;
   welcome_message: string | null;
   quick_replies: string[] | null;
+  // 只表示有沒有設定 MCP 金鑰，金鑰本身不會出現在這個型別（見 getChatbotMcpToken）。
+  has_mcp_token?: boolean;
   created_at: string;
   // 目前登入帳號在這家公司的身分；platform 帳號沒有這個概念，固定是 null。
   your_role?: ChatbotRole | null;
@@ -54,6 +56,15 @@ export async function loginWithGoogle(idToken: string): Promise<LoginResponse> {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ id_token: idToken }),
+  });
+  await throwIfNotOk(response);
+  return (await response.json()) as LoginResponse;
+}
+
+/** 開發用一鍵登入（後端預設關閉，只有本機且明確開啟時才有作用，否則回 404）。 */
+export async function loginWithDevAccount(): Promise<LoginResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/auth/dev-login`, {
+    method: "POST",
   });
   await throwIfNotOk(response);
   return (await response.json()) as LoginResponse;

@@ -34,6 +34,7 @@ from app.schemas import (
     ChatbotInfo,
     ChatbotListResponse,
     ChatbotUpdateRequest,
+    McpTokenResponse,
     DailySummaryResponse,
     DocumentInfo,
     DocumentListResponse,
@@ -48,8 +49,8 @@ from app.schemas import (
     WidgetTheme,
 )
 from app.agent import get_agent
-from app.orders import get_order, search_order, init_db as init_orders_db
-from app.chat_log import init_db as init_chat_log_db, log_chat
+from app.chat_log import init_db as init_chat_log_db, log_chat, log_tool_calls
+from app.mcp_chat import answer_with_mcp, parse_mcp_command
 from app.summary import summarize_day
 from app.providers import is_configured
 from app.line_webhook import create_line_router
@@ -69,9 +70,10 @@ MAX_CLIENT_ID_LENGTH = 128
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # 啟動時預載 DB；避免在啟動階段載入重型模型導致 Cloud Run 健康檢查逾時
+    if settings.DEV_LOGIN_ENABLED:
+        print(f"[WARNING] DEV_LOGIN_ENABLED=true：/api/auth/dev-login 已開啟（僅限本機請求），帳號 {settings.DEV_LOGIN_EMAIL}")
     try:
         init_chat_log_db()
-        init_orders_db()
     except Exception as e:
         print(f"[Warning] Backend startup db init failed: {e}")
     try:
@@ -92,12 +94,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# 同時支援兩種訂單編號格式：
-# - ORD-500001（corp-backend/Firestore 的真實訂單 ID，ORD- + 6位數字）
-# - A12345（1個英文字母 + 5位數字，舊版 SQLite fallback mock 資料用）
-# \b 邊界避免誤吃：例如沒有它，A123456 會被截斷誤判成 A12345。
-ORDER_CODE_PATTERN = re.compile(r"\bORD-\d{6}\b|\b[A-Za-z]\d{5}\b")
 
 # 簡易 rate limit：同一 IP 每 60 秒最多 RATE_LIMIT_MAX_REQUESTS 次 /api/chat 請求。
 # 記憶體版實作，僅適合單一服務程序；多台伺服器水平擴充時需改用 Redis 等共用儲存。
@@ -180,6 +176,44 @@ def login_with_google(req: GoogleLoginRequest):
     return LoginResponse(token=token, account=AccountInfo(**account))
 
 
+# 這些網域是 RFC 2606／6761 保留的，不可能是真的 Google 帳號，所以自動建立管理員帳號是安全的
+_DEV_LOGIN_RESERVED_SUFFIXES = (".invalid", ".local", ".localhost", ".test")
+
+
+def _dev_login_allowed(request: Request) -> bool:
+    if not settings.DEV_LOGIN_ENABLED:
+        return False
+    if os.getenv("K_SERVICE"):  # Cloud Run 一定會設這個變數：正式環境永遠停用，就算有人誤設 DEV_LOGIN_ENABLED
+        return False
+    return request.client is not None and request.client.host in ("127.0.0.1", "::1")
+
+
+@app.post("/api/auth/dev-login", response_model=LoginResponse)
+def dev_login(request: Request):
+    """
+    開發用一鍵登入：不經過 Google，直接以 settings.DEV_LOGIN_EMAIL 登入（見 config.py 的警告）。
+    沒開啟、不是本機請求、或在 Cloud Run 上時一律回 404（不宣告這個端點存在）。
+    這個端點不會修改任何既有帳號的角色；帳號不存在時只會為保留網域的 email 建立 platform_primary。
+    """
+    if not _dev_login_allowed(request):
+        raise HTTPException(status_code=404, detail="Not Found")
+
+    email = settings.DEV_LOGIN_EMAIL
+    account = accounts_store.get_account_by_email(email)
+    if account is None:
+        if not email.lower().endswith(_DEV_LOGIN_RESERVED_SUFFIXES):
+            raise HTTPException(
+                status_code=409,
+                detail=f"帳號 {email} 不存在，且它不是保留網域的位址，開發登入不會替真實 email 建立管理員帳號。",
+            )
+        account = accounts_store.create_account(email, "platform_primary", created_by=None)
+    accounts_store.record_audit(
+        account["id"], action="dev_login", target_type="account", target_id=account["id"], detail={"email": email},
+    )
+    token = accounts_store.create_session(account["id"])
+    return LoginResponse(token=token, account=AccountInfo(**account))
+
+
 @app.post("/api/auth/logout")
 def logout(authorization: str | None = Header(default=None)):
     """撤銷目前 session（刪掉對應的 sessions row）。沒帶 token 或格式錯誤視同已登出，不報錯。"""
@@ -216,8 +250,8 @@ def list_providers(_client_id: str = Depends(_require_client_id)):
     ]
 
 
-DEFAULT_WELCOME_MESSAGE = "您好，我是線上客服，可以問我任何產品的規格、特色，或是輸入訂單編號查詢配送狀態喔。"
-DEFAULT_QUICK_REPLIES = ["無線滑鼠支援多少 DPI？", "查詢訂單 A12345", "退貨要幾天內申請？"]
+DEFAULT_WELCOME_MESSAGE = "您好，我是線上客服，可以問我任何產品的規格、特色，或是退換貨政策喔。"
+DEFAULT_QUICK_REPLIES = ["無線滑鼠支援多少 DPI？", "退貨要幾天內申請？"]
 
 
 @app.get("/api/widget/config", response_model=WidgetConfig)
@@ -453,11 +487,14 @@ def create_chatbot(req: ChatbotCreateRequest, account: dict = Depends(auth.requi
     的協作帳號清單裡看得到、也能正常增減——管理者角色本來就對所有公司有存取權（不靠這個
     綁定），這裡綁定純粹是為了在「這家公司」的視角下如實記錄跟顯示創建者。
     """
-    chatbot = accounts_store.create_chatbot(req.name, req.mcp_url, req.welcome_message, req.quick_replies)
+    chatbot = accounts_store.create_chatbot(
+        req.name, req.mcp_url, req.welcome_message, req.quick_replies, req.mcp_token
+    )
     accounts_store.bind_chatbot(account["id"], chatbot["id"], role="primary")
     accounts_store.record_audit(
         account["id"], action="create_chatbot", target_type="chatbot", target_id=chatbot["id"],
-        detail={"name": req.name},
+        # 稽核紀錄只記「有沒有設定金鑰」，不記金鑰內容
+        detail={"name": req.name, "mcp_token_set": bool(req.mcp_token)},
     )
     return ChatbotInfo(**chatbot)
 
@@ -479,7 +516,7 @@ def update_chatbot(
     開場快速提問」的需求。
     """
     chatbot = accounts_store.update_chatbot(
-        chatbot_id, req.name, req.mcp_url, req.welcome_message, req.quick_replies
+        chatbot_id, req.name, req.mcp_url, req.welcome_message, req.quick_replies, req.mcp_token
     )
     if chatbot is None:
         raise HTTPException(status_code=404, detail="查無這家公司。")
@@ -488,9 +525,26 @@ def update_chatbot(
         detail={
             "name": req.name, "mcp_url": req.mcp_url, "welcome_message": req.welcome_message,
             "quick_replies": req.quick_replies,
+            # 金鑰內容絕不寫進稽核紀錄，只記這次有沒有動到它（None＝沒改、空字串＝清除）
+            "mcp_token_changed": req.mcp_token is not None,
         },
     )
     return ChatbotInfo(**chatbot)
+
+
+@app.get("/api/admin/chatbots/{chatbot_id}/mcp-token", response_model=McpTokenResponse)
+def get_chatbot_mcp_token(chatbot_id: str, account: dict = Depends(auth.require_chatbot_access)):
+    """
+    讓有權限的帳號（platform 角色或綁定這家公司的商家帳號）查看這家公司的 MCP 金鑰。
+    金鑰不放進 ChatbotInfo／列表回應，只有這支端點回傳明文，並且每次查看都寫入稽核紀錄。
+    """
+    chatbot = accounts_store.get_chatbot(chatbot_id)
+    if chatbot is None:
+        raise HTTPException(status_code=404, detail="查無這家公司。")
+    accounts_store.record_audit(
+        account["id"], action="reveal_mcp_token", target_type="chatbot", target_id=chatbot_id,
+    )
+    return McpTokenResponse(mcp_token=accounts_store.get_chatbot_mcp_token(chatbot_id))
 
 
 @app.delete("/api/admin/chatbots/{chatbot_id}")
@@ -694,7 +748,7 @@ async def chat(req: ChatRequest, request: Request, _client_id: str = Depends(_re
         response = ChatResponse(type="text", text="系統暫時發生錯誤，請稍後再試或聯繫真人客服（0800-123-456）。")
 
     try:
-        log_text = response.text if response.text is not None else f"[訂單 {response.code}]"
+        log_text = response.text or ""
         log_chat(
             message=text, response_type=response.type, response_text=log_text, client_ip=client_ip,
             chatbot_id=_client_id,
@@ -711,7 +765,7 @@ def _lookup_chatbot(chatbot_id: str | None) -> dict | None:
     chatbot_id 來自未經驗證的 X-Client-ID header，可能是 None、空字串，或格式不合法的
     UUID；accounts_store.get_chatbot() 底層是 Postgres 查詢，帶入不合法 UUID 會直接拋
     例外，這裡統一包一層防呆，查不到／格式不對都當作「查無公司」，不能讓呼叫端的請求
-    跟著炸掉。widget_config() 與 _handle_chat() 的訂單查詢分流都靠這個函式取得公司資料。
+    跟著炸掉。widget_config() 與 _handle_chat() 的 @mcp 分流都靠這個函式取得公司資料。
     """
     if not chatbot_id:
         return None
@@ -741,68 +795,17 @@ async def _handle_chat(
             ),
         )
 
-    match = ORDER_CODE_PATTERN.search(text.upper())
-
-    if match or "訂單" in text:
-        if match is None:
-            return ChatResponse(
-                type="text",
-                text=(
-                    "請提供訂單編號與電話號碼以便查詢。\n"
-                    "例如：ORD-510155 980281157"
-                ),
-            )
-
-        code = match.group(0)
-
-        # 訂單編號後面的第一個內容，原樣當作電話號碼。
-        # backend 不檢查、不補 0、不修改電話格式，
-        # 實際是否符合由 corp-backend / Firestore 判斷。
-        remaining_text = text[match.end():].strip()
-        if not remaining_text:
-            return ChatResponse(
-                type="text",
-                text=(
-                    "請同時提供訂單編號與電話號碼。\n"
-                    f"例如：{code} 980281157"
-                ),
-            )
-
-        phone_number = remaining_text.split()[0]
-
-        chatbot = _lookup_chatbot(chatbot_id)
-        if not chatbot or not chatbot.get("mcp_url"):
-            return ChatResponse(
-                type="text",
-                text="目前無法使用訂單查詢服務，請聯繫真人客服（0800-123-456）。",
-            )
-
+    # 訊息以 @mcp 開頭：交給該公司 MCP server 的 tools 處理（LLM 自己選 tool、整理成文字），
+    # 不走 RAG；其他訊息維持原本的 RAG + LLM。見 app/mcp_chat.py。
+    mcp_question = parse_mcp_command(text)
+    if mcp_question is not None:
+        result = await answer_with_mcp(mcp_question, history, provider, _lookup_chatbot(chatbot_id))
         try:
-            order = await search_order(
-                code,
-                phone_number,
-                chatbot["mcp_url"],
-            )
-        except Exception:
-            return ChatResponse(
-                type="text",
-                text=(
-                    "訂單查詢服務暫時無法使用，"
-                    "請稍後再試或聯繫真人客服（0800-123-456）。"
-                ),
-            )
-        if order is None:
-            return ChatResponse(
-                type="text",
-                text="查無訂單，請確認訂單編號與電話號碼是否正確。",
-            )
-        return ChatResponse(
-            type="order",
-            code=code,
-            status=order["status"],
-            eta=order["eta"],
-            items=order["items"],
-        )
+            log_tool_calls(chatbot_id, result.tool_calls)
+        except Exception as e:
+            # 稽核紀錄寫入失敗不該讓使用者的聊天請求跟著失敗
+            print(f"[MCP Tool Log Error] {e}")
+        return ChatResponse(type="text", text=result.text)
 
     agent = get_agent()
     answer, retrieved = agent.generate_answer(text, history=history, provider=provider, chatbot_id=chatbot_id)

@@ -18,12 +18,19 @@ raise mcp.shared.exceptions.MCPError 才會被原樣往外拋成協定層級的 
 raise MCPError，讓 backend 端可以用 try/except MCPError 明確分辨「工具執行失敗」
 （已知的業務錯誤，例如 Firestore 讀寫失敗、找不到訂單、未帶更新欄位），跟連線失敗這種
 更底層的例外分開處理；同時仍保留錯誤訊息附掛 log。
+
+權限拆分（給聊天後端的 LLM 用的 tool 一定要是唯讀、且不能讓人只靠編號就撈到別人的訂單）：
+- `mcp`（掛在 /mcp）：只有 search_order（訂單編號＋電話號碼都符合才回傳），聊天後端的 LLM 只會連到這一個。
+- `mcp_admin`（掛在 /mcp-admin）：get_order、list_orders 與 create／update／delete，聊天後端不使用。
+  get_order 只憑訂單編號就回傳整筆訂單、list_orders 會回傳所有訂單，兩者都沒有驗證或租戶隔離，
+  放在 /mcp 會讓任何人能在聊天視窗逐筆枚舉別人的訂單，所以只放管理端。
+兩個 endpoint 各自用不同的 Bearer 金鑰（見 app/mcp_auth.py、app/config.py）。
 """
 import logging
 
 from mcp.server.mcpserver import MCPServer
 from mcp.shared.exceptions import MCPError
-from mcp_types import INTERNAL_ERROR, INVALID_PARAMS
+from mcp_types import INTERNAL_ERROR, INVALID_PARAMS, ToolAnnotations
 
 from app import crud
 from app.schemas import OrderCreate, OrderUpdate
@@ -33,9 +40,10 @@ logger = logging.getLogger("corp-backend.mcp")
 COLLECTION_ORDERS = "Order"
 
 mcp = MCPServer(name="corp-backend-orders")
+mcp_admin = MCPServer(name="corp-backend-orders-admin")
 
 
-@mcp.tool()
+@mcp_admin.tool(annotations=ToolAnnotations(read_only_hint=True))
 def get_order(order_id: str) -> dict | None:
     """依 ID（NewOrderID 或 OrderID）查詢單筆訂單，回應格式同 GET /Order/{order_id}。找不到時回傳 None。"""
     try:
@@ -48,7 +56,7 @@ def get_order(order_id: str) -> dict | None:
     return {"id": doc.id, **doc.data}
 
 
-@mcp.tool()
+@mcp.tool(annotations=ToolAnnotations(read_only_hint=True))
 def search_order(order_id: str, phone_number: str) -> dict | None:
     """依訂單編號與電話號碼查詢訂單，兩者必須完全符合。找不到或電話不符時回傳 None。"""
     try:
@@ -64,7 +72,7 @@ def search_order(order_id: str, phone_number: str) -> dict | None:
     return {"id": doc.id, **doc.data}
 
 
-@mcp.tool()
+@mcp_admin.tool(annotations=ToolAnnotations(read_only_hint=True))
 def list_orders(limit: int = 100, order_by: str | None = None) -> dict:
     """查詢訂單列表，回應格式同 GET /Order（count + orders）。"""
     try:
@@ -76,7 +84,7 @@ def list_orders(limit: int = 100, order_by: str | None = None) -> dict:
     return {"count": len(orders), "orders": orders}
 
 
-@mcp.tool()
+@mcp_admin.tool(annotations=ToolAnnotations(read_only_hint=False, destructive_hint=False))
 def create_order(payload: OrderCreate) -> dict:
     """新增訂單，回應格式同 POST /Order。"""
     try:
@@ -88,7 +96,7 @@ def create_order(payload: OrderCreate) -> dict:
     return {"id": res.id, **res.data}
 
 
-@mcp.tool()
+@mcp_admin.tool(annotations=ToolAnnotations(read_only_hint=False, destructive_hint=False))
 def update_order(order_id: str, payload: OrderUpdate) -> dict | None:
     """更新訂單部分欄位，回應格式同 PATCH /Order/{order_id}。找不到時回傳 None。"""
     update_data = payload.model_dump(exclude_unset=True)
@@ -104,7 +112,7 @@ def update_order(order_id: str, payload: OrderUpdate) -> dict | None:
     return {"id": res.id, **res.data}
 
 
-@mcp.tool()
+@mcp_admin.tool(annotations=ToolAnnotations(read_only_hint=False, destructive_hint=True))
 def delete_order(order_id: str) -> dict | None:
     """刪除訂單，回應格式同 DELETE /Order/{order_id}。找不到時回傳 None。"""
     try:
