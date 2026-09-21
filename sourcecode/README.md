@@ -139,7 +139,7 @@ npm run dev
 
 - 「無線滑鼠支援多少 DPI？」→ 觸發 #1 產品問答（RAG + LLM）
 - 「智慧手錶有什麼特別功能？」→ 觸發 #1 產品問答，回答會提到隱藏的彩蛋錶面
-- 「@mcp 幫我查訂單 A12345」→ 由 LLM 透過該公司 MCP server 的 tools 查詢（需先在後台設定 MCP URL 與金鑰，且使用 Gemini 模型）
+- 「@mcp 幫我查訂單 A12345」→ 由 LLM 透過該公司 MCP server 的 tools 查詢（需先在後台設定 MCP URL 與金鑰，且使用 Gemini 或本地模型）
 
 ## 之後可以延伸的部分
 

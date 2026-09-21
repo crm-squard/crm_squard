@@ -10,7 +10,7 @@ import re
 from dataclasses import dataclass, field
 
 from app import accounts_store
-from app.mcp_client import McpClientError, open_mcp_session
+from app.mcp_client import McpClientError, McpToolResult, open_mcp_session
 from app.providers import (
     ProviderNotConfigured,
     ToolCallRecord,
@@ -35,7 +35,7 @@ MCP_SYSTEM_PROMPT = (
 
 MSG_EMPTY_QUESTION = "請在 @mcp 後面輸入您的問題，例如：@mcp 幫我查訂單 A12345。"
 MSG_NOT_ENABLED = "此服務目前尚未開啟 MCP 功能，如需協助請聯繫客服（0800-123-456）。"
-MSG_PROVIDER_UNSUPPORTED = "此功能目前僅支援 Gemini 模型，請切換模型後再試。"
+MSG_PROVIDER_UNSUPPORTED = "此功能目前僅支援 Gemini 與本地模型，請切換模型後再試。"
 MSG_NO_TOOLS = "此服務目前沒有可用的查詢功能，如需協助請聯繫客服（0800-123-456）。"
 MSG_UNAVAILABLE = "暫時無法連線到查詢服務，請稍後再試或聯繫真人客服（0800-123-456）。"
 MSG_MODEL_ERROR = "呼叫模型時發生錯誤，請稍後再試或改用其他模型。"
@@ -54,6 +54,27 @@ def parse_mcp_command(text: str) -> str | None:
     if match is None:
         return None
     return text[match.end():].strip()
+
+
+def _require_arguments(tools: list, call_tool):
+    """
+    呼叫 tool 前先檢查必填參數是否有值；缺少就直接回錯誤給模型，不送去 MCP server。
+    實測小模型（本地 Qwen 2B）缺少必填參數時，會拿空字串去呼叫 tool，而不是反問顧客；
+    把「缺少哪些資訊、請先詢問顧客」回填給它之後，它就會改成向顧客詢問。
+    對所有 provider 都適用（Gemini 也可能漏帶參數）。
+    """
+    required_by_tool = {t.name: (t.input_schema or {}).get("required", []) for t in tools}
+
+    async def checked_call(name: str, arguments: dict):
+        missing = [k for k in required_by_tool.get(name, []) if arguments.get(k) in (None, "")]
+        if missing:
+            return McpToolResult(
+                text=f"缺少必要參數：{'、'.join(missing)}。請先向顧客詢問這些資訊，不要自行猜測或留空。",
+                is_error=True,
+            )
+        return await call_tool(name, arguments)
+
+    return checked_call
 
 
 async def answer_with_mcp(
@@ -82,7 +103,9 @@ async def answer_with_mcp(
             tools = await session.list_tools()
             if not tools:
                 return McpChatResult(MSG_NO_TOOLS)
-            answer, tool_calls = await generate_with_tools(provider, messages, tools, session.call_tool)
+            answer, tool_calls = await generate_with_tools(
+                provider, messages, tools, _require_arguments(tools, session.call_tool)
+            )
     except McpClientError as e:
         logger.warning(f"chatbot {chatbot['id']} 的 MCP 連線失敗: {e}")
         return McpChatResult(MSG_UNAVAILABLE)

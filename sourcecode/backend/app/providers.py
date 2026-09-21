@@ -9,8 +9,10 @@ API key／要用的模型名稱存在 settings.LLM_KEYS_PATH 指到的 JSON 檔�
 所有 generate_xxx() 函式吃同一種 messages 格式：[{"role": "system"|"user"|"assistant", "content": str}]，
 跟本地模型（app/llm.py 的 generate()）介面一致，agent.py 呼叫時不需要知道背後是哪家供應商。
 """
+import asyncio
 import os
 import json
+import re
 import threading
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable
@@ -174,8 +176,9 @@ def generate_with_provider(provider: str, messages: list[dict], max_new_tokens: 
 
 # ---- Tool calling（讓 LLM 自己決定要不要呼叫 MCP tool，見 app/mcp_chat.py） ----
 #
-# 目前只實作 Gemini（google）：實際使用的線上 provider 只有它；本地小模型（MiniCPM／Qwen 2B）
-# 沒辦法可靠地選 tool，明確不支援，由呼叫端提示使用者改用其他模型。
+# 支援 Gemini（google）與本地模型（local，MLX 上的 Qwen）；其他 provider 目前沒人用，明確不支援，
+# 由呼叫端提示使用者改用其他模型。本地 2B 小模型選 tool 的準確度不如 Gemini，實測的行為與限制
+# 見 _run_local_tool_loop() 的說明。
 
 
 class ToolCallingNotSupported(Exception):
@@ -192,7 +195,7 @@ class ToolCallRecord:
 
 
 def supports_tool_calling(provider: str) -> bool:
-    return provider == "google"
+    return provider in ("google", "local")
 
 
 def _json_schema_to_gemini(schema: dict, defs: dict, depth: int = 0) -> dict:
@@ -322,16 +325,162 @@ async def _run_gemini_tool_loop(
     return _gemini_text(response), records
 
 
+# ---- 本地模型（Qwen）的 tool calling ----
+#
+# Qwen 的 chat template 原生支援 tools：模型想呼叫 tool 時輸出固定格式的 XML，例如
+#   <tool_call>
+#   <function=search_order>
+#   <parameter=order_id>
+#   ORD-510155
+#   </parameter>
+#   </function>
+#   </tool_call>
+# 這裡解析這個格式，執行 tool，把結果以 role="tool" 訊息回填，再讓模型產生最終答案。
+#
+# 實測（Qwen3.5-2B-4bit）的行為：會依 tool 說明抽出正確的參數、拿到結果後如實整理、查無資料時
+# 不編造；但缺少必填參數時它會拿「空字串」去呼叫 tool，而不是反問顧客，所以呼叫前要先檢查必填
+# 參數（見 app/mcp_chat.py 的 _require_arguments），把錯誤回填後它就會改成向顧客詢問；
+# 沒有合適 tool 的一般問題它會直接憑印象回答（可能編造），這是小模型的限制，無法在這裡根除。
+
+_TOOL_CALL_RE = re.compile(r"<tool_call>(.*?)(?:</tool_call>|$)", re.DOTALL)
+_FUNCTION_RE = re.compile(r"<function=([^>\s]+)>(.*?)(?:</function>|$)", re.DOTALL)
+_PARAMETER_RE = re.compile(r"<parameter=([^>\s]+)>(.*?)</parameter>", re.DOTALL)
+
+
+@dataclass
+class ParsedToolCall:
+    name: str
+    arguments: dict[str, str]  # 原始字串值，之後依 tool 的 schema 轉型別
+
+
+def _parse_local_tool_calls(raw: str) -> tuple[str, list[ParsedToolCall]]:
+    """
+    從模型輸出取出 tool 呼叫，回傳（tool 區塊以外的文字, 呼叫清單）。
+    模型輸出被截斷（少了結尾標籤）時盡量容忍；缺少的參數不會被憑空補上，由呼叫前的必填檢查處理。
+    """
+    calls: list[ParsedToolCall] = []
+    for block in _TOOL_CALL_RE.findall(raw):
+        for name, body in _FUNCTION_RE.findall(block):
+            arguments = {key: value.strip() for key, value in _PARAMETER_RE.findall(body)}
+            calls.append(ParsedToolCall(name=name, arguments=arguments))
+    text = _TOOL_CALL_RE.sub("", raw).strip()
+    return text, calls
+
+
+def _coerce_argument(value: str, schema: dict) -> Any:
+    """模型輸出的參數值一律是字串，依 tool 的 JSON Schema 轉成它宣告的型別；轉不了就維持原字串。"""
+    options = schema.get("anyOf") or schema.get("oneOf")
+    if options:  # Optional[X] 這類：取第一個非 null 的型別
+        schema = next((o for o in options if o.get("type") != "null"), {})
+    schema_type = schema.get("type")
+    try:
+        if schema_type == "integer":
+            return int(value)
+        if schema_type == "number":
+            return float(value)
+        if schema_type == "boolean":
+            lowered = value.strip().lower()
+            if lowered in ("true", "1", "yes"):
+                return True
+            if lowered in ("false", "0", "no"):
+                return False
+        if schema_type in ("array", "object"):
+            return json.loads(value)
+    except (ValueError, TypeError):
+        pass
+    return value
+
+
+def _to_openai_tool_definition(tool) -> dict:
+    return {
+        "type": "function",
+        "function": {
+            "name": tool.name,
+            "description": tool.description or tool.name,
+            "parameters": tool.input_schema or {"type": "object", "properties": {}},
+        },
+    }
+
+
+LocalGenerate = Callable[[list, "list[dict] | None", int], Awaitable[str]]
+
+
+async def _run_local_tool_loop(
+    generate: LocalGenerate, messages: list[dict], tools: list, call_tool: ToolCaller,
+    max_new_tokens: int, max_rounds: int, postprocess: Callable[[str], str] = lambda text: text,
+) -> tuple[str, list[ToolCallRecord]]:
+    """
+    本地模型的 tool 迴圈：生成 → 若有 tool 呼叫就執行並把結果回填 → 重複，直到模型直接給出文字答案。
+    最多 max_rounds 輪；用完後最後一次生成不再提供 tools，強迫它用手上的資訊回答，避免無限迴圈。
+    generate 是「跑一次模型」的函式（測試時可換成假的）；postprocess 只套用在最終答案上
+    （簡轉繁），不能套用在 tool 參數上。
+    """
+    known = {t.name: t for t in tools}
+    definitions = [_to_openai_tool_definition(t) for t in tools]
+    conversation = list(messages)
+    records: list[ToolCallRecord] = []
+
+    for _ in range(max_rounds):
+        raw = await generate(conversation, definitions, max_new_tokens)
+        text, calls = _parse_local_tool_calls(raw)
+        if not calls:
+            return postprocess(text), records
+
+        arguments_by_call = []
+        for call in calls:
+            schema_properties = (known[call.name].input_schema or {}).get("properties", {}) if call.name in known else {}
+            arguments_by_call.append(
+                {k: _coerce_argument(v, schema_properties.get(k, {})) for k, v in call.arguments.items()}
+            )
+        conversation.append({
+            "role": "assistant",
+            "content": text,
+            "tool_calls": [
+                {"type": "function", "function": {"name": c.name, "arguments": a}}
+                for c, a in zip(calls, arguments_by_call)
+            ],
+        })
+        for call, arguments in zip(calls, arguments_by_call):
+            if call.name not in known:
+                # 模型編造了不存在的 tool 名稱：不送去 server，直接回報錯誤讓它改用其他方式回答
+                result_text, is_error = f"沒有名為 {call.name} 的工具。", True
+            else:
+                result = await call_tool(call.name, arguments)
+                result_text, is_error = result.text, result.is_error
+            records.append(ToolCallRecord(call.name, arguments, result_text, is_error))
+            conversation.append({"role": "tool", "content": result_text})
+
+    raw = await generate(conversation, None, max_new_tokens)
+    text, _ = _parse_local_tool_calls(raw)
+    return postprocess(text), records
+
+
+async def _generate_local_raw(conversation: list, tool_definitions: "list[dict] | None", max_new_tokens: int) -> str:
+    from app import llm
+
+    # MLX 生成是阻塞的運算，放到執行緒裡跑，避免卡住整個 event loop（其他請求）
+    return await asyncio.to_thread(llm.generate_raw, conversation, tool_definitions, max_new_tokens)
+
+
 async def generate_with_tools(
     provider: str, messages: list[dict], tools: list, call_tool: ToolCaller,
     max_new_tokens: int = 2048, max_rounds: int | None = None,
 ) -> tuple[str, list[ToolCallRecord]]:
     """
-    讓 LLM 使用 tools（app.mcp_client.McpTool 清單）回答，回傳（最終文字答案, 實際呼叫過的 tool 紀錄）。
+    讓 LLM（Gemini 或本地模型）使用 tools（app.mcp_client.McpTool 清單）回答，
+    回傳（最終文字答案, 實際呼叫過的 tool 紀錄）。
     messages 格式同 generate_with_provider()；最後一則必須是使用者的問題。
     """
     if not supports_tool_calling(provider):
         raise ToolCallingNotSupported(f"{provider} 不支援 tool calling")
+
+    if provider == "local":
+        from app import llm
+
+        return await _run_local_tool_loop(
+            _generate_local_raw, messages, tools, call_tool, max_new_tokens,
+            max_rounds or settings.MCP_MAX_TOOL_ROUNDS, postprocess=llm.to_traditional,
+        )
 
     import google.generativeai as genai
 

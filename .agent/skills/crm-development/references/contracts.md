@@ -33,7 +33,9 @@ Widget 呼叫時必須帶入企業客戶識別 Header：`X-Client-ID: <assigned-
 問題，連同該公司 `mcp_url` 的 `tools/list` 交給 LLM，由 LLM 自己決定要不要呼叫、呼叫哪個 tool，最後
 整理成文字。回應一律是 `type: text`。
 
-- 目前只支援 `provider: google`（Gemini）；其他 provider（含 `local`）會回提示文字。
+- 支援 `provider: google`（Gemini）與 `provider: local`（本地 MLX 上的 Qwen，僅限 Apple Silicon 開發機）；其他 provider 會回提示文字。
+  本地 2B 小模型選 tool 的準確度不如 Gemini：缺少必填參數時它會拿空字串呼叫 tool，所以呼叫前一律先檢查必填參數，
+  缺少就回錯誤讓模型向顧客詢問；沒有合適 tool 的一般問題它可能憑印象回答（可能編造）。
 - backend 不認識任何特定 tool（沒有寫死的名稱、參數或回傳欄位）：公司的 MCP server 新增 tool 後不需修改 backend。
 - 協定使用 MCP 2026-07-28 無狀態模式：不做 `initialize` 握手、不帶 `Mcp-Session-Id`，每個請求自帶協定版本與
   client 資訊；每家公司使用自己的 Bearer 金鑰（`chatbots.mcp_token`）。

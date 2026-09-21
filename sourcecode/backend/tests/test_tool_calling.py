@@ -206,9 +206,10 @@ def test_self_referencing_schema_does_not_recurse_forever():
 
 # ---- generate_with_tools 的接線 ----
 
-def test_only_google_supports_tool_calling():
+def test_only_google_and_local_support_tool_calling():
     assert supports_tool_calling("google") is True
-    for provider in ("local", "anthropic", "openai", "xai"):
+    assert supports_tool_calling("local") is True
+    for provider in ("anthropic", "openai", "xai"):
         assert supports_tool_calling(provider) is False
 
 
@@ -217,7 +218,7 @@ def test_unsupported_provider_raises():
         return McpToolResult(text="x")
 
     with pytest.raises(ToolCallingNotSupported):
-        asyncio.run(generate_with_tools("local", [{"role": "user", "content": "hi"}], [], call_tool))
+        asyncio.run(generate_with_tools("openai", [{"role": "user", "content": "hi"}], [], call_tool))
 
 
 def test_generate_with_tools_wires_prompt_history_and_tools(monkeypatch):

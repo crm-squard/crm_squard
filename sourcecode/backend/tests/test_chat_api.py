@@ -94,10 +94,10 @@ def test_mcp_command_with_empty_question_prompts_for_question(client, mcp_chatbo
 
 
 def test_mcp_command_with_unsupported_provider_says_so(client, mcp_chatbot):
-    resp = _post_chat(client, "@mcp 查庫存", mcp_chatbot["id"], provider="local")
+    resp = _post_chat(client, "@mcp 查庫存", mcp_chatbot["id"], provider="openai")
 
     assert resp.json()["type"] == "text"
-    assert "僅支援 Gemini" in resp.json()["text"]
+    assert "僅支援 Gemini 與本地模型" in resp.json()["text"]
 
 
 def test_mcp_command_when_mcp_server_unreachable_returns_friendly_text(client, mcp_chatbot):

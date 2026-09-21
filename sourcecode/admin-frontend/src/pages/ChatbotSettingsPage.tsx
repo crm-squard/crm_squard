@@ -261,7 +261,7 @@ export default function ChatbotSettingsPage() {
               <Form.Item
                 name="mcp_url"
                 label="MCP URL"
-                extra="使用者訊息以 @mcp 開頭時，聊天機器人會透過這個位址的 MCP server 呼叫查詢功能（目前僅支援 Gemini 模型）。沒有填寫時 @mcp 不可用，RAG 知識庫問答不受影響。"
+                extra="使用者訊息以 @mcp 開頭時，聊天機器人會透過這個位址的 MCP server 呼叫查詢功能（支援 Gemini 與本地模型）。沒有填寫時 @mcp 不可用，RAG 知識庫問答不受影響。"
               >
                 <Input placeholder="例如 http://localhost:8001/mcp" />
               </Form.Item>
