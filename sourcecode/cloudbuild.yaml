@@ -149,6 +149,10 @@ steps:
       - '--platform=managed'
       - '--allow-unauthenticated'
       - '--set-env-vars=GCP_PROJECT_ID=$PROJECT_ID'
+      # MCP endpoint 的 Bearer 金鑰：/mcp（唯讀，聊天 backend 用）與 /mcp-admin（管理，聊天不用）各一把。
+      # 部署前必須先在 Secret Manager 建好同名 secret，並讓 Cloud Run 執行身分有 secretAccessor 權限，
+      # 否則這個部署步驟會失敗；沒設定金鑰時 corp-backend 的 MCP endpoint 會一律回 503（見 GCP_DEPLOYMENT.md）。
+      - '--set-secrets=MCP_API_KEY=MCP_API_KEY:latest,MCP_ADMIN_API_KEY=MCP_ADMIN_API_KEY:latest'
       - '--port=8001'
 
   # 9.5 取得已部署的 Corp Backend Cloud Run 服務網址
