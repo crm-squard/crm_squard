@@ -18,7 +18,7 @@ from typing import Awaitable, Callable
 from fastapi import APIRouter, HTTPException, Request
 
 from app.schemas import ChatResponse
-
+from app.accounts_store import get_chatbot
 from app.chat_log import log_chat
 
 
@@ -26,30 +26,28 @@ LINE_REPLY_API = "https://api.line.me/v2/bot/message/reply"
 
 
 def create_line_router(
-    chat_handler: Callable[[str, list, str], Awaitable[ChatResponse]],
+    chat_handler: Callable[[str, list, str, str | None], Awaitable[ChatResponse]],
 ) -> APIRouter:
     router = APIRouter()
 
     channel_secret = os.getenv("LINE_CHANNEL_SECRET", "")
     channel_access_token = os.getenv("LINE_CHANNEL_ACCESS_TOKEN", "")
 
-    def verify_signature(body: bytes, signature: str) -> bool:
+    def verify_signature(body: bytes, signature: str, secret: str) -> bool:
         """
         驗證 LINE Webhook 的 X-Line-Signature。
-        防止非 LINE 來源偽造請求。
         """
-        if not channel_secret or not signature:
+        if not secret or not signature:
             return False
 
         digest = hmac.new(
-            channel_secret.encode("utf-8"),
+            secret.encode("utf-8"),
             body,
             hashlib.sha256,
         ).digest()
 
-        expected_signature = base64.b64encode(digest).decode("utf-8")
-
-        return hmac.compare_digest(expected_signature, signature)
+        expected = base64.b64encode(digest).decode("utf-8")
+        return hmac.compare_digest(expected, signature)
 
     def format_chat_response(response: ChatResponse) -> str:
         """
@@ -80,7 +78,7 @@ def create_line_router(
 
         return response.text or "目前無法取得回覆，請稍後再試。"
 
-    def reply_line(reply_token: str, message: str):
+    def reply_line(reply_token: str, message: str, access_token: str):
         """
         使用 LINE Reply API 回覆使用者。
         不需額外安裝 requests/httpx。
@@ -104,7 +102,7 @@ def create_line_router(
             method="POST",
             headers={
                 "Content-Type": "application/json",
-                "Authorization": f"Bearer {channel_access_token}",
+                "Authorization": f"Bearer {access_token}",
             },
         )
 
@@ -142,7 +140,7 @@ def create_line_router(
 
         signature = request.headers.get("X-Line-Signature", "")
 
-        if not verify_signature(body, signature):
+        if not verify_signature(body, signature, channel_secret):
             raise HTTPException(
                 status_code=400,
                 detail="Invalid LINE signature",
@@ -216,10 +214,124 @@ def create_line_router(
                     "請稍後再試或聯繫真人客服（0800-123-456）。"
                 )
 
-            reply_line(reply_token, reply_text)
+            reply_line(reply_token, reply_text, channel_access_token)
 
         # LINE Webhook 驗證時也可能送 events=[]，
         # 因此仍需正常回傳 200。
+        return {"status": "ok"}
+
+    @router.post("/line/webhook/{chatbot_id}")
+    async def line_webhook_by_chatbot(chatbot_id: str, request: Request):
+        """
+        依 chatbot_id 處理對應 LINE Bot 的 Webhook。
+        LINE Channel Secret / Access Token 直接從 chatbots 取得。
+        """
+        chatbot = get_chatbot(chatbot_id)
+
+        if not chatbot:
+            raise HTTPException(
+                status_code=404,
+                detail="Chatbot not found",
+            )
+
+        line_channel_secret = chatbot.get("line_channel_secret")
+        line_channel_access_token = chatbot.get("line_channel_access_token")
+
+        if not line_channel_secret:
+            raise HTTPException(
+                status_code=500,
+                detail="LINE channel secret is not configured",
+            )
+
+        if not line_channel_access_token:
+            raise HTTPException(
+                status_code=500,
+                detail="LINE channel access token is not configured",
+            )
+
+        body = await request.body()
+        signature = request.headers.get("X-Line-Signature", "")
+
+        if not verify_signature(
+            body,
+            signature,
+            line_channel_secret,
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid LINE signature",
+            )
+
+        try:
+            payload = json.loads(body.decode("utf-8"))
+        except json.JSONDecodeError:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid JSON",
+            )
+
+        events = payload.get("events", [])
+
+        for event in events:
+            if event.get("type") != "message":
+                continue
+
+            message = event.get("message", {})
+
+            if message.get("type") != "text":
+                continue
+
+            reply_token = event.get("replyToken")
+
+            if not reply_token:
+                continue
+
+            user_text = message.get("text", "").strip()
+
+            if not user_text:
+                continue
+
+            try:
+                crm_response = await chat_handler(
+                    user_text,
+                    [],
+                    "google",
+                    chatbot_id,
+                )
+
+                reply_text = format_chat_response(crm_response)
+
+                try:
+                    log_text = (
+                        crm_response.text
+                        if crm_response.text is not None
+                        else f"[訂單 {crm_response.code}]"
+                    )
+
+                    log_chat(
+                        message=user_text,
+                        response_type=crm_response.type,
+                        response_text=log_text,
+                        client_ip="LINE",
+                        chatbot_id=chatbot_id,
+                    )
+                except Exception as e:
+                    print(f"[LINE Chat Log Error] {e}")
+
+            except Exception as e:
+                print(f"[LINE Chat Error] {e}")
+
+                reply_text = (
+                    "系統目前發生錯誤，"
+                    "請稍後再試或聯繫真人客服（0800-123-456）。"
+                )
+
+            reply_line(
+                reply_token,
+                reply_text,
+                line_channel_access_token,
+            )
+
         return {"status": "ok"}
 
     return router

@@ -19,8 +19,8 @@ ADMIN_KEY = "test-admin-key"
 # transport security 只放行帶 port 的 localhost，所以 base_url 要帶 port
 BASE_URL = "http://localhost:8001"
 
-READ_ONLY_TOOLS = {"get_order"}
-ADMIN_TOOLS = {"list_orders", "create_order", "update_order", "delete_order"}
+READ_ONLY_TOOLS = {"search_order"}
+ADMIN_TOOLS = {"get_order", "list_orders", "create_order", "update_order", "delete_order"}
 
 
 @pytest.fixture(scope="module")
@@ -95,6 +95,15 @@ def test_read_endpoint_exposes_only_read_only_tools(running_app):
 
     assert response.status_code == 200
     assert _tool_names(response) == READ_ONLY_TOOLS
+
+
+def test_order_lookup_by_id_alone_is_not_exposed_on_read_endpoint(running_app):
+    """只憑訂單編號就能撈整筆訂單的 tool 不能放在聊天 LLM 連得到的 endpoint（會被逐筆枚舉）。"""
+    response = _request(running_app, "POST", "/mcp/", body=_rpc("tools/list"), token=READ_KEY)
+
+    names = _tool_names(response)
+    assert "get_order" not in names and "list_orders" not in names
+    assert "search_order" in names  # 要求「訂單編號＋電話」都符合的版本才放在這
 
 
 def test_admin_endpoint_exposes_list_and_write_tools(running_app):
