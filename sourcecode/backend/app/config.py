@@ -70,6 +70,15 @@ class Settings:
     # session token 有效期限（小時），過期後 accounts_store.get_account_by_session() 視同查無此帳號。
     SESSION_TTL_HOURS: int = int(os.getenv("SESSION_TTL_HOURS", "24"))
 
+    # 開發用「一鍵登入」（見 main.py 的 /api/auth/dev-login），預設關閉。
+    # 警告：本機開發用的資料庫可能就是正式環境那一個，開啟後登入會在該資料庫建立／使用一個
+    # platform 管理員帳號。因此：預設關閉；只接受本機（loopback）請求；在 Cloud Run 上（有
+    # K_SERVICE 環境變數）即使設成 true 也一律停用；且只會「自動建立」保留網域（.invalid／
+    # .local／.test／.localhost）的帳號——這種位址不可能通過 Google 登入，不會被別人冒用。
+    # 想用真實 email 登入時，該帳號必須已經存在，這個端點不會替真實 email 建立管理員帳號。
+    DEV_LOGIN_ENABLED: bool = os.getenv("DEV_LOGIN_ENABLED", "false").lower() == "true"
+    DEV_LOGIN_EMAIL: str = os.getenv("DEV_LOGIN_EMAIL", "dev-admin@local.invalid")
+
     # 服務啟動時，若 accounts 表是空的（例如全新資料庫，還沒有人能登入），把這裡列出的
     # email（逗號分隔）建成 platform_primary 帳號，解決「雞生蛋」的 bootstrap 問題。
     INITIAL_PLATFORM_ADMIN_EMAILS: list = [

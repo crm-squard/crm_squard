@@ -70,6 +70,8 @@ MAX_CLIENT_ID_LENGTH = 128
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # 啟動時預載 DB；避免在啟動階段載入重型模型導致 Cloud Run 健康檢查逾時
+    if settings.DEV_LOGIN_ENABLED:
+        print(f"[WARNING] DEV_LOGIN_ENABLED=true：/api/auth/dev-login 已開啟（僅限本機請求），帳號 {settings.DEV_LOGIN_EMAIL}")
     try:
         init_chat_log_db()
     except Exception as e:
@@ -170,6 +172,44 @@ def login_with_google(req: GoogleLoginRequest):
             account["id"], action="self_register", target_type="account", target_id=account["id"],
             detail={"email": email},
         )
+    token = accounts_store.create_session(account["id"])
+    return LoginResponse(token=token, account=AccountInfo(**account))
+
+
+# 這些網域是 RFC 2606／6761 保留的，不可能是真的 Google 帳號，所以自動建立管理員帳號是安全的
+_DEV_LOGIN_RESERVED_SUFFIXES = (".invalid", ".local", ".localhost", ".test")
+
+
+def _dev_login_allowed(request: Request) -> bool:
+    if not settings.DEV_LOGIN_ENABLED:
+        return False
+    if os.getenv("K_SERVICE"):  # Cloud Run 一定會設這個變數：正式環境永遠停用，就算有人誤設 DEV_LOGIN_ENABLED
+        return False
+    return request.client is not None and request.client.host in ("127.0.0.1", "::1")
+
+
+@app.post("/api/auth/dev-login", response_model=LoginResponse)
+def dev_login(request: Request):
+    """
+    開發用一鍵登入：不經過 Google，直接以 settings.DEV_LOGIN_EMAIL 登入（見 config.py 的警告）。
+    沒開啟、不是本機請求、或在 Cloud Run 上時一律回 404（不宣告這個端點存在）。
+    這個端點不會修改任何既有帳號的角色；帳號不存在時只會為保留網域的 email 建立 platform_primary。
+    """
+    if not _dev_login_allowed(request):
+        raise HTTPException(status_code=404, detail="Not Found")
+
+    email = settings.DEV_LOGIN_EMAIL
+    account = accounts_store.get_account_by_email(email)
+    if account is None:
+        if not email.lower().endswith(_DEV_LOGIN_RESERVED_SUFFIXES):
+            raise HTTPException(
+                status_code=409,
+                detail=f"帳號 {email} 不存在，且它不是保留網域的位址，開發登入不會替真實 email 建立管理員帳號。",
+            )
+        account = accounts_store.create_account(email, "platform_primary", created_by=None)
+    accounts_store.record_audit(
+        account["id"], action="dev_login", target_type="account", target_id=account["id"], detail={"email": email},
+    )
     token = accounts_store.create_session(account["id"])
     return LoginResponse(token=token, account=AccountInfo(**account))
 

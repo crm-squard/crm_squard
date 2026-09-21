@@ -61,6 +61,15 @@ export async function loginWithGoogle(idToken: string): Promise<LoginResponse> {
   return (await response.json()) as LoginResponse;
 }
 
+/** 開發用一鍵登入（後端預設關閉，只有本機且明確開啟時才有作用，否則回 404）。 */
+export async function loginWithDevAccount(): Promise<LoginResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/auth/dev-login`, {
+    method: "POST",
+  });
+  await throwIfNotOk(response);
+  return (await response.json()) as LoginResponse;
+}
+
 export async function logout(token: string): Promise<void> {
   const response = await fetch(`${API_BASE_URL}/api/auth/logout`, {
     method: "POST",

@@ -8,6 +8,7 @@ import {
 } from "react";
 import {
   getMe,
+  loginWithDevAccount,
   loginWithGoogle,
   logout as logoutApi,
   type Account,
@@ -58,6 +59,7 @@ interface AuthContextValue {
   chatbots: ChatbotInfo[];
   selectedChatbotId: string | null;
   loginWithIdToken: (idToken: string) => Promise<void>;
+  loginWithDev: () => Promise<void>;
   logout: () => Promise<void>;
   selectChatbot: (chatbotId: string | null) => void;
   refreshMe: () => Promise<void>;
@@ -87,6 +89,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     },
     [updateState],
   );
+
+  // 開發用一鍵登入：只在開發模式的登入頁顯示入口，後端另有多重限制（見 backend/app/main.py）
+  const loginWithDev = useCallback(async () => {
+    const { token } = await loginWithDevAccount();
+    const me = await getMe(token);
+    updateState({
+      token,
+      account: me.account,
+      chatbots: me.chatbots,
+      selectedChatbotId: null,
+    });
+  }, [updateState]);
 
   const logout = useCallback(async () => {
     if (state.token) {
@@ -119,11 +133,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       chatbots: state.chatbots,
       selectedChatbotId: state.selectedChatbotId,
       loginWithIdToken,
+      loginWithDev,
       logout,
       selectChatbot,
       refreshMe,
     }),
-    [state, loginWithIdToken, logout, selectChatbot, refreshMe],
+    [state, loginWithIdToken, loginWithDev, logout, selectChatbot, refreshMe],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

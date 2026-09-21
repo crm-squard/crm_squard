@@ -1,4 +1,5 @@
 import Alert from "antd/es/alert";
+import Button from "antd/es/button";
 import Spin from "antd/es/spin";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -29,12 +30,33 @@ declare global {
 
 export default function LoginPage() {
   const navigate = useNavigate();
-  const { loginWithIdToken } = useAuth();
+  const { loginWithIdToken, loginWithDev } = useAuth();
   const buttonRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
+  // 開發用一鍵登入入口：只在 Vite 開發模式（npm run dev）且明確設定 VITE_DEV_LOGIN=true 時顯示；
+  // 正式建置（import.meta.env.DEV 為 false）不會包含這個按鈕。後端另外預設關閉，見 /api/auth/dev-login。
+  const showDevLogin =
+    import.meta.env.DEV && import.meta.env.VITE_DEV_LOGIN === "true";
+
+  async function handleDevLogin() {
+    setLoading(true);
+    setError(null);
+    try {
+      await loginWithDev();
+      navigate("/select-chatbot", { replace: true });
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "開發登入失敗，請確認後端已開啟 DEV_LOGIN_ENABLED",
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
 
   useEffect(() => {
     if (!clientId || !buttonRef.current) return;
@@ -82,7 +104,17 @@ export default function LoginPage() {
           />
         ) : null}
         {error ? <Alert type="error" showIcon message={error} /> : null}
-        {loading ? <Spin /> : <div ref={buttonRef} />}
+        {loading ? <Spin /> : null}
+        {/* 登入中只隱藏、不卸載：卸載後 Google 按鈕的容器會被重建，但 GSI 只在 effect 裡繪製一次，
+            登入失敗回到這個畫面時 Google 按鈕就會消失。 */}
+        <div className={loading ? "hidden" : ui.loginActions}>
+          <div ref={buttonRef} />
+          {showDevLogin ? (
+            <Button type="dashed" onClick={handleDevLogin}>
+              開發測試登入
+            </Button>
+          ) : null}
+        </div>
       </div>
     </main>
   );
