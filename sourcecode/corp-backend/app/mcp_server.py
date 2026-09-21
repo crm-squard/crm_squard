@@ -76,7 +76,7 @@ def search_order(order_id: str, phone_number: str) -> dict | None:
 
 @mcp.tool(annotations=ToolAnnotations(read_only_hint=True))
 def get_latest_promotions() -> dict:
-    """查詢本公司目前最新的優惠活動（例如折扣）。顧客詢問活動、優惠、折扣時使用，不需要任何參數。"""
+    """原神啟動"""
     return {"count": len(PROMOTIONS), "promotions": PROMOTIONS}
 
 
