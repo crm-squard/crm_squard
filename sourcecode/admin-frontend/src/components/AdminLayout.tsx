@@ -1,11 +1,9 @@
 import CustomerServiceOutlined from "@ant-design/icons/CustomerServiceOutlined";
-import DatabaseOutlined from "@ant-design/icons/DatabaseOutlined";
 import DownOutlined from "@ant-design/icons/DownOutlined";
 import HomeOutlined from "@ant-design/icons/HomeOutlined";
 import LogoutOutlined from "@ant-design/icons/LogoutOutlined";
 import MenuOutlined from "@ant-design/icons/MenuOutlined";
 import RobotOutlined from "@ant-design/icons/RobotOutlined";
-import SettingOutlined from "@ant-design/icons/SettingOutlined";
 import ShoppingOutlined from "@ant-design/icons/ShoppingOutlined";
 import TeamOutlined from "@ant-design/icons/TeamOutlined";
 import UserOutlined from "@ant-design/icons/UserOutlined";
@@ -21,20 +19,14 @@ import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import BrandMark from "./BrandMark";
 import { useAuth } from "../auth/AuthContext";
 import { ui } from "../uiStyles";
+import { tw } from "../utils/tw";
 
 const { Header, Sider, Content } = Layout;
 
-// 公司設定排第一個（使用者明確要求：進到後台第一眼要能設定/確認目前是哪家公司）。
 const navigationItems = [
-  {
-    key: "/chatbot-settings",
-    icon: <SettingOutlined />,
-    label: "Chatbot 設定",
-  },
   { key: "/chatbots", icon: <RobotOutlined />, label: "ChatBot" },
-  { key: "/", icon: <HomeOutlined />, label: "儀表板" },
-  { key: "/orders", icon: <ShoppingOutlined />, label: "訂單管理" },
-  { key: "/rag", icon: <DatabaseOutlined />, label: "RAG 知識庫" },
+  // { key: "/dashboard", icon: <HomeOutlined />, label: "儀表板" },
+  // { key: "/orders", icon: <ShoppingOutlined />, label: "訂單管理" },
   { key: "/summary", icon: <CustomerServiceOutlined />, label: "客服機器人" },
 ];
 
@@ -47,12 +39,11 @@ const ADMIN_ACCOUNTS_ITEM = {
 
 function resolveSelectedKey(pathname: string) {
   if (pathname.startsWith("/orders")) return "/orders";
-  if (pathname.startsWith("/rag")) return "/rag";
-  if (pathname.startsWith("/chatbot-settings")) return "/chatbot-settings";
   if (pathname.startsWith("/chatbots")) return "/chatbots";
+  if (pathname.startsWith("/dashboard")) return "/dashboard";
   if (pathname.startsWith("/summary")) return "/summary";
   if (pathname.startsWith("/admin-accounts")) return "/admin-accounts";
-  return "/";
+  return "/chatbots";
 }
 
 export default function AdminLayout() {
@@ -93,7 +84,7 @@ export default function AdminLayout() {
         <BrandMark compact={collapsed && !isMobile} />
       </div>
       {(!collapsed || isMobile) && (
-        <div className={ui.tenantBlock}>
+        <div className={tw(ui.tenantBlock, "hidden")}>
           <span>目前商家</span>
           {chatbots.length > 1 ? (
             <Dropdown
@@ -109,9 +100,7 @@ export default function AdminLayout() {
                 {selectedChatbot?.name ?? "選擇商家"} <DownOutlined />
               </strong>
             </Dropdown>
-          ) : (
-            <strong>{selectedChatbot?.name ?? "-"}</strong>
-          )}
+          ) : null}
           {/* 只有一家公司時上面沒有下拉選單，這裡另外給一個固定入口，不然新增第二家商家後
               就永遠回不到選公司頁面了（選了一家之後 ChatbotSelectPage 不會再自動出現）。 */}
           <button
