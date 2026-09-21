@@ -20,7 +20,8 @@ raise MCPError，讓 backend 端可以用 try/except MCPError 明確分辨「工
 更底層的例外分開處理；同時仍保留錯誤訊息附掛 log。
 
 權限拆分（給聊天後端的 LLM 用的 tool 一定要是唯讀、且不能讓人只靠編號就撈到別人的訂單）：
-- `mcp`（掛在 /mcp）：只有 search_order（訂單編號＋電話號碼都符合才回傳），聊天後端的 LLM 只會連到這一個。
+- `mcp`（掛在 /mcp）：search_order（訂單編號＋電話號碼都符合才回傳）與 get_latest_promotions
+  （公開的最新活動，內容在 app/promotions.py），聊天後端的 LLM 只會連到這一個。
 - `mcp_admin`（掛在 /mcp-admin）：get_order、list_orders 與 create／update／delete，聊天後端不使用。
   get_order 只憑訂單編號就回傳整筆訂單、list_orders 會回傳所有訂單，兩者都沒有驗證或租戶隔離，
   放在 /mcp 會讓任何人能在聊天視窗逐筆枚舉別人的訂單，所以只放管理端。
@@ -33,6 +34,7 @@ from mcp.shared.exceptions import MCPError
 from mcp_types import INTERNAL_ERROR, INVALID_PARAMS, ToolAnnotations
 
 from app import crud
+from app.promotions import PROMOTIONS
 from app.schemas import OrderCreate, OrderUpdate
 
 logger = logging.getLogger("corp-backend.mcp")
@@ -70,6 +72,12 @@ def search_order(order_id: str, phone_number: str) -> dict | None:
         return None
 
     return {"id": doc.id, **doc.data}
+
+
+@mcp.tool(annotations=ToolAnnotations(read_only_hint=True))
+def get_latest_promotions() -> dict:
+    """查詢本公司目前最新的優惠活動（例如折扣）。顧客詢問活動、優惠、折扣時使用，不需要任何參數。"""
+    return {"count": len(PROMOTIONS), "promotions": PROMOTIONS}
 
 
 @mcp_admin.tool(annotations=ToolAnnotations(read_only_hint=True))

@@ -19,7 +19,7 @@ ADMIN_KEY = "test-admin-key"
 # transport security 只放行帶 port 的 localhost，所以 base_url 要帶 port
 BASE_URL = "http://localhost:8001"
 
-READ_ONLY_TOOLS = {"search_order"}
+READ_ONLY_TOOLS = {"search_order", "get_latest_promotions"}
 ADMIN_TOOLS = {"get_order", "list_orders", "create_order", "update_order", "delete_order"}
 
 
@@ -177,3 +177,19 @@ def test_rest_endpoints_are_unaffected_by_mcp_auth(running_app):
     response = _request(running_app, "GET", "/health")
 
     assert response.status_code == 200
+
+
+def test_latest_promotions_returns_current_promotions_on_read_endpoint(running_app, monkeypatch):
+    """聊天 LLM 問活動時能拿到 PROMOTIONS 的內容（預設全館 9 折）；換活動只需改 PROMOTIONS。"""
+    from app import mcp_server
+
+    body = _rpc("tools/call", {"name": "get_latest_promotions", "arguments": {}})
+    response = _request(running_app, "POST", "/mcp/", body=body, token=READ_KEY)
+
+    result = response.json()["result"]
+    assert result.get("isError") is not True
+    assert "全館 9 折" in str(result)
+
+    monkeypatch.setattr(mcp_server, "PROMOTIONS", [{"title": "夏日特賣", "description": "第二件 5 折"}])
+    response = _request(running_app, "POST", "/mcp/", body=body, token=READ_KEY)
+    assert "夏日特賣" in str(response.json()["result"])
