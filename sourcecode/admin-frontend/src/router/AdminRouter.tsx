@@ -15,6 +15,7 @@ const RagPage = lazy(() => import("../pages/RagPage"));
 const LoginPage = lazy(() => import("../pages/LoginPage"));
 const ChatbotSelectPage = lazy(() => import("../pages/ChatbotSelectPage"));
 const ChatbotSettingsPage = lazy(() => import("../pages/ChatbotSettingsPage"));
+const ChatbotsPage = lazy(() => import("../pages/ChatbotsPage"));
 const SummaryPage = lazy(() => import("../pages/SummaryPage"));
 const AdminAccountsPage = lazy(() => import("../pages/AdminAccountsPage"));
 
@@ -45,6 +46,7 @@ const router = createBrowserRouter([
       { path: "orders/:orderId", element: loadPage(<OrderDetailPage />) },
       { path: "rag", element: loadPage(<RagPage />) },
       { path: "chatbot-settings", element: loadPage(<ChatbotSettingsPage />) },
+      { path: "chatbots", element: loadPage(<ChatbotsPage />) },
       { path: "summary", element: loadPage(<SummaryPage />) },
       { path: "admin-accounts", element: loadPage(<AdminAccountsPage />) },
       { path: "*", element: <Navigate to="/" replace /> },

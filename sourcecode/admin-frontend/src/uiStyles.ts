@@ -58,6 +58,32 @@ export const ui = {
   chatbotSelectCard: tw(
     "grid w-full max-w-[640px] gap-4 rounded-2xl bg-white p-8 shadow-[0_20px_40px_rgb(15_33_72/.08)] [&_h1]:m-0 [&_h1]:text-card-heading [&_h1]:text-admin-heading",
   ),
+  chatbotsCardHeader: tw(
+    "flex items-center justify-between gap-4 max-[620px]:items-start [&_h2]:m-0 [&_h2]:text-lg [&_h2]:text-admin-agent-title",
+  ),
+  chatbotsCreateButton: tw(
+    "h-9! rounded-control! border-0! bg-admin-agent-action! px-3.5! text-caption! text-white! shadow-none! hover:bg-admin-agent-action/90!",
+  ),
+  chatbotsGrid: tw("mt-2.5 grid grid-cols-2 gap-3.5 max-[760px]:grid-cols-1"),
+  chatbotCard: tw(
+    "grid min-h-[138px] min-w-0 gap-2 rounded-agent-card border border-solid border-admin-agent-border bg-white p-3",
+  ),
+  chatbotCardTitle: tw(
+    "flex min-w-0 items-center gap-3 [&_h3]:m-0 [&_h3]:overflow-hidden [&_h3]:text-base [&_h3]:text-ellipsis [&_h3]:whitespace-nowrap [&_h3]:text-admin-agent-title",
+  ),
+  chatbotTitleButton: tw(
+    "block max-w-full cursor-pointer overflow-hidden border-0 bg-transparent p-0 text-left text-base text-ellipsis whitespace-nowrap text-admin-agent-title hover:text-admin-agent-action focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-admin-agent-action",
+  ),
+  chatbotAvatar: tw(
+    "text-admin-agent-avatar grid size-10 shrink-0 place-items-center rounded-full bg-gray-100 text-base",
+  ),
+  chatbotMenu: tw(
+    "ml-auto size-10! shrink-0 rounded-agent-card! text-xl! text-admin-text-subtle hover:bg-admin-surface-subtle!",
+  ),
+  chatbotMetadata: tw(
+    "grid gap-1 text-caption text-admin-text-subtle [&_code]:w-fit [&_code]:max-w-full [&_code]:overflow-hidden [&_code]:text-ellipsis [&_code]:whitespace-nowrap",
+  ),
+  chatbotId: tw("text-wrap"),
   pageHeading: tw(
     "flex min-h-19 items-start justify-between gap-6 [&_h1]:mt-0 [&_h1]:mb-1.25 [&_h1]:text-[clamp(27px,2.3vw,34px)] [&_h1]:tracking-[-.035em] [&_h1]:text-admin-heading [&_p]:m-0 [&_p]:text-sm [&_p]:text-admin-muted [&_time]:pt-2.5 [&_time]:text-caption [&_time]:text-admin-muted max-[899px]:[&_time]:hidden",
   ),
