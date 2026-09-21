@@ -25,6 +25,7 @@ export async function createChatbot(
     name: string;
     mcp_url?: string;
     mcp_token?: string;
+    mcp_trigger_name?: string;
     welcome_message?: string;
     quick_replies?: string[];
   },
@@ -63,6 +64,8 @@ export async function updateChatbot(
     mcp_url?: string;
     // 不帶＝不變更；空字串＝清除金鑰
     mcp_token?: string;
+    // 不帶＝不變更；空字串＝回到預設的 MCP
+    mcp_trigger_name?: string;
     welcome_message?: string;
     quick_replies?: string[];
     // 送給 LLM 的片段數（1～10）；不帶＝不變更

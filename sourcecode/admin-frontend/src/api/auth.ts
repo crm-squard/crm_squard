@@ -25,6 +25,8 @@ export interface ChatbotInfo {
   quick_replies: string[] | null;
   // 只表示有沒有設定 MCP 金鑰，金鑰本身不會出現在這個型別（見 getChatbotMcpToken）。
   has_mcp_token?: boolean;
+  // 「MCP 機器人名稱」：聊天訊息以 @名稱 開頭時啟動 MCP，後端一律回傳實際生效的名稱（預設 MCP）。
+  mcp_trigger_name?: string;
   // RAG 檢索設定：k 是送給 LLM 的片段數（預設 5）；rerank_enabled 是這家公司勾選的偏好。
   rag_top_k?: number;
   rerank_enabled?: boolean;

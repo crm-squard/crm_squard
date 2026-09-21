@@ -1,6 +1,6 @@
 """FastAPI 請求/回應格式。前端依 type 欄位決定要 render 哪一種訊息元件。"""
 from typing import Any, List, Literal, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class HistoryTurn(BaseModel):
@@ -154,6 +154,8 @@ class ChatbotInfo(BaseModel):
     quick_replies: Optional[List[str]] = None
     # 只表示有沒有設定 MCP 金鑰；金鑰本身不出現在這個回應（見 GET /api/admin/chatbots/{id}/mcp-token）
     has_mcp_token: bool = False
+    # 聊天訊息以「@名稱」開頭時啟動 MCP，這裡是實際生效的名稱（沒設定就是預設的 MCP）。
+    mcp_trigger_name: str = "MCP"
     # RAG 檢索設定：k 是送給 LLM 的片段數；rerank_enabled 是這家公司在後台勾選的偏好（存在共用
     # 資料庫），不代表一定會生效。
     rag_top_k: int = 5
@@ -180,12 +182,28 @@ class McpTokenResponse(BaseModel):
     mcp_token: Optional[str] = None
 
 
+def _normalize_mcp_trigger_name(value: Optional[str]) -> Optional[str]:
+    """
+    去掉前後空白與使用者順手打的開頭 @／＠（介面上已經固定顯示 @，兩種都收）；名稱中間不能有空白或 @，
+    否則訊息「@名稱 問題」永遠對不上。空字串代表「回到預設 MCP」，原樣保留給 accounts_store 處理。
+    """
+    if value is None:
+        return None
+    value = value.strip().lstrip("@＠").strip()
+    if any(ch.isspace() or ch in "@＠" for ch in value):
+        raise ValueError("MCP 機器人名稱不能包含空白或 @")
+    return value
+
+
 class ChatbotCreateRequest(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     mcp_url: Optional[str] = Field(default=None, max_length=500)
     mcp_token: Optional[str] = Field(default=None, max_length=500)
     welcome_message: Optional[str] = Field(default=None, max_length=500)
     quick_replies: Optional[List[str]] = Field(default=None, max_length=10)
+    mcp_trigger_name: Optional[str] = Field(default=None, max_length=20)
+
+    _check_mcp_trigger_name = field_validator("mcp_trigger_name")(_normalize_mcp_trigger_name)
 
 
 class ChatbotUpdateRequest(BaseModel):
@@ -200,6 +218,10 @@ class ChatbotUpdateRequest(BaseModel):
     rag_top_k: Optional[int] = Field(default=None, ge=1, le=10)
     # true 只在伺服器支援 rerank 時才能設（否則 400）；false（關閉）任何環境都允許；不帶＝不變更
     rerank_enabled: Optional[bool] = None
+    # 「MCP 機器人名稱」：訊息以 @名稱 開頭時啟動 MCP；空字串＝回到預設 MCP；不帶＝不變更
+    mcp_trigger_name: Optional[str] = Field(default=None, max_length=20)
+
+    _check_mcp_trigger_name = field_validator("mcp_trigger_name")(_normalize_mcp_trigger_name)
 
 
 class AccountCreateRequest(BaseModel):

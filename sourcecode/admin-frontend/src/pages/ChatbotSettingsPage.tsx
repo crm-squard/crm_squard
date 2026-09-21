@@ -41,6 +41,7 @@ interface ChatbotSettingsForm {
   name: string;
   mcp_url?: string;
   mcp_token?: string;
+  mcp_trigger_name?: string;
   welcome_message?: string;
   quick_replies?: string;
   rag_top_k?: number;
@@ -51,10 +52,13 @@ interface ChatbotSettingsForm {
 const DEFAULT_RAG_TOP_K = 5;
 const MAX_RAG_TOP_K = 10;
 
+// 跟後端 accounts_store.DEFAULT_MCP_TRIGGER_NAME 一致
+const DEFAULT_MCP_TRIGGER_NAME = "MCP";
+
 const DEFAULT_QUICK_REPLIES = ["無線滑鼠支援多少 DPI？", "退貨要幾天內申請？"];
 
 /**
- * 公司資訊設定頁面：MCP 連線設定（URL 與金鑰，訊息以 @mcp 開頭時使用）跟聊天機器人開頭語從原本 select-chatbot 頁面
+ * 公司資訊設定頁面：MCP 連線設定（URL、金鑰與機器人名稱，訊息以 @名稱 開頭時使用）跟聊天機器人開頭語從原本 select-chatbot 頁面
  * 的就地編輯移過來這裡，select-chatbot 頁面只留商家名稱跟識別碼，操作對象一律是
  * AuthContext 目前選定的公司（跟 RagPage 一樣的模式，不用另外帶 chatbot_id 路由參數）。
  */
@@ -70,6 +74,11 @@ export default function ChatbotSettingsPage() {
   } = useAuth();
   const [messageApi, contextHolder] = message.useMessage();
   const [form] = Form.useForm<ChatbotSettingsForm>();
+  // 即時反映輸入中的名稱，讓說明文字顯示的觸發詞跟實際會生效的一致
+  const triggerNameInput = Form.useWatch("mcp_trigger_name", form);
+  const triggerName =
+    (triggerNameInput ?? "").trim().replace(/^[@＠]+/, "") ||
+    DEFAULT_MCP_TRIGGER_NAME;
   const [accountForm] = Form.useForm<{ email: string }>();
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -134,6 +143,7 @@ export default function ChatbotSettingsPage() {
       form.setFieldsValue({
         name: chatbot.name,
         mcp_url: chatbot.mcp_url ?? "",
+        mcp_trigger_name: chatbot.mcp_trigger_name ?? DEFAULT_MCP_TRIGGER_NAME,
         welcome_message: chatbot.welcome_message ?? "",
         quick_replies: (chatbot.quick_replies ?? DEFAULT_QUICK_REPLIES).join(
           "\n",
@@ -158,6 +168,8 @@ export default function ChatbotSettingsPage() {
       await updateChatbot(token, selectedChatbotId, {
         name: values.name,
         mcp_url: values.mcp_url ?? "",
+        // 留空＝回到預設 MCP（後端把空字串當成「重設」）
+        mcp_trigger_name: values.mcp_trigger_name ?? "",
         // 金鑰欄位留空代表不變更（空字串在後端是「清除」，改由專用的清除按鈕處理）
         ...(values.mcp_token ? { mcp_token: values.mcp_token } : {}),
         welcome_message: values.welcome_message ?? "",
@@ -287,9 +299,27 @@ export default function ChatbotSettingsPage() {
               <Form.Item
                 name="mcp_url"
                 label="MCP URL"
-                extra="使用者訊息以 @mcp 開頭時，聊天機器人會透過這個位址的 MCP server 呼叫查詢功能（支援 Gemini 與本地模型）。沒有填寫時 @mcp 不可用，RAG 知識庫問答不受影響。"
+                extra={`使用者訊息以 @${triggerName} 開頭時，聊天機器人會透過這個位址的 MCP server 呼叫查詢功能（支援 Gemini 與本地模型）。沒有填寫時 @${triggerName} 不可用，RAG 知識庫問答不受影響。`}
               >
                 <Input placeholder="例如 http://localhost:8001/mcp" />
+              </Form.Item>
+              <Form.Item
+                name="mcp_trigger_name"
+                label="MCP 機器人名稱"
+                extra={`顧客在聊天視窗輸入「@${triggerName} 你的問題」就會啟動 MCP 功能（不分大小寫）。預設是 ${DEFAULT_MCP_TRIGGER_NAME}；留空會回到預設。名稱不能包含空白或 @，最多 20 字。`}
+                rules={[
+                  { max: 20, message: "名稱最多 20 個字" },
+                  {
+                    pattern: /^[^\s@＠]*$/,
+                    message: "名稱不能包含空白或 @",
+                  },
+                ]}
+              >
+                <Input
+                  addonBefore="@"
+                  placeholder={DEFAULT_MCP_TRIGGER_NAME}
+                  maxLength={20}
+                />
               </Form.Item>
               <Form.Item
                 name="mcp_token"
@@ -327,7 +357,7 @@ export default function ChatbotSettingsPage() {
                     )}
                     <Popconfirm
                       title="確定要清除這家商家的 MCP 金鑰嗎？"
-                      description="清除後 @mcp 會因為金鑰無效而無法連線，直到重新設定。"
+                      description={`清除後 @${triggerName} 會因為金鑰無效而無法連線，直到重新設定。`}
                       onConfirm={handleClearMcpToken}
                       okButtonProps={{ danger: true }}
                     >
