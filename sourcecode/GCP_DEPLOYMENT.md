@@ -47,6 +47,31 @@
 
 ---
 
+### 步驟 1.5：Corp Backend 的 MCP 金鑰（`@mcp` 需要）
+
+Corp Backend 的 MCP endpoint 需要 Bearer 金鑰，**沒設定時 `/mcp` 與 `/mcp-admin` 一律回 503**。
+`cloudbuild.yaml` 的 corp-backend 部署步驟會從 Secret Manager 帶入下面兩個 secret，**必須先建好，否則部署會失敗**：
+
+| Secret | 用途 | 給誰用 |
+|---|---|---|
+| `MCP_API_KEY` | `/mcp`（唯讀，`search_order`） | 聊天 backend：填進**該公司**的「Chatbot 設定 → MCP 金鑰」 |
+| `MCP_ADMIN_API_KEY` | `/mcp-admin`（管理與寫入） | 管理用途，**不要**填進任何公司的設定 |
+
+1. 產生隨機金鑰並建立 secret（兩把必須不同）：
+   ```bash
+   python3 -c "import secrets;print(secrets.token_urlsafe(32))" | gcloud secrets create MCP_API_KEY --data-file=-
+   python3 -c "import secrets;print(secrets.token_urlsafe(32))" | gcloud secrets create MCP_ADMIN_API_KEY --data-file=-
+   ```
+2. 讓 Cloud Run 執行身分能讀取（與 backend 讀 `RAG_PG_PASSWORD` 相同的服務帳號）：
+   ```bash
+   gcloud secrets add-iam-policy-binding MCP_API_KEY --member="serviceAccount:<CLOUD_RUN_SERVICE_ACCOUNT>" --role="roles/secretmanager.secretAccessor"
+   gcloud secrets add-iam-policy-binding MCP_ADMIN_API_KEY --member="serviceAccount:<CLOUD_RUN_SERVICE_ACCOUNT>" --role="roles/secretmanager.secretAccessor"
+   ```
+3. 部署後，到管理後台選擇該公司 →「Chatbot 設定」：MCP URL 填 `https://<corp-backend 網址>/mcp`，
+   MCP 金鑰貼上 `MCP_API_KEY` 的值（`gcloud secrets versions access latest --secret=MCP_API_KEY`）。
+
+---
+
 ### 步驟 2：部署 Corp Frontend 至 Cloud Run
 
 1. 將前端 `API_BASE_URL` 指定為步驟 1 取得的 Backend URL 並進行建置：
