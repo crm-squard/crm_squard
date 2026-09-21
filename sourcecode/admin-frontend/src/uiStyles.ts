@@ -84,9 +84,27 @@ export const ui = {
     "grid gap-1 text-caption text-admin-text-subtle [&_code]:w-fit [&_code]:max-w-full [&_code]:overflow-hidden [&_code]:text-ellipsis [&_code]:whitespace-nowrap",
   ),
   chatbotId: tw("text-wrap"),
+  settingsTabs: tw(
+    "[&_.ant-tabs-ink-bar]:bg-admin-primary [&_.ant-tabs-nav]:mb-4 [&_.ant-tabs-nav]:overflow-x-auto [&_.ant-tabs-nav-list]:min-w-max [&_.ant-tabs-tab]:px-2 [&_.ant-tabs-tab]:py-3 [&_.ant-tabs-tab-active_.ant-tabs-tab-btn]:text-admin-primary! [&_.ant-tabs-tab-btn]:text-admin-text-subtle [&_.ant-tabs-tab-btn_span]:flex [&_.ant-tabs-tab-btn_span]:items-center [&_.ant-tabs-tab-btn_span]:gap-2",
+  ),
+  settingsCardGrid: tw("grid gap-4"),
+  settingsCard: tw(
+    "rounded-surface border border-solid border-admin-border bg-white shadow-[0_1px_2px_rgb(15_33_72/.06)] [&_.ant-card-body]:p-6 max-[620px]:[&_.ant-card-body]:p-4 [&_.ant-card-head]:border-admin-border [&_.ant-card-head]:px-6 max-[620px]:[&_.ant-card-head]:px-4",
+  ),
+  settingsPlaceholder: tw(
+    "grid min-h-28 place-items-center rounded-control border border-dashed border-admin-border bg-admin-surface-subtle px-4 text-center text-caption text-admin-text-subtle",
+  ),
+  settingsActions: tw(
+    "flex items-center justify-between gap-3 pt-1 max-[620px]:flex-col-reverse max-[620px]:items-stretch [&_.ant-btn]:min-w-24",
+  ),
+  settingsAccountForm: tw(
+    "mt-4 flex gap-2 max-[620px]:flex-col [&_.ant-form-item]:mb-0 max-[620px]:[&_.ant-form-item]:w-full max-[620px]:[&_.ant-input]:w-full",
+  ),
   pageHeading: tw(
     "flex min-h-19 items-start justify-between gap-6 [&_h1]:mt-0 [&_h1]:mb-1.25 [&_h1]:text-[clamp(27px,2.3vw,34px)] [&_h1]:tracking-[-.035em] [&_h1]:text-admin-heading [&_p]:m-0 [&_p]:text-sm [&_p]:text-admin-muted [&_time]:pt-2.5 [&_time]:text-caption [&_time]:text-admin-muted max-[899px]:[&_time]:hidden",
   ),
+  pageHeaderGroup: tw("grid gap-1"),
+  currentChatbotName: tw("text-sm text-[#293958]"),
   pageContent: tw("flex w-full flex-col gap-4"),
   detailHeading: tw(
     "items-center [&_.ant-btn]:mt-0 [&_.ant-btn]:mr-0 [&_.ant-btn]:mb-2 [&_.ant-btn]:-ml-3 [&_.ant-btn]:text-[#62718a]",

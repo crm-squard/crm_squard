@@ -14,7 +14,7 @@ import Spin from "antd/es/spin";
 import Typography from "antd/es/typography";
 import { useEffect, useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
-import { deleteChatbot, createChatbot } from "../api/chatbots";
+import { createChatbot, deleteChatbot } from "../api/chatbots";
 import { useAuth } from "../auth/AuthContext";
 import AdminPageLayout from "../components/AdminPageLayout";
 import { ui } from "../uiStyles";
@@ -77,7 +77,7 @@ export default function ChatbotsPage() {
 
   function goToSettings(chatbotId: string) {
     selectChatbot(chatbotId);
-    navigate("/chatbot-settings");
+    navigate("/chatbots/settings");
   }
 
   function openCreateModal() {
@@ -87,7 +87,6 @@ export default function ChatbotsPage() {
 
   async function handleCreate() {
     let values: { name: string };
-
     try {
       values = await form.validateFields();
     } catch {
@@ -96,13 +95,17 @@ export default function ChatbotsPage() {
 
     setCreating(true);
     try {
-      await createChatbot(authToken, { name: values.name.trim() });
+      const created = await createChatbot(authToken, {
+        name: values.name.trim(),
+      });
       await refreshMe();
+      selectChatbot(created.id);
       setCreateOpen(false);
       messageApi.success("已新增 ChatBot");
-    } catch (err) {
+      navigate("/chatbots/settings");
+    } catch (error) {
       messageApi.error(
-        err instanceof Error ? err.message : "新增 ChatBot 失敗",
+        error instanceof Error ? error.message : "新增 ChatBot 失敗",
       );
     } finally {
       setCreating(false);
@@ -134,96 +137,96 @@ export default function ChatbotsPage() {
       description="建立並設定商家的 AI Agent，管理角色、模型、知識庫與自動化工具。"
       beforeHeader={contextHolder}
     >
-        <div className={ui.chatbotsCardHeader}>
-          <h2>ChatBot 列表</h2>
+      <div className={ui.chatbotsCardHeader}>
+        <h2>ChatBot 列表</h2>
+        <Button
+          className={ui.chatbotsCreateButton}
+          icon={<PlusOutlined />}
+          type="primary"
+          onClick={openCreateModal}
+        >
+          新增 ChatBot
+        </Button>
+      </div>
+
+      {isRefreshing ? (
+        <div className={ui.routeLoading} role="status">
+          <Spin size="small" />
+          <span>載入 ChatBot 列表…</span>
+        </div>
+      ) : chatbots.length === 0 ? (
+        <Empty className="my-10" description="目前沒有可管理的 ChatBot">
           <Button
-            className={ui.chatbotsCreateButton}
             icon={<PlusOutlined />}
             type="primary"
             onClick={openCreateModal}
           >
-            新增 ChatBot
+            新增第一個 ChatBot
           </Button>
-        </div>
-
-        {isRefreshing ? (
-          <div className={ui.routeLoading} role="status">
-            <Spin size="small" />
-            <span>載入 ChatBot 列表…</span>
-          </div>
-        ) : chatbots.length === 0 ? (
-          <Empty className="my-10" description="目前沒有可管理的 ChatBot">
-            <Button
-              icon={<PlusOutlined />}
-              type="primary"
-              onClick={openCreateModal}
-            >
-              新增第一個 ChatBot
-            </Button>
-          </Empty>
-        ) : (
-          <section aria-labelledby="published-chatbots-heading">
-            <div className={ui.chatbotsGrid}>
-              {chatbots.map((chatbot) => (
-                <article className={ui.chatbotCard} key={chatbot.id}>
-                  <div className={ui.chatbotCardTitle}>
-                    <div aria-hidden="true" className={ui.chatbotAvatar}>
-                      {getInitial(chatbot.name)}
-                    </div>
-                    <h3>
-                      <button
-                        aria-label={`設定 ${chatbot.name}`}
-                        className={ui.chatbotTitleButton}
-                        title={chatbot.name}
-                        type="button"
-                        onClick={() => goToSettings(chatbot.id)}
-                      >
-                        {chatbot.name}
-                      </button>
-                    </h3>
-                    <Dropdown
-                      menu={{
-                        items: [
-                          {
-                            key: "settings",
-                            icon: <SettingOutlined />,
-                            label: "前往設定",
-                          },
-                          {
-                            danger: true,
-                            key: "delete",
-                            icon: <DeleteOutlined />,
-                            label: "刪除 ChatBot",
-                          },
-                        ],
-                        onClick: ({ key }) => {
-                          if (key === "settings") goToSettings(chatbot.id);
-                          if (key === "delete") setPendingDeleteId(chatbot.id);
-                        },
-                      }}
-                      trigger={["click"]}
+        </Empty>
+      ) : (
+        <section aria-labelledby="published-chatbots-heading">
+          <div className={ui.chatbotsGrid}>
+            {chatbots.map((chatbot) => (
+              <article className={ui.chatbotCard} key={chatbot.id}>
+                <div className={ui.chatbotCardTitle}>
+                  <div aria-hidden="true" className={ui.chatbotAvatar}>
+                    {getInitial(chatbot.name)}
+                  </div>
+                  <h3>
+                    <button
+                      aria-label={`設定 ${chatbot.name}`}
+                      className={ui.chatbotTitleButton}
+                      title={chatbot.name}
+                      type="button"
+                      onClick={() => goToSettings(chatbot.id)}
                     >
-                      <Button
-                        aria-label={`操作 ${chatbot.name}`}
-                        className={ui.chatbotMenu}
-                        icon={<MoreOutlined />}
-                        type="text"
-                      />
-                    </Dropdown>
-                  </div>
-                  <div className={ui.chatbotMetadata}>
-                    <Text copyable={{ text: chatbot.id }}>
-                      <span className={ui.chatbotId}>ID：{chatbot.id}</span>
-                    </Text>
-                    <span>
-                      最後編輯：{formatLastEditedAt(chatbot.created_at)}
-                    </span>
-                  </div>
-                </article>
-              ))}
-            </div>
-          </section>
-        )}
+                      {chatbot.name}
+                    </button>
+                  </h3>
+                  <Dropdown
+                    menu={{
+                      items: [
+                        {
+                          key: "settings",
+                          icon: <SettingOutlined />,
+                          label: "前往設定",
+                        },
+                        {
+                          danger: true,
+                          key: "delete",
+                          icon: <DeleteOutlined />,
+                          label: "刪除 ChatBot",
+                        },
+                      ],
+                      onClick: ({ key }) => {
+                        if (key === "settings") goToSettings(chatbot.id);
+                        if (key === "delete") setPendingDeleteId(chatbot.id);
+                      },
+                    }}
+                    trigger={["click"]}
+                  >
+                    <Button
+                      aria-label={`操作 ${chatbot.name}`}
+                      className={ui.chatbotMenu}
+                      icon={<MoreOutlined />}
+                      type="text"
+                    />
+                  </Dropdown>
+                </div>
+                <div className={ui.chatbotMetadata}>
+                  <Text copyable={{ text: chatbot.id }}>
+                    <span className={ui.chatbotId}>ID：{chatbot.id}</span>
+                  </Text>
+                  <span>
+                    最後編輯：{formatLastEditedAt(chatbot.created_at)}
+                  </span>
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+      )}
       <Modal
         cancelText="取消"
         confirmLoading={creating}
@@ -246,7 +249,6 @@ export default function ChatbotsPage() {
           </Form.Item>
         </Form>
       </Modal>
-
       <Modal
         cancelText="取消"
         confirmLoading={deleting}

@@ -50,7 +50,7 @@ export default function ChatbotSelectPage() {
       await refreshMe();
       form.resetFields();
       messageApi.success(
-        "已新增商家服務，MCP URL／開頭語可以到「Chatbot 設定」頁面填寫",
+        "已新增商家服務，可到 ChatBot 的「基本設定」頁面繼續設定",
       );
     } catch (err) {
       messageApi.error(err instanceof Error ? err.message : "新增失敗");
@@ -70,7 +70,7 @@ export default function ChatbotSelectPage() {
 
   function goToSettings(chatbotId: string) {
     selectChatbot(chatbotId);
-    navigate("/chatbot-settings");
+    navigate("/chatbots/settings");
   }
 
   return (
@@ -116,9 +116,15 @@ export default function ChatbotSelectPage() {
                         {chatbot.your_role ? (
                           <Tag
                             className="ml-2"
-                            color={chatbot.your_role === "primary" ? "blue" : "default"}
+                            color={
+                              chatbot.your_role === "primary"
+                                ? "blue"
+                                : "default"
+                            }
                           >
-                            {chatbot.your_role === "primary" ? "主帳號" : "協作帳號"}
+                            {chatbot.your_role === "primary"
+                              ? "主帳號"
+                              : "協作帳號"}
                           </Tag>
                         ) : null}
                       </>
