@@ -94,6 +94,16 @@ export default function ChatbotSettingsPage() {
     setRevealedMcpToken(null);
   }, [selectedChatbotId]);
 
+  // 公司清單是登入時抓一次、存在瀏覽器裡的快取；別的管理員或別的瀏覽器改了設定（例如 MCP 金鑰），
+  // 這裡的資料就會過期（「查看金鑰」按鈕不出現、提示寫「尚未設定」）。打開設定頁時重新向後端取得最新資料。
+  useEffect(() => {
+    if (!token || !selectedChatbotId) return;
+    refreshMe().catch(() => {
+      // 重新整理失敗就沿用快取，不打斷頁面
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, selectedChatbotId]);
+
   useEffect(() => {
     if (!token || !selectedChatbotId) return;
     listAuditLog(token, selectedChatbotId)
