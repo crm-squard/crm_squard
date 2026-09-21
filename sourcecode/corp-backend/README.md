@@ -73,6 +73,9 @@ MCP_ADMIN_API_KEY=<另一組隨機字串>
 | `/mcp-admin` | `get_order`、`list_orders`、`create_order`、`update_order`、`delete_order` | `MCP_ADMIN_API_KEY` | 管理用途，聊天後端不使用 |
 
 請求需帶 `Authorization: Bearer <金鑰>`；`get_order` 只憑訂單編號就回傳整筆訂單、`list_orders` 會回傳所有訂單，兩者都沒有驗證或租戶隔離，放在 `/mcp` 會讓人在聊天視窗逐筆枚舉別人的訂單，所以只放 `/mcp-admin`。
+**Host header 檢查**：MCP SDK 內建 DNS rebinding 防護，預設只放行 `localhost`。部署到 Cloud Run 後 Host 是 `*.run.app`，
+不處理的話所有已通過認證的請求都會被回 `421 Invalid Host header`。目前在 Cloud Run 上（有 `K_SERVICE`）且沒設定時會自動停用，
+邊界改由 Bearer 金鑰把關；也可以用 `MCP_ALLOWED_HOSTS`（逗號分隔）只放行指定網域。
 測試：`pip install -r requirements-dev.txt` 後在本目錄執行 `python -m pytest tests`。
 
 ---
