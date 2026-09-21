@@ -1,5 +1,6 @@
 import Space from "antd/es/space";
 import type { ReactNode } from "react";
+import { useAuth } from "../auth/AuthContext";
 import { ui } from "../uiStyles";
 import { tw } from "../utils/tw";
 
@@ -22,18 +23,31 @@ export default function AdminPageLayout({
   variant = "default",
   children,
 }: AdminPageLayoutProps) {
+  const { chatbots, selectedChatbotId } = useAuth();
+  const selectedChatbotName = chatbots.find(
+    (chatbot) => chatbot.id === selectedChatbotId,
+  )?.name;
+
   return (
     <main className={ui.pageContent}>
       {beforeHeader}
-      <div
-        className={tw(ui.pageHeading, variant === "detail" && ui.detailHeading)}
-      >
-        <div>
-          {headerLeading}
-          <h1>{title}</h1>
-          <p>{description}</p>
+      <div className={ui.pageHeaderGroup}>
+        <strong className={ui.currentChatbotName}>
+          {selectedChatbotName ?? "-"}
+        </strong>
+        <div
+          className={tw(
+            ui.pageHeading,
+            variant === "detail" && ui.detailHeading,
+          )}
+        >
+          <div>
+            {headerLeading}
+            <h1>{title}</h1>
+            <p>{description}</p>
+          </div>
+          {headerExtra}
         </div>
-        {headerExtra}
       </div>
 
       <Space className={ui.fullWidth} direction="vertical" size={16}>

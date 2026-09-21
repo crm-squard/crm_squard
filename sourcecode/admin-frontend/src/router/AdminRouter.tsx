@@ -15,8 +15,13 @@ const RagPage = lazy(() => import("../pages/RagPage"));
 const LoginPage = lazy(() => import("../pages/LoginPage"));
 const ChatbotSelectPage = lazy(() => import("../pages/ChatbotSelectPage"));
 const ChatbotSettingsPage = lazy(() => import("../pages/ChatbotSettingsPage"));
+const ChatbotsPage = lazy(() => import("../pages/ChatbotsPage"));
+const ChatbotPlaceholderPage = lazy(
+  () => import("../pages/ChatbotPlaceholderPage"),
+);
 const SummaryPage = lazy(() => import("../pages/SummaryPage"));
 const AdminAccountsPage = lazy(() => import("../pages/AdminAccountsPage"));
+const AuditLogPage = lazy(() => import("../pages/AuditLogPage"));
 
 function PageLoading() {
   return (
@@ -40,11 +45,43 @@ const router = createBrowserRouter([
       </RequireAuth>
     ),
     children: [
-      { index: true, element: loadPage(<DashboardPage />) },
+      { index: true, element: <Navigate to="/chatbots" replace /> },
+      { path: "dashboard", element: loadPage(<DashboardPage />) },
       { path: "orders", element: loadPage(<OrdersPage />) },
       { path: "orders/:orderId", element: loadPage(<OrderDetailPage />) },
-      { path: "rag", element: loadPage(<RagPage />) },
-      { path: "chatbot-settings", element: loadPage(<ChatbotSettingsPage />) },
+      { path: "chatbots", element: loadPage(<ChatbotsPage />) },
+      { path: "chatbots/settings", element: loadPage(<ChatbotSettingsPage />) },
+      { path: "chatbots/knowledge", element: loadPage(<RagPage />) },
+      {
+        path: "chatbots/linebot-settings",
+        element: loadPage(<ChatbotPlaceholderPage />),
+      },
+      {
+        path: "chatbots/script-settings",
+        element: loadPage(<ChatbotPlaceholderPage />),
+      },
+      {
+        path: "chatbots/audit-log",
+        element: loadPage(<AuditLogPage />),
+      },
+      { path: "chatbots/*", element: <Navigate to="/chatbots" replace /> },
+      {
+        path: "chatbot-settings",
+        element: <Navigate to="/chatbots/settings" replace />,
+      },
+      { path: "rag", element: <Navigate to="/chatbots/knowledge" replace /> },
+      {
+        path: "linebot-settings",
+        element: <Navigate to="/chatbots/linebot-settings" replace />,
+      },
+      {
+        path: "script-settings",
+        element: <Navigate to="/chatbots/script-settings" replace />,
+      },
+      {
+        path: "audit-log",
+        element: <Navigate to="/chatbots/audit-log" replace />,
+      },
       { path: "summary", element: loadPage(<SummaryPage />) },
       { path: "admin-accounts", element: loadPage(<AdminAccountsPage />) },
       { path: "*", element: <Navigate to="/" replace /> },

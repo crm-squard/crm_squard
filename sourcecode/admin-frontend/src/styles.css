@@ -14,6 +14,9 @@
   --color-admin-text-subtle: #7b889d;
   --color-admin-surface: #ffffff;
   --color-admin-surface-subtle: #f7f9fc;
+  --color-admin-agent-action: #142671;
+  --color-admin-agent-border: #d7e3f8;
+  --color-admin-agent-title: #0a0a0a;
   --font-admin: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
   --text-caption: 0.8125rem;
   --text-label: 0.6875rem;
@@ -24,6 +27,7 @@
   --radius-control: 0.625rem;
   --radius-metric: 0.875rem;
   --radius-surface: 0.9375rem;
+  --radius-agent-card: 1rem;
   --animate-rag-overlay-in: rag-overlay-in 140ms ease-out;
 
   @keyframes rag-overlay-in {

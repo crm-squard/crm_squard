@@ -12,20 +12,24 @@ import Card from "antd/es/card";
 import Checkbox from "antd/es/checkbox";
 import Collapse from "antd/es/collapse";
 import Empty from "antd/es/empty";
+import Form from "antd/es/form";
 import Input from "antd/es/input";
+import InputNumber from "antd/es/input-number";
 import message from "antd/es/message";
 import Modal from "antd/es/modal";
 import Popconfirm from "antd/es/popconfirm";
 import Select from "antd/es/select";
 import Space from "antd/es/space";
 import Spin from "antd/es/spin";
+import Switch from "antd/es/switch";
 import Table from "antd/es/table";
 import Tag from "antd/es/tag";
 import Typography from "antd/es/typography";
 import Upload from "antd/es/upload";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useBeforeUnload, useBlocker } from "react-router-dom";
+import { Navigate, useBeforeUnload, useBlocker } from "react-router-dom";
 import AdminPageLayout from "../components/AdminPageLayout";
+import ChatbotSettingsTabs from "../components/ChatbotSettingsTabs";
 import {
   deleteDocument,
   fetchDocuments,
@@ -40,6 +44,7 @@ import type {
 } from "../types/documents";
 import { useAuth } from "../auth/AuthContext";
 import ChatWidgetPreview from "../components/ChatWidgetPreview";
+import { updateChatbot } from "../api/chatbots";
 import { ui } from "../uiStyles";
 import { tw } from "../utils/tw";
 
@@ -48,6 +53,8 @@ const { Dragger } = Upload;
 
 const ACCEPTED_EXTENSION = ".md";
 const CONCURRENCY_LIMIT = 4;
+const DEFAULT_RAG_TOP_K = 5;
+const MAX_RAG_TOP_K = 10;
 
 // lib.dom 的 File 型別不一定含 webkitRelativePath（非標準屬性），用交集型別擴充，
 // 避免整份改用 any 而失去其餘欄位的型別檢查。
@@ -194,7 +201,13 @@ function TagChipsInput({
 }
 
 export default function AdminDocumentsPage() {
-  const { token, selectedChatbotId } = useAuth();
+  const { token, selectedChatbotId, chatbots, refreshMe } = useAuth();
+  const chatbot = chatbots.find((item) => item.id === selectedChatbotId);
+  const [settingsForm] = Form.useForm<{
+    rag_top_k: number;
+    rerank_enabled: boolean;
+  }>();
+  const [savingSettings, setSavingSettings] = useState(false);
   const [messageApi, messageContextHolder] = message.useMessage();
   const [modalApi, modalContextHolder] = Modal.useModal();
   const filesInputRef = useRef<HTMLInputElement>(null);
@@ -221,6 +234,36 @@ export default function AdminDocumentsPage() {
   const [isDraggingFiles, setIsDraggingFiles] = useState(false);
   const hasUnanalyzedFiles = selectedFiles.length > 0 && !precheckDone;
   const navigationBlocker = useBlocker(hasUnanalyzedFiles);
+
+  useEffect(() => {
+    if (!chatbot) return;
+    settingsForm.setFieldsValue({
+      rag_top_k: chatbot.rag_top_k ?? DEFAULT_RAG_TOP_K,
+      rerank_enabled: chatbot.rerank_enabled ?? false,
+    });
+  }, [chatbot, settingsForm]);
+
+  async function handleSaveSettings(values: {
+    rag_top_k: number;
+    rerank_enabled: boolean;
+  }) {
+    if (!token || !selectedChatbotId) return;
+    setSavingSettings(true);
+    try {
+      await updateChatbot(token, selectedChatbotId, {
+        rag_top_k: values.rag_top_k,
+        ...(values.rerank_enabled !== !!chatbot?.rerank_enabled
+          ? { rerank_enabled: values.rerank_enabled }
+          : {}),
+      });
+      await refreshMe();
+      messageApi.success("已儲存知識設定");
+    } catch (error) {
+      messageApi.error(error instanceof Error ? error.message : "儲存失敗");
+    } finally {
+      setSavingSettings(false);
+    }
+  }
 
   useBeforeUnload(
     useCallback(
@@ -528,9 +571,11 @@ export default function AdminDocumentsPage() {
     }
   }
 
+  if (!selectedChatbotId) return <Navigate to="/chatbots" replace />;
+
   return (
     <AdminPageLayout
-      title="RAG 知識庫"
+      title="知識管理"
       description="管理聊天機器人檢索使用的 Markdown 文件與分類標籤。"
       beforeHeader={
         <>
@@ -543,12 +588,46 @@ export default function AdminDocumentsPage() {
           ) : null}
         </>
       }
-      headerExtra={
-        <Tag className={ui.headingTag} color="blue">
-          {documents.length} 份文件
-        </Tag>
-      }
+      // headerExtra={
+      //   <Tag className={ui.headingTag} color="blue">
+      //     {documents.length} 份文件
+      //   </Tag>
+      // }
     >
+      <ChatbotSettingsTabs />
+      <Card className={ui.settingsCard} title="檢索設定">
+        <Form
+          form={settingsForm}
+          layout="vertical"
+          onFinish={handleSaveSettings}
+        >
+          <Form.Item
+            name="rag_top_k"
+            label="檢索片段數（k）"
+            extra={`每次回答從知識庫挑選的內容數量（1～${MAX_RAG_TOP_K}）。`}
+            rules={[{ required: true, message: "請輸入片段數" }]}
+          >
+            <InputNumber min={1} max={MAX_RAG_TOP_K} precision={0} />
+          </Form.Item>
+          <Form.Item
+            name="rerank_enabled"
+            label="重排序（rerank）"
+            valuePropName="checked"
+            extra={
+              chatbot?.rerank_available
+                ? "使用重排序模型挑選最相關片段。"
+                : "這個環境目前不支援重排序。"
+            }
+          >
+            <Switch
+              disabled={!chatbot?.rerank_available && !chatbot?.rerank_enabled}
+            />
+          </Form.Item>
+          <Button type="primary" htmlType="submit" loading={savingSettings}>
+            儲存知識設定
+          </Button>
+        </Form>
+      </Card>
       {notice ? (
         <Alert
           type="success"
