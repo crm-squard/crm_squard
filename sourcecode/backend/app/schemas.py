@@ -43,9 +43,20 @@ class ChatResponse(BaseModel):
     items: Optional[str] = None
 
 
+class QuestionCategory(BaseModel):
+    name: str
+    count: int
+
+
 class DailySummaryResponse(BaseModel):
     date: str
     question_count: int
+    categories: List[QuestionCategory] = Field(default_factory=list)
+    # 無意義問題（測試訊息、亂打字、與業務無關的閒聊）：純備查，不需要管理者採取行動
+    meaningless_questions: List[str] = Field(default_factory=list)
+    # 需商家關注：問題合理但太獨特無法歸類，或機器人明顯答不出來（見 app/summary.py 的
+    # NO_INFO_ANSWER 訊號輔助判斷），管理者可能要補充知識庫或人工介入
+    needs_merchant_attention: List[str] = Field(default_factory=list)
     summary: str
 
 

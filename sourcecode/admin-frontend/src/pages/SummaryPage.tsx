@@ -1,5 +1,6 @@
 import Alert from "antd/es/alert";
 import Card from "antd/es/card";
+import Collapse from "antd/es/collapse";
 import DatePicker from "antd/es/date-picker";
 import Empty from "antd/es/empty";
 import Spin from "antd/es/spin";
@@ -12,7 +13,32 @@ import { useAuth } from "../auth/AuthContext";
 import { getDailySummary, type DailySummary } from "../api/summary";
 import { ui } from "../uiStyles";
 
-const { Paragraph } = Typography;
+const { Paragraph, Title } = Typography;
+
+/** 常見主題次數長條圖：純 CSS 呈現，資料量小（通常個位數~十幾個主題），不需要另外引入圖表套件。 */
+function CategoryChart({ categories }: { categories: DailySummary["categories"] }) {
+  if (categories.length === 0) return null;
+  const sorted = [...categories].sort((a, b) => b.count - a.count);
+  const max = Math.max(...sorted.map((c) => c.count), 1);
+  return (
+    <div className={ui.summaryChart}>
+      {sorted.map((category) => (
+        <div key={category.name} className={ui.summaryChartRow}>
+          <span className={ui.summaryChartLabel} title={category.name}>
+            {category.name}
+          </span>
+          <span className={ui.summaryChartTrack}>
+            <span
+              className={ui.summaryChartBar}
+              style={{ width: `${(category.count / max) * 100}%` }}
+            />
+          </span>
+          <span className={ui.summaryChartCount}>{category.count}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 /**
  * 客服機器人：當日提問主題摘要（對應儀表板「今日對話」卡片原本寫的「對話分析功能規劃中」）。
@@ -71,7 +97,44 @@ export default function SummaryPage() {
           ) : (
             <>
               <Tag color="blue">{data.question_count} 則提問</Tag>
+              <CategoryChart categories={data.categories} />
               <Paragraph className={ui.preWrap}>{data.summary}</Paragraph>
+
+              {data.needs_merchant_attention.length > 0 && (
+                <div className={ui.summaryAttentionSection}>
+                  <Title level={5} style={{ margin: 0 }}>
+                    需商家關注（{data.needs_merchant_attention.length}）
+                  </Title>
+                  <Paragraph type="secondary" style={{ marginBottom: 0, marginTop: 4 }}>
+                    這些問題與業務相關，但機器人可能答不出來，或太獨特無法歸類，建議人工確認。
+                  </Paragraph>
+                  <ul className={ui.summaryAttentionList}>
+                    {data.needs_merchant_attention.map((q, i) => (
+                      <li key={i}>{q}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {data.meaningless_questions.length > 0 && (
+                <Collapse
+                  ghost
+                  style={{ marginTop: 16 }}
+                  items={[
+                    {
+                      key: "meaningless",
+                      label: `無意義訊息（${data.meaningless_questions.length}）`,
+                      children: (
+                        <ul className={ui.summaryMeaninglessList}>
+                          {data.meaningless_questions.map((q, i) => (
+                            <li key={i}>{q}</li>
+                          ))}
+                        </ul>
+                      ),
+                    },
+                  ]}
+                />
+              )}
             </>
           )
         ) : null}

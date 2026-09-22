@@ -113,15 +113,19 @@ def get_tool_calls_for_chatbot(chatbot_id: str, limit: int = 100) -> list[dict]:
     ]
 
 
-def get_messages_for_date(date: str, chatbot_id: str) -> list[str]:
+def get_messages_for_date(date: str, chatbot_id: str) -> list[dict]:
     """
-    取得指定日期（YYYY-MM-DD，UTC）、指定公司當天所有使用者提問的原始文字，依時間排序。
+    取得指定日期（YYYY-MM-DD，UTC）、指定公司當天所有使用者提問，依時間排序。
     chatbot_id 必填——摘要依公司隔離，不提供全域彙總（避免看到其他公司的顧客提問內容）。
+
+    同時回傳 response_text：summary.py 用它判斷機器人當時是不是回「查無此資訊」
+    （app.agent.NO_INFO_ANSWER），藉此輔助分類「需商家關注」的問題，不用完全依賴 LLM 自己判斷。
     """
     with _connect() as conn:
         _ensure_chatbot_id_column(conn)
         rows = conn.execute(
-            "SELECT message FROM chat_log WHERE created_at LIKE ? AND chatbot_id = ? ORDER BY created_at",
+            "SELECT message, response_text FROM chat_log WHERE created_at LIKE ? AND chatbot_id = ? "
+            "ORDER BY created_at",
             (f"{date}%", chatbot_id),
         ).fetchall()
-    return [row[0] for row in rows]
+    return [{"message": row[0], "response_text": row[1]} for row in rows]

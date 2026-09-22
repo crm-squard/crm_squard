@@ -208,4 +208,27 @@ export const ui = {
   ragTableTools: tw(
     "mb-4.5 grid grid-cols-[minmax(220px,1.2fr)_minmax(220px,1fr)_auto] gap-3 max-[620px]:grid-cols-1",
   ),
+  summaryChart: tw("grid gap-2.5"),
+  summaryChartRow: tw(
+    "grid grid-cols-[minmax(120px,180px)_1fr_auto] items-center gap-3 text-caption",
+  ),
+  summaryChartLabel: tw(
+    "overflow-hidden text-ellipsis whitespace-nowrap text-[#334360]",
+  ),
+  summaryChartTrack: tw(
+    "h-4.5 overflow-hidden rounded-full bg-admin-surface-subtle",
+  ),
+  summaryChartBar: tw(
+    "h-full rounded-full bg-admin-primary transition-[width]",
+  ),
+  summaryChartCount: tw("text-right font-semibold text-[#10234b]"),
+  summaryAttentionSection: tw(
+    "mt-5 rounded-control border border-solid border-[#ffd8a8] bg-[#fff8ef] p-4.5",
+  ),
+  summaryAttentionList: tw(
+    "m-0 mt-2 grid list-none gap-1.5 p-0 [&_li]:rounded-compact [&_li]:bg-white [&_li]:px-3 [&_li]:py-2 [&_li]:text-caption [&_li]:text-[#5a4321]",
+  ),
+  summaryMeaninglessList: tw(
+    "m-0 mt-2 grid list-none gap-1.25 p-0 [&_li]:text-caption [&_li]:text-admin-text-subtle",
+  ),
 };

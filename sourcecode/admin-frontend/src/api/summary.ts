@@ -1,6 +1,14 @@
+export interface QuestionCategory {
+  name: string;
+  count: number;
+}
+
 export interface DailySummary {
   date: string;
   question_count: number;
+  categories: QuestionCategory[];
+  meaningless_questions: string[];
+  needs_merchant_attention: string[];
   summary: string;
 }
 
