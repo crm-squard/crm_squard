@@ -147,13 +147,18 @@ export default function AdminLayout() {
               },
             }}
           >
-            <div className={ui.account} aria-label="帳號選單">
+            <Button
+              aria-haspopup="menu"
+              aria-label="帳號選單"
+              className={ui.account}
+              type="text"
+            >
               <Avatar icon={<UserOutlined />} />
               <span>
                 <strong>{account?.email ?? "-"}</strong>
                 <small>{account?.role ?? ""}</small>
               </span>
-            </div>
+            </Button>
           </Dropdown>
         </Header>
         <Content className={ui.adminContent}>

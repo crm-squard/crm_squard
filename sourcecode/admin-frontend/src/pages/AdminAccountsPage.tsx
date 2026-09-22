@@ -11,8 +11,10 @@ import { Navigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { createAccount, deleteAccount, listAccounts } from "../api/accounts";
 import type { Account } from "../api/auth";
+import AdminPageLayout from "../components/AdminPageLayout";
+import { ui } from "../uiStyles";
 
-const { Text, Paragraph } = Typography;
+const { Paragraph } = Typography;
 
 /**
  * 管理者帳號頁籤：只有 platform_primary／platform_secondary 看得到，跟商家帳號完全分開
@@ -33,7 +35,9 @@ export default function AdminAccountsPage() {
     listAccounts(token)
       .then(setAccounts)
       .catch((err) =>
-        messageApi.error(err instanceof Error ? err.message : "帳號清單載入失敗"),
+        messageApi.error(
+          err instanceof Error ? err.message : "帳號清單載入失敗",
+        ),
       );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
@@ -55,7 +59,10 @@ export default function AdminAccountsPage() {
     if (!token) return;
     setAdding(true);
     try {
-      await createAccount(token, { email: values.email, role: "platform_secondary" });
+      await createAccount(token, {
+        email: values.email,
+        role: "platform_secondary",
+      });
       form.resetFields();
       loadAccounts();
       messageApi.success("已新增副管理者帳號");
@@ -78,14 +85,12 @@ export default function AdminAccountsPage() {
   }
 
   return (
-    <main>
-      {contextHolder}
-      <div>
-        <h1>管理者帳號</h1>
-        <p>平台維運帳號，預設對所有商家服務都有存取權限，不受單一 Chatbot 綁定限制。</p>
-      </div>
-
-      <Card>
+    <AdminPageLayout
+      title="管理者帳號"
+      description="平台維運帳號，預設對所有商家服務都有存取權限，不受單一 Chatbot 綁定限制。"
+      beforeHeader={contextHolder}
+    >
+      <Card className={ui.settingsCard}>
         <List
           dataSource={accounts}
           locale={{ emptyText: "目前沒有管理者帳號。" }}
@@ -100,7 +105,9 @@ export default function AdminAccountsPage() {
                         description="移除後該帳號會立刻無法登入。"
                         onConfirm={() => handleRemove(acc.id)}
                       >
-                        <Button danger size="small">移除</Button>
+                        <Button danger size="small">
+                          移除
+                        </Button>
                       </Popconfirm>,
                     ]
                   : []
@@ -111,10 +118,21 @@ export default function AdminAccountsPage() {
           )}
         />
         {isPrimary ? (
-          <Form form={form} layout="inline" onFinish={handleAdd} style={{ marginTop: 16 }}>
+          <Form
+            className={ui.settingsAccountForm}
+            form={form}
+            layout="inline"
+            onFinish={handleAdd}
+          >
             <Form.Item
               name="email"
-              rules={[{ required: true, type: "email", message: "請輸入有效的 gmail 地址" }]}
+              rules={[
+                {
+                  required: true,
+                  type: "email",
+                  message: "請輸入有效的 gmail 地址",
+                },
+              ]}
             >
               <Input placeholder="要新增的副管理者 gmail 地址" />
             </Form.Item>
@@ -125,11 +143,11 @@ export default function AdminAccountsPage() {
             </Form.Item>
           </Form>
         ) : (
-          <Paragraph type="secondary" style={{ marginTop: 16 }}>
+          <Paragraph className={ui.marginTop4} type="secondary">
             只有主管理者帳號能新增/移除副管理者。
           </Paragraph>
         )}
       </Card>
-    </main>
+    </AdminPageLayout>
   );
 }
