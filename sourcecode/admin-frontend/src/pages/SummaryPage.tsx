@@ -16,7 +16,11 @@ import { ui } from "../uiStyles";
 const { Paragraph, Title } = Typography;
 
 /** 常見主題次數長條圖：純 CSS 呈現，資料量小（通常個位數~十幾個主題），不需要另外引入圖表套件。 */
-function CategoryChart({ categories }: { categories: DailySummary["categories"] }) {
+function CategoryChart({
+  categories,
+}: {
+  categories: DailySummary["categories"];
+}) {
   if (categories.length === 0) return null;
   const sorted = [...categories].sort((a, b) => b.count - a.count);
   const max = Math.max(...sorted.map((c) => c.count), 1);
@@ -102,10 +106,13 @@ export default function SummaryPage() {
 
               {data.needs_merchant_attention.length > 0 && (
                 <div className={ui.summaryAttentionSection}>
-                  <Title level={5} style={{ margin: 0 }}>
+                  <Title className={ui.summaryAttentionTitle} level={5}>
                     需商家關注（{data.needs_merchant_attention.length}）
                   </Title>
-                  <Paragraph type="secondary" style={{ marginBottom: 0, marginTop: 4 }}>
+                  <Paragraph
+                    className={ui.summaryAttentionDescription}
+                    type="secondary"
+                  >
                     這些問題與業務相關，但機器人可能答不出來，或太獨特無法歸類，建議人工確認。
                   </Paragraph>
                   <ul className={ui.summaryAttentionList}>
@@ -119,7 +126,7 @@ export default function SummaryPage() {
               {data.meaningless_questions.length > 0 && (
                 <Collapse
                   ghost
-                  style={{ marginTop: 16 }}
+                  className={ui.marginTop4}
                   items={[
                     {
                       key: "meaningless",

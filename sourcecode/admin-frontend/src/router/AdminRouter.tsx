@@ -18,9 +18,7 @@ const ChatbotsPage = lazy(() => import("../pages/ChatbotsPage"));
 const ChatbotPlaceholderPage = lazy(
   () => import("../pages/ChatbotPlaceholderPage"),
 );
-const LineBotSettingsPage = lazy(
-  () => import("../pages/LineBotSettingsPage"),
-);
+const LineBotSettingsPage = lazy(() => import("../pages/LineBotSettingsPage"));
 const SummaryPage = lazy(() => import("../pages/SummaryPage"));
 const AdminAccountsPage = lazy(() => import("../pages/AdminAccountsPage"));
 const AuditLogPage = lazy(() => import("../pages/AuditLogPage"));

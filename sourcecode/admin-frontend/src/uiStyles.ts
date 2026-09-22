@@ -42,7 +42,7 @@ export const ui = {
     "h-10.5! w-10.5! rounded-control! border! border-solid! border-[#dce4ee]! text-icon-control! text-[#173664]! hover:bg-[#eef5ff]! hover:text-admin-primary!",
   ),
   account: tw(
-    "flex cursor-pointer items-center gap-2.5 text-[#738099] [&_.ant-avatar]:bg-[#c8d0dc] [&_small]:text-xs [&_span]:grid [&_span]:leading-[1.25] max-[620px]:[&_span]:hidden [&_strong]:text-caption",
+    "h-auto! border-0! bg-transparent! p-0! text-left! text-[#738099] hover:bg-transparent! [&_.ant-avatar]:bg-[#c8d0dc] [&_small]:text-xs [&_span]:grid [&_span]:leading-[1.25] max-[620px]:[&_span]:hidden [&_strong]:text-caption",
   ),
   adminContent: tw(
     "min-w-0 px-7 pt-5.5 pb-10 max-[899px]:px-4 max-[899px]:pt-5 max-[899px]:pb-8",
@@ -176,7 +176,7 @@ export const ui = {
     "relative z-[1001] [&.ant-upload-wrapper_.ant-upload-drag]:border-admin-primary [&.ant-upload-wrapper_.ant-upload-drag]:bg-[#f7fbff] [&.ant-upload-wrapper_.ant-upload-drag]:shadow-[0_0_0_4px_rgb(23_105_224/.18),0_18px_48px_rgb(7_28_62/.24)]",
   ),
   ragDragger: tw(
-    "[&.ant-upload-wrapper_.ant-upload-drag]:rounded-toast [&_.ant-upload-drag-icon]:mb-2.5! [&_.ant-upload-drag-icon_.anticon]:text-[42px]! [&_.ant-upload-drag-icon_.anticon]:text-admin-primary! [&_.ant-upload-hint]:text-xs! [&_.ant-upload-hint]:text-[#7c899d]! [&_.ant-upload-hint]:select-none [&_.ant-upload-text]:text-base! [&_.ant-upload-text]:font-[650]! [&_.ant-upload-text]:text-[#20345e]! [&_.ant-upload-text]:select-none [&.ant-upload-wrapper_.ant-upload-btn]:px-5 [&.ant-upload-wrapper_.ant-upload-btn]:pt-6.5 [&.ant-upload-wrapper_.ant-upload-btn]:pb-5.5 max-[620px]:[&.ant-upload-wrapper_.ant-upload-btn]:px-3.5 [&.ant-upload-wrapper_.ant-upload-drag]:border-admin-border [&.ant-upload-wrapper_.ant-upload-drag]:bg-[linear-gradient(145deg,#f8fbff,#f4f8fd)] [&.ant-upload-wrapper_.ant-upload-drag:hover]:border-admin-primary [&.ant-upload-wrapper_.ant-upload-drag:hover]:bg-[#f2f7ff]",
+    "[&_.ant-upload-drag-icon]:mb-2.5! [&_.ant-upload-drag-icon_.anticon]:text-[42px]! [&_.ant-upload-drag-icon_.anticon]:text-admin-primary! [&_.ant-upload-hint]:text-xs! [&_.ant-upload-hint]:text-[#7c899d]! [&_.ant-upload-hint]:select-none [&_.ant-upload-text]:text-base! [&_.ant-upload-text]:font-[650]! [&_.ant-upload-text]:text-[#20345e]! [&_.ant-upload-text]:select-none [&.ant-upload-wrapper_.ant-upload-btn]:px-5 [&.ant-upload-wrapper_.ant-upload-btn]:pt-6.5 [&.ant-upload-wrapper_.ant-upload-btn]:pb-5.5 max-[620px]:[&.ant-upload-wrapper_.ant-upload-btn]:px-3.5 [&.ant-upload-wrapper_.ant-upload-drag]:rounded-surface [&.ant-upload-wrapper_.ant-upload-drag]:border-admin-border [&.ant-upload-wrapper_.ant-upload-drag]:bg-[linear-gradient(145deg,#f8fbff,#f4f8fd)] [&.ant-upload-wrapper_.ant-upload-drag:hover]:border-admin-primary [&.ant-upload-wrapper_.ant-upload-drag:hover]:bg-[#f2f7ff]",
   ),
   ragPickerActions: tw(
     "mt-4 justify-center max-[620px]:grid [&_.ant-btn]:min-w-33 [&_.ant-btn]:bg-white/86 max-[620px]:[&_.ant-btn]:w-full",
@@ -227,6 +227,8 @@ export const ui = {
   summaryAttentionSection: tw(
     "mt-5 rounded-control border border-solid border-[#ffd8a8] bg-[#fff8ef] p-4.5",
   ),
+  summaryAttentionTitle: tw("m-0"),
+  summaryAttentionDescription: tw("mt-1 mb-0"),
   summaryAttentionList: tw(
     "m-0 mt-2 grid list-none gap-1.5 p-0 [&_li]:rounded-compact [&_li]:bg-white [&_li]:px-3 [&_li]:py-2 [&_li]:text-caption [&_li]:text-[#5a4321]",
   ),
