@@ -31,7 +31,7 @@ const items = [
     label: (
       <span>
         <MessageOutlined />
-        LineBot設定
+        LINE BOT 設定
       </span>
     ),
   },
