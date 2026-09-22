@@ -101,7 +101,7 @@ const styles = {
   heroStatValue: tw(
     "font-display text-[clamp(54px,6vw,76px)] leading-none tracking-[-.06em] text-brand-primary max-[560px]:text-[92px]",
   ),
-  heroStatLabel: tw("w-18 leading-[1.2] font-extrabold"),
+  heroStatLabel: tw("leading-[1.2] font-extrabold"),
   heroBadge: tw(
     "absolute top-[1%] right-[7%] z-3 grid min-h-19 w-35 place-items-center rounded-highlight border border-solid border-store-border bg-store-surface text-center font-display leading-[1.2] font-bold text-brand-secondary shadow-store max-[560px]:min-h-16 max-[560px]:w-28 max-[560px]:text-label",
   ),
@@ -137,7 +137,7 @@ const styles = {
     "min-w-0 overflow-hidden rounded-card border border-solid border-store-border bg-store-surface shadow-product transition-[box-shadow,transform] duration-220 hover:-translate-y-0.75 hover:shadow-store max-[560px]:block",
   ),
   productImage: tw(
-    "relative grid aspect-[256/190] place-items-center border-b border-store-border bg-store-canvas-alt bg-cover bg-center bg-no-repeat max-[560px]:h-auto max-[560px]:border-r-0",
+    "relative grid aspect-[256/190] place-items-center border-b border-store-border bg-store-canvas-alt bg-contain bg-center bg-no-repeat max-[560px]:h-auto max-[560px]:border-r-0",
   ),
   productUnavailable: tw("text-sm font-bold text-store-muted"),
   productImageNotice: tw(
@@ -206,7 +206,7 @@ const styles = {
     "relative grid grid-cols-[112px_1fr_44px] items-center gap-4 border-b border-store-border py-4.5 max-[560px]:grid-cols-[88px_1fr_44px] max-[560px]:gap-3",
   ),
   cartThumb: tw(
-    "aspect-[256/190] w-28 rounded-[15px] bg-store-canvas-alt bg-cover bg-center bg-no-repeat max-[560px]:w-22",
+    "aspect-[256/190] w-28 rounded-[15px] bg-store-canvas-alt bg-contain bg-center bg-no-repeat max-[560px]:w-22",
   ),
   cartItemInfo: tw(
     "[&_h3]:mt-0 [&_h3]:mb-1 [&_h3]:font-display [&_h3]:text-base [&>span]:font-extrabold [&>span]:text-brand-primary [&>span]:tabular-nums",
