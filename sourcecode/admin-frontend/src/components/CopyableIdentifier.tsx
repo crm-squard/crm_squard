@@ -6,11 +6,13 @@ const { Text } = Typography;
 interface CopyableIdentifierProps {
   label: string;
   value: string;
+  contentClassName?: string;
 }
 
 export default function CopyableIdentifier({
   label,
   value,
+  contentClassName,
 }: CopyableIdentifierProps) {
   return (
     <Text
@@ -20,8 +22,9 @@ export default function CopyableIdentifier({
         tooltips: ["複製識別碼", "已複製識別碼"],
       }}
     >
-      <span>
-        {label}：{value}
+      <span className={contentClassName}>
+        {label ? `${label}：` : null}
+        {value}
       </span>
     </Text>
   );
