@@ -1,5 +1,6 @@
 import Space from "antd/es/space";
 import type { ReactNode } from "react";
+import { useLocation } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { ui } from "../uiStyles";
 import { tw } from "../utils/tw";
@@ -23,6 +24,7 @@ export default function AdminPageLayout({
   variant = "default",
   children,
 }: AdminPageLayoutProps) {
+  const location = useLocation();
   const { chatbots, selectedChatbotId } = useAuth();
   const selectedChatbotName = chatbots.find(
     (chatbot) => chatbot.id === selectedChatbotId,
@@ -45,7 +47,7 @@ export default function AdminPageLayout({
           </div>
           {headerExtra}
         </div>
-        {selectedChatbotName ? (
+        {location.pathname.startsWith("/chatbots/") && selectedChatbotName ? (
           <strong className={ui.currentChatbotName}>
             目前商家：{selectedChatbotName}
           </strong>
