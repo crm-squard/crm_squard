@@ -32,9 +32,6 @@ export default function AdminPageLayout({
     <main className={ui.pageContent}>
       {beforeHeader}
       <div className={ui.pageHeaderGroup}>
-        <strong className={ui.currentChatbotName}>
-          {selectedChatbotName ?? "-"}
-        </strong>
         <div
           className={tw(
             ui.pageHeading,
@@ -48,6 +45,11 @@ export default function AdminPageLayout({
           </div>
           {headerExtra}
         </div>
+        {selectedChatbotName ? (
+          <strong className={ui.currentChatbotName}>
+            目前商家：{selectedChatbotName}
+          </strong>
+        ) : null}
       </div>
 
       <Space className={ui.fullWidth} direction="vertical" size={16}>

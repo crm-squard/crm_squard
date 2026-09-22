@@ -11,15 +11,13 @@ import Input from "antd/es/input";
 import message from "antd/es/message";
 import Modal from "antd/es/modal";
 import Spin from "antd/es/spin";
-import Typography from "antd/es/typography";
 import { useEffect, useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { createChatbot, deleteChatbot } from "../api/chatbots";
 import { useAuth } from "../auth/AuthContext";
 import AdminPageLayout from "../components/AdminPageLayout";
+import CopyableIdentifier from "../components/CopyableIdentifier";
 import { ui } from "../uiStyles";
-
-const { Text } = Typography;
 
 function formatLastEditedAt(value: string | null): string {
   // API 尚未提供 updated_at，先以 created_at 作為設計稿欄位的示意資料。
@@ -140,7 +138,6 @@ export default function ChatbotsPage() {
       <div className={ui.chatbotsCardHeader}>
         <h2>ChatBot 列表</h2>
         <Button
-          className={ui.chatbotsCreateButton}
           icon={<PlusOutlined />}
           type="primary"
           onClick={openCreateModal}
@@ -156,13 +153,13 @@ export default function ChatbotsPage() {
         </div>
       ) : chatbots.length === 0 ? (
         <Empty className="my-10" description="目前沒有可管理的 ChatBot">
-          <Button
+          {/* <Button
             icon={<PlusOutlined />}
             type="primary"
             onClick={openCreateModal}
           >
             新增第一個 ChatBot
-          </Button>
+          </Button> */}
         </Empty>
       ) : (
         <section aria-labelledby="published-chatbots-heading">
@@ -185,6 +182,7 @@ export default function ChatbotsPage() {
                     </button>
                   </h3>
                   <Dropdown
+                    rootClassName={ui.chatbotDropdown}
                     menu={{
                       items: [
                         {
@@ -208,6 +206,7 @@ export default function ChatbotsPage() {
                   >
                     <Button
                       aria-label={`操作 ${chatbot.name}`}
+                      aria-haspopup="menu"
                       className={ui.chatbotMenu}
                       icon={<MoreOutlined />}
                       type="text"
@@ -215,9 +214,7 @@ export default function ChatbotsPage() {
                   </Dropdown>
                 </div>
                 <div className={ui.chatbotMetadata}>
-                  <Text copyable={{ text: chatbot.id }}>
-                    <span className={ui.chatbotId}>ID：{chatbot.id}</span>
-                  </Text>
+                  <CopyableIdentifier label="ID" value={chatbot.id} />
                   <span>
                     最後編輯：{formatLastEditedAt(chatbot.created_at)}
                   </span>

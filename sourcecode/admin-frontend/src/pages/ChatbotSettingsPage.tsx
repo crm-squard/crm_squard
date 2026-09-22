@@ -18,6 +18,7 @@ import {
 import { useAuth } from "../auth/AuthContext";
 import AdminPageLayout from "../components/AdminPageLayout";
 import ChatbotSettingsTabs from "../components/ChatbotSettingsTabs";
+import CopyableIdentifier from "../components/CopyableIdentifier";
 import { ui } from "../uiStyles";
 
 const { Text, Paragraph } = Typography;
@@ -223,10 +224,7 @@ export default function ChatbotSettingsPage() {
       <Card className={ui.settingsCard} title="基本資料">
         {chatbot ? (
           <Paragraph type="secondary">
-            商家識別碼：
-            <Text code copyable>
-              {chatbot.id}
-            </Text>
+            <CopyableIdentifier label="商家識別碼" value={chatbot.id} />
           </Paragraph>
         ) : null}
         <Form.Item
@@ -323,7 +321,7 @@ export default function ChatbotSettingsPage() {
         ) : null}
       </Card>
 
-      <Card className={ui.settingsCard} title="管理帳號">
+      <Card className={ui.settingsCard} title="管理商家帳號">
         <>
           <List
             dataSource={accounts}
@@ -393,7 +391,7 @@ export default function ChatbotSettingsPage() {
       </Card>
 
       <div className={ui.settingsActions}>
-        <Popconfirm
+        {/* <Popconfirm
           title="確定要刪除這家商家服務嗎？"
           description="會連同 RAG 知識庫文件與向量資料一起刪除，無法復原。"
           onConfirm={handleDeleteChatbot}
@@ -402,7 +400,7 @@ export default function ChatbotSettingsPage() {
           <Button danger loading={deleting}>
             刪除這家商家服務
           </Button>
-        </Popconfirm>
+        </Popconfirm> */}
         <Button type="primary" loading={saving} onClick={() => form.submit()}>
           儲存基本設定
         </Button>

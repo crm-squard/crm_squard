@@ -46,7 +46,7 @@ export default function LoginPage() {
     setError(null);
     try {
       await loginWithDev();
-      navigate("/select-chatbot", { replace: true });
+      navigate("/chatbots", { replace: true });
     } catch (err) {
       setError(
         err instanceof Error
@@ -66,7 +66,7 @@ export default function LoginPage() {
       setError(null);
       try {
         await loginWithIdToken(response.credential);
-        navigate("/select-chatbot", { replace: true });
+        navigate("/chatbots", { replace: true });
       } catch (err) {
         setError(
           err instanceof Error

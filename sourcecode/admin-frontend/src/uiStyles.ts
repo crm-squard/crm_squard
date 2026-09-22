@@ -61,9 +61,6 @@ export const ui = {
   chatbotsCardHeader: tw(
     "flex items-center justify-between gap-4 max-[620px]:items-start [&_h2]:m-0 [&_h2]:text-lg [&_h2]:text-admin-agent-title",
   ),
-  chatbotsCreateButton: tw(
-    "h-9! rounded-control! border-0! bg-admin-agent-action! px-3.5! text-caption! text-white! shadow-none! hover:bg-admin-agent-action/90!",
-  ),
   chatbotsGrid: tw("mt-2.5 grid grid-cols-2 gap-3.5 max-[760px]:grid-cols-1"),
   chatbotCard: tw(
     "grid min-h-[138px] min-w-0 gap-2 rounded-agent-card border border-solid border-admin-agent-border bg-white p-3",
@@ -72,30 +69,35 @@ export const ui = {
     "flex min-w-0 items-center gap-3 [&_h3]:m-0 [&_h3]:overflow-hidden [&_h3]:text-base [&_h3]:text-ellipsis [&_h3]:whitespace-nowrap [&_h3]:text-admin-agent-title",
   ),
   chatbotTitleButton: tw(
-    "block max-w-full cursor-pointer overflow-hidden border-0 bg-transparent p-0 text-left text-base text-ellipsis whitespace-nowrap text-admin-agent-title hover:text-admin-agent-action focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-admin-agent-action",
+    "block max-w-full cursor-pointer overflow-hidden border-0 bg-transparent p-0 text-left text-base font-bold text-ellipsis whitespace-nowrap text-admin-agent-title hover:text-admin-agent-action focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-admin-agent-action",
   ),
   chatbotAvatar: tw(
-    "text-admin-agent-avatar grid size-10 shrink-0 place-items-center rounded-full bg-gray-100 text-base",
+    "grid size-10 shrink-0 place-items-center rounded-full bg-admin-agent-avatar-bg text-base text-admin-agent-avatar",
   ),
   chatbotMenu: tw(
-    "ml-auto size-10! shrink-0 rounded-agent-card! text-xl! text-admin-text-subtle hover:bg-admin-surface-subtle!",
+    "ml-auto size-10! shrink-0 rounded-control! border! border-solid! border-transparent! text-xl! text-admin-text-subtle hover:border-admin-border! hover:bg-admin-surface-subtle! [&[aria-expanded=true]]:border-admin-primary! [&[aria-expanded=true]]:bg-white! [&[aria-expanded=true]]:text-admin-primary!",
+  ),
+  chatbotDropdown: tw(
+    "[&_.ant-dropdown-menu]:min-w-40! [&_.ant-dropdown-menu]:rounded-surface! [&_.ant-dropdown-menu]:border! [&_.ant-dropdown-menu]:border-solid! [&_.ant-dropdown-menu]:border-admin-border! [&_.ant-dropdown-menu]:bg-white! [&_.ant-dropdown-menu]:p-2! [&_.ant-dropdown-menu]:shadow-[0_16px_36px_rgb(15_33_72/.14)]! [&_.ant-dropdown-menu-item]:min-h-11! [&_.ant-dropdown-menu-item]:rounded-control! [&_.ant-dropdown-menu-item]:px-4! [&_.ant-dropdown-menu-item]:py-2.5! [&_.ant-dropdown-menu-item]:text-sm! [&_.ant-dropdown-menu-item]:font-medium! [&_.ant-dropdown-menu-item]:text-admin-heading! [&_.ant-dropdown-menu-item-danger.ant-dropdown-menu-item-active]:text-white! [&_.ant-dropdown-menu-item-danger.ant-dropdown-menu-item-active_.anticon]:text-white! [&_.ant-dropdown-menu-item-danger:hover]:text-white! [&_.ant-dropdown-menu-item-danger:hover_.anticon]:text-white! [&_.ant-dropdown-menu-item:not(.ant-dropdown-menu-item-danger):hover]:bg-admin-surface-subtle! [&_.ant-dropdown-menu-item:not(.ant-dropdown-menu-item-danger):hover]:text-admin-primary!",
   ),
   chatbotMetadata: tw(
-    "grid gap-1 text-caption text-admin-text-subtle [&_code]:w-fit [&_code]:max-w-full [&_code]:overflow-hidden [&_code]:text-ellipsis [&_code]:whitespace-nowrap",
+    "grid text-caption leading-none text-admin-text-subtle [&_code]:w-fit [&_code]:max-w-full [&_code]:overflow-hidden [&_code]:text-ellipsis [&_code]:whitespace-nowrap",
   ),
-  chatbotId: tw("text-wrap"),
+  copyableIdentifier: tw(
+    "inline-flex! max-w-full items-center text-caption! leading-normal! text-admin-text-subtle! [&_.ant-typography-copy]:rounded-sm! [&_.ant-typography-copy]:px-2! [&_.ant-typography-copy]:py-1! [&_.ant-typography-copy]:text-base! [&_.ant-typography-copy]:text-admin-text-subtle! [&_.ant-typography-copy]:hover:bg-admin-surface-subtle! [&>span]:min-w-0 [&>span]:break-all",
+  ),
   settingsTabs: tw(
     "[&_.ant-tabs-ink-bar]:bg-admin-primary [&_.ant-tabs-nav]:mb-4 [&_.ant-tabs-nav]:overflow-x-auto [&_.ant-tabs-nav-list]:min-w-max [&_.ant-tabs-tab]:px-2 [&_.ant-tabs-tab]:py-3 [&_.ant-tabs-tab-active_.ant-tabs-tab-btn]:text-admin-primary! [&_.ant-tabs-tab-btn]:text-admin-text-subtle [&_.ant-tabs-tab-btn_span]:flex [&_.ant-tabs-tab-btn_span]:items-center [&_.ant-tabs-tab-btn_span]:gap-2",
   ),
   settingsCardGrid: tw("grid gap-4"),
   settingsCard: tw(
-    "rounded-surface border border-solid border-admin-border bg-white shadow-[0_1px_2px_rgb(15_33_72/.06)] [&_.ant-card-body]:p-6 max-[620px]:[&_.ant-card-body]:p-4 [&_.ant-card-head]:border-admin-border [&_.ant-card-head]:px-6 max-[620px]:[&_.ant-card-head]:px-4",
+    "rounded-surface border border-solid border-admin-border bg-white text-admin-text-subtle shadow-[0_1px_2px_rgb(15_33_72/.06)] [&_.ant-card-body]:p-6 max-[620px]:[&_.ant-card-body]:p-4 [&_.ant-card-head]:border-admin-border [&_.ant-card-head]:px-6 max-[620px]:[&_.ant-card-head]:px-4",
   ),
   settingsPlaceholder: tw(
     "grid min-h-28 place-items-center rounded-control border border-dashed border-admin-border bg-admin-surface-subtle px-4 text-center text-caption text-admin-text-subtle",
   ),
   settingsActions: tw(
-    "flex items-center justify-between gap-3 pt-1 max-[620px]:flex-col-reverse max-[620px]:items-stretch [&_.ant-btn]:min-w-24",
+    "flex items-center justify-end gap-3 pt-1 max-[620px]:flex-col-reverse max-[620px]:items-stretch [&_.ant-btn]:min-w-24",
   ),
   settingsAccountForm: tw(
     "mt-4 flex gap-2 max-[620px]:flex-col [&_.ant-form-item]:mb-0 max-[620px]:[&_.ant-form-item]:w-full max-[620px]:[&_.ant-input]:w-full",
@@ -104,7 +106,7 @@ export const ui = {
     "flex min-h-19 items-start justify-between gap-6 [&_h1]:mt-0 [&_h1]:mb-1.25 [&_h1]:text-[clamp(27px,2.3vw,34px)] [&_h1]:tracking-[-.035em] [&_h1]:text-admin-heading [&_p]:m-0 [&_p]:text-sm [&_p]:text-admin-muted [&_time]:pt-2.5 [&_time]:text-caption [&_time]:text-admin-muted max-[899px]:[&_time]:hidden",
   ),
   pageHeaderGroup: tw("grid gap-1"),
-  currentChatbotName: tw("text-sm text-[#293958]"),
+  currentChatbotName: tw("py-2 text-sm text-[#556a94]"),
   pageContent: tw("flex w-full flex-col gap-4"),
   detailHeading: tw(
     "items-center [&_.ant-btn]:mt-0 [&_.ant-btn]:mr-0 [&_.ant-btn]:mb-2 [&_.ant-btn]:-ml-3 [&_.ant-btn]:text-[#62718a]",

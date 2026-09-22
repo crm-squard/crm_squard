@@ -1,5 +1,4 @@
 import CustomerServiceOutlined from "@ant-design/icons/CustomerServiceOutlined";
-import DownOutlined from "@ant-design/icons/DownOutlined";
 import HomeOutlined from "@ant-design/icons/HomeOutlined";
 import LogoutOutlined from "@ant-design/icons/LogoutOutlined";
 import MenuOutlined from "@ant-design/icons/MenuOutlined";
@@ -19,7 +18,6 @@ import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import BrandMark from "./BrandMark";
 import { useAuth } from "../auth/AuthContext";
 import { ui } from "../uiStyles";
-import { tw } from "../utils/tw";
 
 const { Header, Sider, Content } = Layout;
 
@@ -27,7 +25,7 @@ const navigationItems = [
   { key: "/chatbots", icon: <RobotOutlined />, label: "ChatBot" },
   // { key: "/dashboard", icon: <HomeOutlined />, label: "儀表板" },
   // { key: "/orders", icon: <ShoppingOutlined />, label: "訂單管理" },
-  { key: "/summary", icon: <CustomerServiceOutlined />, label: "客服機器人" },
+  { key: "/summary", icon: <CustomerServiceOutlined />, label: "客服摘要" },
 ];
 
 // 「管理者帳號」頁籤只給 platform_primary／platform_secondary 看，商家帳號完全看不到這個入口。
@@ -49,15 +47,11 @@ function resolveSelectedKey(pathname: string) {
 export default function AdminLayout() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { account, chatbots, selectedChatbotId, selectChatbot, logout } =
-    useAuth();
+  const { account, logout } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(() => window.innerWidth < 900);
   const selectedKey = resolveSelectedKey(location.pathname);
-  const selectedChatbot = chatbots.find(
-    (chatbot) => chatbot.id === selectedChatbotId,
-  );
   const isPlatformRole =
     account?.role === "platform_primary" ||
     account?.role === "platform_secondary";
@@ -83,35 +77,6 @@ export default function AdminLayout() {
       <div className={ui.siderBrand}>
         <BrandMark compact={collapsed && !isMobile} />
       </div>
-      {(!collapsed || isMobile) && (
-        <div className={tw(ui.tenantBlock, "hidden")}>
-          <span>目前商家</span>
-          {chatbots.length > 1 ? (
-            <Dropdown
-              menu={{
-                items: chatbots.map((chatbot) => ({
-                  key: chatbot.id,
-                  label: chatbot.name,
-                })),
-                onClick: ({ key }) => selectChatbot(key),
-              }}
-            >
-              <strong className={ui.tenantSwitcher}>
-                {selectedChatbot?.name ?? "選擇商家"} <DownOutlined />
-              </strong>
-            </Dropdown>
-          ) : null}
-          {/* 只有一家公司時上面沒有下拉選單，這裡另外給一個固定入口，不然新增第二家商家後
-              就永遠回不到選公司頁面了（選了一家之後 ChatbotSelectPage 不會再自動出現）。 */}
-          <button
-            type="button"
-            className={ui.tenantManageLink}
-            onClick={() => navigate("/select-chatbot")}
-          >
-            管理商家服務
-          </button>
-        </div>
-      )}
       <Menu
         mode="inline"
         selectedKeys={[selectedKey]}
