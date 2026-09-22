@@ -526,6 +526,9 @@ def update_chatbot(
         chatbot_id, req.name, req.mcp_url, req.welcome_message, req.quick_replies, req.mcp_token,
         rag_top_k=req.rag_top_k, rerank_enabled=req.rerank_enabled,
         mcp_trigger_name=req.mcp_trigger_name,
+        line_channel_id=req.line_channel_id,
+        line_channel_secret=req.line_channel_secret,
+        line_channel_access_token=req.line_channel_access_token,
     )
     if chatbot is None:
         raise HTTPException(status_code=404, detail="查無這家公司。")

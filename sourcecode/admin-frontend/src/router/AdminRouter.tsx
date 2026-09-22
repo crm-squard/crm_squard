@@ -19,6 +19,9 @@ const ChatbotsPage = lazy(() => import("../pages/ChatbotsPage"));
 const ChatbotPlaceholderPage = lazy(
   () => import("../pages/ChatbotPlaceholderPage"),
 );
+const LineBotSettingsPage = lazy(
+  () => import("../pages/LineBotSettingsPage"),
+);
 const SummaryPage = lazy(() => import("../pages/SummaryPage"));
 const AdminAccountsPage = lazy(() => import("../pages/AdminAccountsPage"));
 const AuditLogPage = lazy(() => import("../pages/AuditLogPage"));
@@ -54,7 +57,7 @@ const router = createBrowserRouter([
       { path: "chatbots/knowledge", element: loadPage(<RagPage />) },
       {
         path: "chatbots/linebot-settings",
-        element: loadPage(<ChatbotPlaceholderPage />),
+        element: loadPage(<LineBotSettingsPage />),
       },
       {
         path: "chatbots/script-settings",

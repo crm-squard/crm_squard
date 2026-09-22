@@ -160,6 +160,10 @@ class ChatbotInfo(BaseModel):
     # 資料庫），不代表一定會生效。
     rag_top_k: int = 5
     rerank_enabled: bool = False
+
+    # LINE Channel ID 僅供管理端記錄，不參與 Webhook 驗證或 LINE API 呼叫。
+    line_channel_id: Optional[str] = None
+
     # 這台「伺服器」能不能做 rerank（總開關、非 Cloud Run、binary 存在，見 reranker.is_supported()）。
     # 不是公司的屬性，但放在每筆公司資料裡，前端不用另外多打一支 API；後台頁面據此決定要不要停用開關。
     rerank_available: bool = Field(default_factory=lambda: _rerank_available())
@@ -220,6 +224,11 @@ class ChatbotUpdateRequest(BaseModel):
     rerank_enabled: Optional[bool] = None
     # 「MCP 機器人名稱」：訊息以 @名稱 開頭時啟動 MCP；空字串＝回到預設 MCP；不帶＝不變更
     mcp_trigger_name: Optional[str] = Field(default=None, max_length=20)
+
+    # LINE Messaging API 設定；Channel ID 目前僅供記錄。
+    line_channel_id: Optional[str] = Field(default=None, max_length=200)
+    line_channel_secret: Optional[str] = Field(default=None, max_length=500)
+    line_channel_access_token: Optional[str] = Field(default=None, max_length=2000)
 
     _check_mcp_trigger_name = field_validator("mcp_trigger_name")(_normalize_mcp_trigger_name)
 

@@ -70,6 +70,10 @@ def _ensure_schema() -> None:
             "ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS mcp_token TEXT"
         ))
         # LINE Messaging API 設定
+        # line_channel_id 目前僅供管理端記錄，不參與 Webhook 驗證或 LINE API 呼叫。
+        conn.execute(sql_text(
+            "ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS line_channel_id TEXT"
+        ))
         conn.execute(sql_text(
             "ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS line_channel_secret TEXT"
         ))
@@ -373,6 +377,7 @@ def _row_to_chatbot(row) -> dict:
         # NULL（從沒設定過）→ 系統預設；k 是「送給 LLM 的片段數」，見 settings.RAG_DEFAULT_TOP_K
         "rag_top_k": row.rag_top_k or settings.RAG_DEFAULT_TOP_K,
         "rerank_enabled": bool(row.rerank_enabled),
+        "line_channel_id": getattr(row, "line_channel_id", None),
         "line_channel_secret": getattr(row, "line_channel_secret", None),
         "line_channel_access_token": getattr(row, "line_channel_access_token", None),
         "created_at": row.created_at.isoformat() if row.created_at is not None else None,
@@ -415,6 +420,9 @@ def update_chatbot(
     quick_replies: Optional[list[str]] = None, mcp_token: Optional[str] = None,
     rag_top_k: Optional[int] = None, rerank_enabled: Optional[bool] = None,
     mcp_trigger_name: Optional[str] = None,
+    line_channel_id: Optional[str] = None,
+    line_channel_secret: Optional[str] = None,
+    line_channel_access_token: Optional[str] = None,
 ) -> Optional[dict]:
     """
     只更新有帶值的欄位（None 代表「這次沒有要改這個欄位」，不是「要清空」）——
@@ -440,10 +448,13 @@ def update_chatbot(
                     mcp_token = COALESCE(:mcp_token, mcp_token),
                     rag_top_k = COALESCE(:rag_top_k, rag_top_k),
                     rerank_enabled = COALESCE(:rerank_enabled, rerank_enabled),
-                    mcp_trigger_name = COALESCE(:mcp_trigger_name, mcp_trigger_name)
+                    mcp_trigger_name = COALESCE(:mcp_trigger_name, mcp_trigger_name),
+                    line_channel_id = COALESCE(:line_channel_id, line_channel_id),
+                    line_channel_secret = COALESCE(:line_channel_secret, line_channel_secret),
+                    line_channel_access_token = COALESCE(:line_channel_access_token, line_channel_access_token)
                 WHERE id = :id
                 RETURNING id, name, mcp_url, welcome_message, quick_replies, rag_top_k, rerank_enabled, mcp_trigger_name,
-                          created_at, """
+                          line_channel_id, line_channel_secret, line_channel_access_token, created_at, """
             + _HAS_MCP_TOKEN_SQL
             ),
             {
@@ -452,6 +463,9 @@ def update_chatbot(
                 "mcp_token": mcp_token,
                 "rag_top_k": rag_top_k, "rerank_enabled": rerank_enabled,
                 "mcp_trigger_name": mcp_trigger_name,
+                "line_channel_id": line_channel_id,
+                "line_channel_secret": line_channel_secret,
+                "line_channel_access_token": line_channel_access_token,
             },
         ).fetchone()
     return _row_to_chatbot(row) if row is not None else None
@@ -464,7 +478,7 @@ def get_chatbot(chatbot_id: str) -> Optional[dict]:
         row = conn.execute(
             sql_text(
                 "SELECT id, name, mcp_url, welcome_message, quick_replies, rag_top_k, rerank_enabled, mcp_trigger_name, "
-                "line_channel_secret, line_channel_access_token, created_at, "
+                "line_channel_id, line_channel_secret, line_channel_access_token, created_at, "
                 + _HAS_MCP_TOKEN_SQL + " FROM chatbots WHERE id = :id"
             ),
             {"id": chatbot_id},
@@ -510,7 +524,7 @@ def list_chatbots_visible_to(account: dict) -> list[dict]:
     engine = get_engine()
     if account["role"] in PLATFORM_ROLES:
         sql = sql_text(
-            "SELECT id, name, mcp_url, welcome_message, quick_replies, rag_top_k, rerank_enabled, mcp_trigger_name, created_at, "
+            "SELECT id, name, mcp_url, welcome_message, quick_replies, rag_top_k, rerank_enabled, mcp_trigger_name, line_channel_id, created_at, "
             + _HAS_MCP_TOKEN_SQL + ", NULL AS your_role FROM chatbots ORDER BY created_at"
         )
         params = {}
@@ -518,7 +532,7 @@ def list_chatbots_visible_to(account: dict) -> list[dict]:
         sql = sql_text(
             """
             SELECT c.id, c.name, c.mcp_url, c.welcome_message, c.quick_replies, c.rag_top_k, c.rerank_enabled, c.mcp_trigger_name,
-                   c.created_at,
+                   c.line_channel_id, c.created_at,
                    (c.mcp_token IS NOT NULL AND c.mcp_token <> '') AS has_mcp_token,
                    ca.role AS your_role
             FROM chatbots c
