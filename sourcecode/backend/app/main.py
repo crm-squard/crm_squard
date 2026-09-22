@@ -796,18 +796,6 @@ async def _handle_chat(
 
         return ChatResponse(type="text", text="請輸入您的問題。")
 
-    # 店家資訊：固定資料，不經過 Gemini / RAG
-    if text.strip() == "店家資訊":
-        return ChatResponse(
-            type="text",
-            text=(
-                "🏪 CRM 智慧客服\n\n"
-                "📍 地址：福爾摩沙省有夠偏縣找不到鄉問路村大馬路田邊小巷罵罵號\n"
-                "☎ 客服電話：02-XXXXXXXX\n"
-                "🕒 營業時間：週一～週五 09:00–18:00\n"
-                "🌐 官方網站：https://crm-squard-main-frontend-821217334800.europe-west1.run.app/"
-            ),
-        )
 
     # 訊息以「@<MCP 機器人名稱>」開頭（沒設定名稱時是 @MCP）：交給該公司 MCP server 的 tools 處理
     # （LLM 自己選 tool、整理成文字），不走 RAG；其他訊息維持原本的 RAG + LLM。見 app/mcp_chat.py。
