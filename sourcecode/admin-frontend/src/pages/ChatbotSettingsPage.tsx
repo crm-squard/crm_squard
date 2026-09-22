@@ -24,6 +24,9 @@ const { Text, Paragraph } = Typography;
 const { TextArea } = Input;
 const DEFAULT_MCP_TRIGGER_NAME = "MCP";
 const DEFAULT_QUICK_REPLIES = ["無線滑鼠支援多少 DPI？", "退貨要幾天內申請？"];
+const CHAT_WIDGET_PREVIEW_ORIGIN = (
+  import.meta.env.VITE_CHAT_WIDGET_URL || "http://localhost:5175/chat-widget.js"
+).replace(/\/chat-widget\.js$/, "");
 
 interface ChatbotSettingsForm {
   name: string;
@@ -236,6 +239,14 @@ export default function ChatbotSettingsPage() {
         >
           <Input placeholder="例如：客服 ChatBot" />
         </Form.Item>
+        {chatbot ? (
+          <Paragraph type="secondary">
+            機器人網址：
+            <Text code copyable>
+              {`${CHAT_WIDGET_PREVIEW_ORIGIN}/?clientId=${chatbot.id}`}
+            </Text>
+          </Paragraph>
+        ) : null}
       </Card>
 
       <Card className={ui.settingsCard} title="對話內容">

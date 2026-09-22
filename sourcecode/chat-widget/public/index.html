@@ -42,6 +42,19 @@
       <h1>CRM Chat Widget</h1>
       <p>此頁面用於本機及部署後的獨立介面驗證，聊天元件會自動顯示於右下角。</p>
     </main>
-    <script src="/chat-widget.js" data-client-id="client_demo" defer></script>
+    <script>
+      // 讀取網址的 clientId 參數，讓 https://.../?clientId=<商家 chatbot UUID>
+      // 可直接跳轉到對應商家的機器人；未帶參數時維持預設的 client_demo。
+      (function () {
+        var clientId =
+          new URLSearchParams(window.location.search).get("clientId") ||
+          "client_demo";
+        var script = document.createElement("script");
+        script.src = "/chat-widget.js";
+        script.dataset.clientId = clientId;
+        script.defer = true;
+        document.body.appendChild(script);
+      })();
+    </script>
   </body>
 </html>
