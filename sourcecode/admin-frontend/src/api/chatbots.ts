@@ -72,6 +72,10 @@ export async function updateChatbot(
     rag_top_k?: number;
     // true 只在伺服器支援時才能設（否則後端回 400）；不帶＝不變更
     rerank_enabled?: boolean;
+    // LINE Messaging API 設定；Channel ID 僅供記錄。
+    line_channel_id?: string;
+    line_channel_secret?: string;
+    line_channel_access_token?: string;
   },
 ): Promise<ChatbotInfo> {
   const response = await fetch(

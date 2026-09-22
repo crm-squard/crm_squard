@@ -30,6 +30,8 @@ export interface ChatbotInfo {
   // RAG 檢索設定：k 是送給 LLM 的片段數（預設 5）；rerank_enabled 是這家公司勾選的偏好。
   rag_top_k?: number;
   rerank_enabled?: boolean;
+  // LINE Channel ID 僅供管理端記錄；Secret / Access Token 不由一般 ChatbotInfo 回傳。
+  line_channel_id?: string | null;
   // 「伺服器」能不能做 rerank（正式環境 Cloud Run 固定為 false），不是公司屬性；
   // false 時設定頁把開關停用，不能開啟。
   rerank_available?: boolean;
