@@ -15,7 +15,7 @@ import { ui } from "../uiStyles";
 const { Paragraph } = Typography;
 
 /**
- * 客服機器人：當日提問主題摘要（對應儀表板「今日對話」卡片原本寫的「對話分析功能規劃中」）。
+ * 客服摘要：當日提問主題摘要（對應儀表板「今日對話」卡片原本寫的「對話分析功能規劃中」）。
  * 依 AuthContext.selectedChatbotId 過濾，跟 RAG 頁面一樣的模式——切換公司時這裡也要
  * 重新拉取，只看得到目前選定公司的顧客提問內容。
  */
@@ -49,7 +49,7 @@ export default function SummaryPage() {
 
   return (
     <AdminPageLayout
-      title="客服機器人"
+      title="客服摘要"
       description="查看指定日期使用者向聊天機器人提問的主題摘要。"
       headerExtra={
         <DatePicker

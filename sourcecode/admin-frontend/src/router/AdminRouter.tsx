@@ -13,7 +13,6 @@ const OrderDetailPage = lazy(() => import("../pages/OrderDetailPage"));
 const OrdersPage = lazy(() => import("../pages/OrdersPage"));
 const RagPage = lazy(() => import("../pages/RagPage"));
 const LoginPage = lazy(() => import("../pages/LoginPage"));
-const ChatbotSelectPage = lazy(() => import("../pages/ChatbotSelectPage"));
 const ChatbotSettingsPage = lazy(() => import("../pages/ChatbotSettingsPage"));
 const ChatbotsPage = lazy(() => import("../pages/ChatbotsPage"));
 const ChatbotPlaceholderPage = lazy(
@@ -37,7 +36,7 @@ function loadPage(page: ReactNode) {
 
 const router = createBrowserRouter([
   { path: "login", element: loadPage(<LoginPage />) },
-  { path: "select-chatbot", element: loadPage(<ChatbotSelectPage />) },
+  { path: "select-chatbot", element: <Navigate to="/chatbots" replace /> },
   {
     element: (
       <RequireAuth>
