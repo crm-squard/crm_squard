@@ -1,3 +1,4 @@
+import CopyOutlined from "@ant-design/icons/CopyOutlined";
 import Button from "antd/es/button";
 import Card from "antd/es/card";
 import Form from "antd/es/form";
@@ -5,6 +6,7 @@ import Input from "antd/es/input";
 import List from "antd/es/list";
 import message from "antd/es/message";
 import Popconfirm from "antd/es/popconfirm";
+import Tooltip from "antd/es/tooltip";
 import Typography from "antd/es/typography";
 import { useCallback, useEffect, useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
@@ -18,7 +20,6 @@ import {
 import { useAuth } from "../auth/AuthContext";
 import AdminPageLayout from "../components/AdminPageLayout";
 import ChatbotSettingsTabs from "../components/ChatbotSettingsTabs";
-import CopyableIdentifier from "../components/CopyableIdentifier";
 import { ui } from "../uiStyles";
 
 const { Text, Paragraph } = Typography;
@@ -214,6 +215,15 @@ export default function ChatbotSettingsPage() {
     }
   }
 
+  async function copyValue(value: string, label: string) {
+    try {
+      await navigator.clipboard.writeText(value);
+      messageApi.success(`已複製${label}`);
+    } catch {
+      messageApi.error("複製失敗，請手動複製內容");
+    }
+  }
+
   const isPlatformRole =
     currentAccount?.role === "platform_primary" ||
     currentAccount?.role === "platform_secondary";
@@ -222,11 +232,6 @@ export default function ChatbotSettingsPage() {
   const basicContent = (
     <div className={ui.settingsCardGrid}>
       <Card className={ui.settingsCard} title="基本資料">
-        {chatbot ? (
-          <Paragraph type="secondary">
-            <CopyableIdentifier label="商家識別碼" value={chatbot.id} />
-          </Paragraph>
-        ) : null}
         <Form.Item
           name="name"
           label="名稱"
@@ -238,12 +243,56 @@ export default function ChatbotSettingsPage() {
           <Input placeholder="例如：客服 ChatBot" />
         </Form.Item>
         {chatbot ? (
-          <Paragraph type="secondary">
-            機器人網址：
-            <Text code copyable>
-              {`${CHAT_WIDGET_PREVIEW_ORIGIN}/?clientId=${chatbot.id}`}
-            </Text>
-          </Paragraph>
+          <Form.Item label="商家識別碼">
+            <Input.Search
+              aria-label="商家識別碼"
+              readOnly
+              value={chatbot.id}
+              enterButton={
+                <Button
+                  aria-label="複製商家識別碼"
+                  color="default"
+                  icon={
+                    <Tooltip title="複製商家識別碼">
+                      <CopyOutlined />
+                    </Tooltip>
+                  }
+                  variant="outlined"
+                />
+              }
+              onSearch={() => void copyValue(chatbot.id, "商家識別碼")}
+            />
+          </Form.Item>
+        ) : null}
+
+        {chatbot ? (
+          <>
+            <Form.Item label="機器人網址">
+              <Input.Search
+                aria-label="機器人網址"
+                readOnly
+                value={`${CHAT_WIDGET_PREVIEW_ORIGIN}/?clientId=${chatbot.id}`}
+                enterButton={
+                  <Button
+                    aria-label="複製機器人網址"
+                    color="default"
+                    icon={
+                      <Tooltip title="複製機器人網址">
+                        <CopyOutlined />
+                      </Tooltip>
+                    }
+                    variant="outlined"
+                  />
+                }
+                onSearch={() =>
+                  void copyValue(
+                    `${CHAT_WIDGET_PREVIEW_ORIGIN}/?clientId=${chatbot.id}`,
+                    "機器人網址",
+                  )
+                }
+              />
+            </Form.Item>
+          </>
         ) : null}
       </Card>
 
@@ -302,9 +351,28 @@ export default function ChatbotSettingsPage() {
               </Button>
             ) : (
               <>
-                <Text code copyable>
-                  {revealedMcpToken}
-                </Text>
+                <Form.Item label="MCP 金鑰">
+                  <Input.Search
+                    aria-label="MCP 金鑰"
+                    readOnly
+                    value={revealedMcpToken}
+                    enterButton={
+                      <Button
+                        aria-label="複製 MCP 金鑰"
+                        color="default"
+                        icon={
+                          <Tooltip title="複製 MCP 金鑰">
+                            <CopyOutlined />
+                          </Tooltip>
+                        }
+                        variant="outlined"
+                      />
+                    }
+                    onSearch={() =>
+                      void copyValue(revealedMcpToken, "MCP 金鑰")
+                    }
+                  />
+                </Form.Item>
                 <Button onClick={() => setRevealedMcpToken(null)}>隱藏</Button>
               </>
             )}

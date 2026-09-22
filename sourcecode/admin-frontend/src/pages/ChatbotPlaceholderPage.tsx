@@ -1,9 +1,14 @@
+import CopyOutlined from "@ant-design/icons/CopyOutlined";
+import Button from "antd/es/button";
 import Card from "antd/es/card";
+import Form from "antd/es/form";
+import Input from "antd/es/input";
+import message from "antd/es/message";
+import Tooltip from "antd/es/tooltip";
 import Typography from "antd/es/typography";
 import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import ChatbotSettingsTabs from "../components/ChatbotSettingsTabs";
-import CopyableIdentifier from "../components/CopyableIdentifier";
 import AdminPageLayout from "../components/AdminPageLayout";
 import { ui } from "../uiStyles";
 
@@ -23,6 +28,7 @@ const { Paragraph, Text } = Typography;
 export default function ChatbotPlaceholderPage() {
   const location = useLocation();
   const { selectedChatbotId, chatbots } = useAuth();
+  const [messageApi, contextHolder] = message.useMessage();
   const content = pageContent[location.pathname];
 
   if (!selectedChatbotId) return <Navigate to="/chatbots" replace />;
@@ -36,15 +42,48 @@ export default function ChatbotPlaceholderPage() {
     ? `<script src="${adminFrontendUrl}/chat-widget.js" data-client-id="${chatbot.id}"></script>`
     : "";
 
+  async function copyEmbedScript() {
+    try {
+      await navigator.clipboard.writeText(embedScript);
+      messageApi.success("已複製嵌入程式碼");
+    } catch {
+      messageApi.error("複製失敗，請手動複製內容");
+    }
+  }
+
   return (
-    <AdminPageLayout title={content.title} description={content.description}>
+    <AdminPageLayout
+      title={content.title}
+      description={content.description}
+      beforeHeader={contextHolder}
+    >
       <ChatbotSettingsTabs />
       <Card className={ui.settingsCard} title="嵌入程式碼">
         {location.pathname === "/chatbots/script-settings" && chatbot ? (
           <>
-            <div className="pb-10">
-              <CopyableIdentifier label="複製嵌入程式碼" value={embedScript} />
-            </div>
+            <Form component={false} layout="vertical">
+              <Form.Item label="嵌入程式碼">
+                <Input.Search
+                  aria-label="嵌入程式碼"
+                  className="font-mono"
+                  readOnly
+                  value={embedScript}
+                  enterButton={
+                    <Button
+                      aria-label="複製嵌入程式碼"
+                      color="default"
+                      icon={
+                        <Tooltip title="複製嵌入程式碼">
+                          <CopyOutlined />
+                        </Tooltip>
+                      }
+                      variant="outlined"
+                    />
+                  }
+                  onSearch={() => void copyEmbedScript()}
+                />
+              </Form.Item>
+            </Form>
             <Paragraph>
               請將上面程式碼貼到網站的 <Text code>&lt;html&gt;</Text> 標籤內。
             </Paragraph>

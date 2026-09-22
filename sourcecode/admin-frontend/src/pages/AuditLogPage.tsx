@@ -66,7 +66,7 @@ export default function AuditLogPage() {
       <ChatbotSettingsTabs />
       <Card className={ui.settingsCard} title="稽核紀錄">
         <Paragraph type="secondary">
-          這家商家服務最近的異動紀錄：建立或刪除、設定變更、知識庫文件及協作帳號異動。
+          商家服務最近的異動紀錄：建立或刪除、設定變更、知識庫文件及協作帳號異動。
         </Paragraph>
         <List
           dataSource={entries}
