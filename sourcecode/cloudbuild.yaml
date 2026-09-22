@@ -229,6 +229,7 @@ steps:
           --build-arg VITE_RAG_API_URL=$$BACKEND_URL \
           --build-arg VITE_GOOGLE_CLIENT_ID=${_GOOGLE_CLIENT_ID} \
           --build-arg VITE_CHAT_WIDGET_URL=$$WIDGET_URL/chat-widget.js \
+          --build-arg VITE_ADMIN_FRONTEND_URL=${_ADMIN_FRONTEND_URL} \
           -t europe-west1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/crm-admin-frontend:latest \
           ./sourcecode/admin-frontend
 
@@ -274,6 +275,9 @@ substitutions:
   # 正式環境應由 Cloud Build Trigger 覆寫成已在 Google Cloud Console 建立的 Client ID，
   # 且該 Client ID 的「已授權的 JavaScript 來源」要加上這裡部署出來的 admin-frontend 網址。
   _GOOGLE_CLIENT_ID: ''
+  # 由 stage／main Cloud Build Trigger 分別注入對應的 Admin Frontend 網址，
+  # 僅供腳本設定頁顯示嵌入程式碼，不作為部署流程判斷。
+  _ADMIN_FRONTEND_URL: ''
 
 images:
   - 'europe-west1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/crm-backend:latest'
