@@ -76,6 +76,14 @@ export async function updateChatbot(
     line_channel_id?: string;
     line_channel_secret?: string;
     line_channel_access_token?: string;
+    // Meta 平台（Facebook 粉專 + Instagram 私訊）設定；app_secret / verify_token 是 Meta App
+    // 層級的憑證，兩個管道共用。Page ID / Instagram Business ID 僅供記錄。
+    facebook_page_id?: string;
+    facebook_app_secret?: string;
+    facebook_page_access_token?: string;
+    facebook_verify_token?: string;
+    instagram_business_id?: string;
+    instagram_access_token?: string;
   },
 ): Promise<ChatbotInfo> {
   const response = await fetch(

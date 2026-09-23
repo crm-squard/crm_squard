@@ -56,6 +56,7 @@ from app.rag import reranker
 from app.summary import summarize_day
 from app.providers import is_configured
 from app.line_webhook import create_line_router
+from app.meta_webhook import create_meta_router
 
 PROVIDER_LABELS = {
     "local": "本地 Qwen3.5-2B（免費，僅限 Apple Silicon 開發機）",
@@ -529,6 +530,12 @@ def update_chatbot(
         line_channel_id=req.line_channel_id,
         line_channel_secret=req.line_channel_secret,
         line_channel_access_token=req.line_channel_access_token,
+        facebook_page_id=req.facebook_page_id,
+        facebook_app_secret=req.facebook_app_secret,
+        facebook_page_access_token=req.facebook_page_access_token,
+        facebook_verify_token=req.facebook_verify_token,
+        instagram_business_id=req.instagram_business_id,
+        instagram_access_token=req.instagram_access_token,
     )
     if chatbot is None:
         raise HTTPException(status_code=404, detail="查無這家公司。")
@@ -830,3 +837,5 @@ async def _handle_chat(
 
 # LINE Messaging API
 app.include_router(create_line_router(_handle_chat))
+# Meta 平台（Facebook 粉專 + Instagram 私訊，共用同一個 webhook 端點）
+app.include_router(create_meta_router(_handle_chat))

@@ -1,0 +1,287 @@
+"""
+Meta 平台（Facebook 粉專 + Instagram 私訊）Webhook。
+
+Meta 的 Webhooks 是「整個 App 一組 Callback URL／Verify Token」，不是每個產品各自一組：
+商家在 Meta App 後台只設定一次這支端點，之後不論是粉專訊息（payload.object == "page"）
+還是 Instagram 私訊（payload.object == "instagram"），Meta 都會打同一個 URL，所以這裡
+用同一個 router 依 object 分流，而不是拆成兩條平行路由。
+
+Facebook／Instagram 都僅作為 CRM 的另一個聊天入口。實際問題處理由 main.py 的
+_handle_chat() 負責，避免重複實作訂單查詢、RAG、LLM 等邏輯。
+"""
+
+import hashlib
+import hmac
+import json
+import urllib.error
+import urllib.request
+from typing import Awaitable, Callable
+
+from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi.responses import PlainTextResponse
+
+from app.schemas import ChatResponse
+from app.accounts_store import get_chatbot
+from app.chat_log import log_chat
+
+
+FACEBOOK_SEND_API = "https://graph.facebook.com/v21.0/me/messages"
+
+# Instagram Messaging API 這裡採用「沿用粉專連動」的整合方式（跟 Facebook 共用同一個 Meta App、
+# 後台設定步驟一致）。Meta 近年也在推廣獨立的 Instagram 帳號登入新版 API，若實際串接時 Meta 後台
+# 走的是那條新流程，instagram_access_token 的取得方式與下面這個 Send API 網址可能需要調整。
+INSTAGRAM_SEND_API_TEMPLATE = "https://graph.facebook.com/v21.0/{ig_id}/messages"
+
+
+def create_meta_router(
+    chat_handler: Callable[[str, list, str, str | None], Awaitable[ChatResponse]],
+) -> APIRouter:
+    router = APIRouter()
+
+    def verify_signature(body: bytes, signature: str, app_secret: str) -> bool:
+        """
+        驗證 Meta 送來的 X-Hub-Signature-256（格式 "sha256=<hex>"）。
+        Facebook 與 Instagram 事件都是同一個 Meta App 送出，共用同一把 App Secret。
+        """
+        if not app_secret or not signature or not signature.startswith("sha256="):
+            return False
+
+        expected = hmac.new(
+            app_secret.encode("utf-8"),
+            body,
+            hashlib.sha256,
+        ).hexdigest()
+
+        return hmac.compare_digest(expected, signature[len("sha256="):])
+
+    def format_chat_response(response: ChatResponse) -> str:
+        """
+        將 CRM 原本的 ChatResponse 轉換成 Messenger／Instagram 可顯示的純文字。
+        """
+
+        if response.type == "order":
+            items = response.items or []
+
+            if isinstance(items, list):
+                item_text = "\n".join(
+                    f"• {item}" if isinstance(item, str) else f"• {str(item)}"
+                    for item in items
+                )
+            else:
+                item_text = str(items)
+
+            text = (
+                f"訂單編號：{response.code}\n"
+                f"目前狀態：{response.status}\n"
+                f"預計時間：{response.eta}"
+            )
+
+            if item_text:
+                text += f"\n商品：\n{item_text}"
+
+            return text
+
+        return response.text or "目前無法取得回覆，請稍後再試。"
+
+    def send_facebook_message(psid: str, message: str, page_access_token: str):
+        """
+        使用 Facebook Send API 回覆粉專訊息。不需額外安裝 requests/httpx。
+        """
+
+        payload = {
+            "recipient": {"id": psid},
+            "message": {"text": message[:2000]},
+        }
+
+        data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+
+        req = urllib.request.Request(
+            f"{FACEBOOK_SEND_API}?access_token={page_access_token}",
+            data=data,
+            method="POST",
+            headers={"Content-Type": "application/json"},
+        )
+
+        try:
+            with urllib.request.urlopen(req, timeout=15) as response:
+                print(f"[Facebook Send Success] HTTP {response.status}")
+
+        except urllib.error.HTTPError as e:
+            detail = e.read().decode("utf-8", errors="replace")
+            print(f"[Facebook Send API Error] HTTP {e.code}: {detail}")
+
+        except Exception as e:
+            print(f"[Facebook Send Error] {e}")
+
+    def send_instagram_message(
+        igsid: str, message: str, instagram_business_id: str, instagram_access_token: str
+    ):
+        """
+        使用 Instagram Send API 回覆私訊。不需額外安裝 requests/httpx。
+        """
+
+        payload = {
+            "recipient": {"id": igsid},
+            "message": {"text": message[:1000]},
+        }
+
+        data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+
+        url = INSTAGRAM_SEND_API_TEMPLATE.format(ig_id=instagram_business_id)
+
+        req = urllib.request.Request(
+            f"{url}?access_token={instagram_access_token}",
+            data=data,
+            method="POST",
+            headers={"Content-Type": "application/json"},
+        )
+
+        try:
+            with urllib.request.urlopen(req, timeout=15) as response:
+                print(f"[Instagram Send Success] HTTP {response.status}")
+
+        except urllib.error.HTTPError as e:
+            detail = e.read().decode("utf-8", errors="replace")
+            print(f"[Instagram Send API Error] HTTP {e.code}: {detail}")
+
+        except Exception as e:
+            print(f"[Instagram Send Error] {e}")
+
+    async def _answer_and_log(
+        user_text: str, chatbot_id: str, channel: str
+    ) -> str:
+        """
+        呼叫共用的 _handle_chat() 取得回覆、寫入 chat_log；Facebook／Instagram 共用同一套邏輯，
+        只有 client_ip 標記的管道名稱不同，方便之後在聊天紀錄分辨訊息來源。
+        """
+        try:
+            # 第一版暫時不帶入歷史對話作為上下文，但每次問答仍會寫入既有 chat_log。
+            # provider 使用目前 CRM 預設的 Gemini。
+            crm_response = await chat_handler(user_text, [], "google", chatbot_id)
+
+            reply_text = format_chat_response(crm_response)
+
+            try:
+                log_text = (
+                    crm_response.text
+                    if crm_response.text is not None
+                    else f"[訂單 {crm_response.code}]"
+                )
+
+                log_chat(
+                    message=user_text,
+                    response_type=crm_response.type,
+                    response_text=log_text,
+                    client_ip=channel,
+                    chatbot_id=chatbot_id,
+                )
+            except Exception as e:
+                # 對話紀錄失敗不能影響回覆
+                print(f"[{channel} Chat Log Error] {e}")
+
+        except Exception as e:
+            print(f"[{channel} Chat Error] {e}")
+
+            reply_text = (
+                "系統目前發生錯誤，"
+                "請稍後再試或聯繫真人客服（0800-123-456）。"
+            )
+
+        return reply_text
+
+    @router.get("/meta/webhook/{chatbot_id}", response_class=PlainTextResponse)
+    async def meta_webhook_verify(
+        chatbot_id: str,
+        hub_mode: str = Query(default="", alias="hub.mode"),
+        hub_verify_token: str = Query(default="", alias="hub.verify_token"),
+        hub_challenge: str = Query(default="", alias="hub.challenge"),
+    ):
+        """
+        Meta 設定 Webhook 時發出的驗證請求：mode/verify_token 核對成功才回傳 challenge。
+        Facebook 與 Instagram 產品共用同一個 App 層級的 Verify Token。
+        """
+        chatbot = get_chatbot(chatbot_id)
+        verify_token = chatbot.get("facebook_verify_token") if chatbot else None
+
+        if (
+            not verify_token
+            or hub_mode != "subscribe"
+            or not hmac.compare_digest(hub_verify_token, verify_token)
+        ):
+            raise HTTPException(status_code=403, detail="Verification failed")
+
+        return hub_challenge
+
+    @router.post("/meta/webhook/{chatbot_id}")
+    async def meta_webhook(chatbot_id: str, request: Request):
+        """
+        接收 Facebook Messenger 與 Instagram 的訊息事件；依 payload.object 分流。
+        """
+        chatbot = get_chatbot(chatbot_id)
+
+        if not chatbot:
+            raise HTTPException(status_code=404, detail="Chatbot not found")
+
+        # App Secret／Verify Token 是這個 Meta App 層級的憑證，Facebook／Instagram 共用；
+        # 欄位名沿用 facebook_* 是第一版留下的命名，語意上代表「這個 Meta App」而不限於粉專。
+        app_secret = chatbot.get("facebook_app_secret")
+
+        if not app_secret:
+            raise HTTPException(status_code=500, detail="Meta app secret is not configured")
+
+        body = await request.body()
+        signature = request.headers.get("X-Hub-Signature-256", "")
+
+        if not verify_signature(body, signature, app_secret):
+            raise HTTPException(status_code=400, detail="Invalid Meta signature")
+
+        try:
+            payload = json.loads(body.decode("utf-8"))
+        except json.JSONDecodeError:
+            raise HTTPException(status_code=400, detail="Invalid JSON")
+
+        object_type = payload.get("object")
+        entries = payload.get("entry", [])
+
+        for entry in entries:
+            for event in entry.get("messaging", []):
+                message = event.get("message", {})
+
+                # 機器人自己剛送出去的訊息也會被推播回來（is_echo），必須跳過，
+                # 否則會自問自答造成無窮迴圈。postback 等其他事件類型第一版先不處理。
+                if not message or message.get("is_echo"):
+                    continue
+
+                user_text = (message.get("text") or "").strip()
+                sender_id = (event.get("sender") or {}).get("id")
+
+                if not user_text or not sender_id:
+                    continue
+
+                if object_type == "page":
+                    page_access_token = chatbot.get("facebook_page_access_token")
+                    if not page_access_token:
+                        print("[Facebook Chat Error] page access token is not configured")
+                        continue
+
+                    reply_text = await _answer_and_log(user_text, chatbot_id, "Facebook")
+                    send_facebook_message(sender_id, reply_text, page_access_token)
+
+                elif object_type == "instagram":
+                    instagram_business_id = chatbot.get("instagram_business_id")
+                    instagram_access_token = chatbot.get("instagram_access_token")
+                    if not instagram_business_id or not instagram_access_token:
+                        print("[Instagram Chat Error] instagram credentials are not configured")
+                        continue
+
+                    reply_text = await _answer_and_log(user_text, chatbot_id, "Instagram")
+                    send_instagram_message(
+                        sender_id, reply_text, instagram_business_id, instagram_access_token
+                    )
+
+                # 其他 object 類型（例如未來的 whatsapp_business_account）先略過，不報錯。
+
+        # Meta 要求 Webhook 在合理時間內回 200，否則會重試；即使沒有可處理的事件也要回 200。
+        return {"status": "ok"}
+
+    return router

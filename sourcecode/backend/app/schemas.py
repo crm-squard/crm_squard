@@ -175,6 +175,12 @@ class ChatbotInfo(BaseModel):
     # LINE Channel ID 僅供管理端記錄，不參與 Webhook 驗證或 LINE API 呼叫。
     line_channel_id: Optional[str] = None
 
+    # Facebook Page ID 僅供管理端記錄，不參與 Webhook 驗證或 Send API 呼叫。
+    facebook_page_id: Optional[str] = None
+
+    # Instagram Business ID 僅供管理端記錄（也是呼叫 Instagram Send API 網址中的 ig 帳號 ID）。
+    instagram_business_id: Optional[str] = None
+
     # 這台「伺服器」能不能做 rerank（總開關、非 Cloud Run、binary 存在，見 reranker.is_supported()）。
     # 不是公司的屬性，但放在每筆公司資料裡，前端不用另外多打一支 API；後台頁面據此決定要不要停用開關。
     rerank_available: bool = Field(default_factory=lambda: _rerank_available())
@@ -240,6 +246,15 @@ class ChatbotUpdateRequest(BaseModel):
     line_channel_id: Optional[str] = Field(default=None, max_length=200)
     line_channel_secret: Optional[str] = Field(default=None, max_length=500)
     line_channel_access_token: Optional[str] = Field(default=None, max_length=2000)
+
+    # Meta 平台（Facebook 粉專 + Instagram 私訊）設定；app_secret／verify_token 是 Meta App 層級
+    # 的憑證，兩個管道共用。Page ID／Instagram Business ID 目前僅供記錄。
+    facebook_page_id: Optional[str] = Field(default=None, max_length=200)
+    facebook_app_secret: Optional[str] = Field(default=None, max_length=500)
+    facebook_page_access_token: Optional[str] = Field(default=None, max_length=2000)
+    facebook_verify_token: Optional[str] = Field(default=None, max_length=200)
+    instagram_business_id: Optional[str] = Field(default=None, max_length=200)
+    instagram_access_token: Optional[str] = Field(default=None, max_length=2000)
 
     _check_mcp_trigger_name = field_validator("mcp_trigger_name")(_normalize_mcp_trigger_name)
 

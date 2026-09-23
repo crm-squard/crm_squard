@@ -1,5 +1,6 @@
 import BookOutlined from "@ant-design/icons/BookOutlined";
 import CodeOutlined from "@ant-design/icons/CodeOutlined";
+import FacebookOutlined from "@ant-design/icons/FacebookOutlined";
 import FileTextOutlined from "@ant-design/icons/FileTextOutlined";
 import MessageOutlined from "@ant-design/icons/MessageOutlined";
 import SettingOutlined from "@ant-design/icons/SettingOutlined";
@@ -32,6 +33,15 @@ const items = [
       <span>
         <MessageOutlined />
         LINE BOT 設定
+      </span>
+    ),
+  },
+  {
+    key: "/chatbots/meta-settings",
+    label: (
+      <span>
+        <FacebookOutlined />
+        Facebook / Instagram 設定
       </span>
     ),
   },

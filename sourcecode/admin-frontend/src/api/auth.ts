@@ -32,6 +32,10 @@ export interface ChatbotInfo {
   rerank_enabled?: boolean;
   // LINE Channel ID 僅供管理端記錄；Secret / Access Token 不由一般 ChatbotInfo 回傳。
   line_channel_id?: string | null;
+  // Facebook Page ID 僅供管理端記錄；App Secret / Page Access Token / Verify Token 不由一般 ChatbotInfo 回傳。
+  facebook_page_id?: string | null;
+  // Instagram Business ID 僅供管理端記錄；Access Token 不由一般 ChatbotInfo 回傳。
+  instagram_business_id?: string | null;
   // 「伺服器」能不能做 rerank（正式環境 Cloud Run 固定為 false），不是公司屬性；
   // false 時設定頁把開關停用，不能開啟。
   rerank_available?: boolean;
