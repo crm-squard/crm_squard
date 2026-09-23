@@ -354,7 +354,7 @@ def _extract_pdf_text(raw_bytes: bytes) -> str:
 
 def _extract_docx_text(raw_bytes: bytes) -> str:
     """讀出 Word 文件每個段落的文字並用空行接起來；不保留標題階層，統一交給
-    parse_plain_text 依字數切段（見 app/rag/documents_store.py 的說明）。"""
+    parse_plain_text 用 SentenceSplitter 依句子邊界切段（見 app/rag/documents_store.py 的說明）。"""
     import io
 
     from docx import Document
@@ -372,7 +372,8 @@ def _extract_docx_text(raw_bytes: bytes) -> str:
 def _read_document_upload(file: UploadFile) -> tuple[bytes, str, Callable[[str, str], list[dict]]]:
     """驗證上傳檔案格式（.md／.pdf／.docx），讀出原始 bytes，並回傳解析成文字後的內容
     與對應的 chunk parser（.md 保留原本的 H1/H2 標題拆分；PDF/Word 沒有 Markdown 結構，
-    改用 parse_plain_text 依字數切段，見 app/rag/documents_store.py）。"""
+    改用 parse_plain_text 的 SentenceSplitter 依句子邊界、token 數切段並保留 overlap，
+    見 app/rag/documents_store.py）。"""
     from app.rag.documents_store import parse_generic_markdown, parse_plain_text
 
     filename = (file.filename or "").lower()
@@ -466,8 +467,8 @@ def upsert_document(
     不符直接回 400（避免預檢後檔案內容又被改動）——雜湊比對的對象固定是原始檔案 bytes，
     不是 PDF/Word 轉檔後的擷取文字（見 _read_document_upload()）。
 
-    支援 .md（保留原本的 H1/H2 標題拆分）、.pdf、.docx（沒有 Markdown 結構，依字數切段，
-    見 app/rag/documents_store.py 的 parse_plain_text）。
+    支援 .md（保留原本的 H1/H2 標題拆分）、.pdf、.docx（沒有 Markdown 結構，改用 SentenceSplitter
+    依句子邊界、token 數切段並保留 overlap，見 app/rag/documents_store.py 的 parse_plain_text）。
     """
     from app.rag.documents_store import (
         hash_content,
