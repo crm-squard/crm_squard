@@ -1,4 +1,4 @@
-import type { Account, AccountRole } from "./auth";
+import type { Account, AccountRole } from "../types/auth";
 import { requestAdminApi } from "./apiClient";
 
 // 帶 chatbotId：查這家公司綁定的商家帳號（公司設定頁「管理帳號」用，不含管理者帳號）。

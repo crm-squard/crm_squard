@@ -1,4 +1,4 @@
-import type { AccountRole } from "../api/auth";
+import type { AccountRole } from "../types/auth";
 
 export type AccountRoleTagColor = "primary" | "default";
 

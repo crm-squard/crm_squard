@@ -13,10 +13,9 @@ import {
   loginWithDevAccount,
   loginWithGoogle,
   logout as logoutApi,
-  type Account,
-  type ChatbotInfo,
 } from "../api/auth";
 import { setUnauthorizedHandler } from "../api/apiClient";
+import type { Account, ChatbotInfo } from "../types/auth";
 
 const STORAGE_KEY = "admin_auth_state";
 
