@@ -42,19 +42,14 @@
       <h1>CRM Chat Widget</h1>
       <p>此頁面用於本機及部署後的獨立介面驗證，聊天元件會自動顯示於右下角。</p>
     </main>
-    <script>
-      // 讀取網址的 clientId 參數，讓 https://.../?clientId=<商家 chatbot UUID>
-      // 可直接跳轉到對應商家的機器人；未帶參數時維持預設的 client_demo。
-      (function () {
-        var clientId =
-          new URLSearchParams(window.location.search).get("clientId") ||
-          "client_demo";
-        var script = document.createElement("script");
-        script.src = "/chat-widget.js";
-        script.dataset.clientId = clientId;
-        script.defer = true;
-        document.body.appendChild(script);
-      })();
-    </script>
+    <!--
+      本機 Widget 預覽與 Corp Frontend 固定使用相同的公開 Client ID，避免兩個開發入口查詢不同資料。
+      此值僅用於辨識商家，並非授權憑證；正式嵌入的值仍由 Corp Frontend 建置流程注入。
+    -->
+    <script
+      src="/chat-widget.js"
+      data-client-id="fa0e0ad1-ae3b-4ade-bc09-ae1f552ef55e"
+      defer
+    ></script>
   </body>
 </html>

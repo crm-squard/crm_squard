@@ -1,5 +1,6 @@
 import BookOutlined from "@ant-design/icons/BookOutlined";
 import CodeOutlined from "@ant-design/icons/CodeOutlined";
+import CustomerServiceOutlined from "@ant-design/icons/CustomerServiceOutlined";
 import FacebookOutlined from "@ant-design/icons/FacebookOutlined";
 import FileTextOutlined from "@ant-design/icons/FileTextOutlined";
 import MessageOutlined from "@ant-design/icons/MessageOutlined";
@@ -51,6 +52,15 @@ const items = [
       <span>
         <CodeOutlined />
         腳本設定
+      </span>
+    ),
+  },
+  {
+    key: "/chatbots/summary",
+    label: (
+      <span>
+        <CustomerServiceOutlined />
+        客服摘要
       </span>
     ),
   },

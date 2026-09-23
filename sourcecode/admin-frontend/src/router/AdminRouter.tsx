@@ -67,6 +67,7 @@ const router = createBrowserRouter([
         path: "chatbots/script-settings",
         element: loadPage(<ChatbotPlaceholderPage />),
       },
+      { path: "chatbots/summary", element: loadPage(<SummaryPage />) },
       {
         path: "chatbots/audit-log",
         element: loadPage(<AuditLogPage />),
@@ -89,7 +90,6 @@ const router = createBrowserRouter([
         path: "audit-log",
         element: <Navigate to="/chatbots/audit-log" replace />,
       },
-      { path: "summary", element: loadPage(<SummaryPage />) },
       { path: "admin-accounts", element: loadPage(<AdminAccountsPage />) },
       { path: "*", element: <Navigate to="/" replace /> },
     ],

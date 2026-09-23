@@ -7,8 +7,10 @@ import Tag from "antd/es/tag";
 import Typography from "antd/es/typography";
 import dayjs, { type Dayjs } from "dayjs";
 import { useEffect, useState } from "react";
+import { Navigate } from "react-router-dom";
 import AdminPageLayout from "../components/AdminPageLayout";
 import CardLoading from "../components/CardLoading";
+import ChatbotSettingsTabs from "../components/ChatbotSettingsTabs";
 import { useAuth } from "../auth/AuthContext";
 import { getDailySummary, type DailySummary } from "../api/summary";
 import { ui } from "../uiStyles";
@@ -77,6 +79,8 @@ export default function SummaryPage() {
     };
   }, [token, selectedChatbotId, date]);
 
+  if (!selectedChatbotId) return <Navigate to="/chatbots" replace />;
+
   return (
     <AdminPageLayout
       title="客服摘要"
@@ -90,7 +94,8 @@ export default function SummaryPage() {
         />
       }
     >
-      <Card>
+      <ChatbotSettingsTabs />
+      <Card className={ui.settingsCard}>
         {loading ? (
           <CardLoading label="客服摘要讀取中" />
         ) : error ? (
