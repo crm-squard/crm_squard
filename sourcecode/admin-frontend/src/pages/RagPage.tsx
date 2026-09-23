@@ -52,6 +52,9 @@ const { Text } = Typography;
 const { Dragger } = Upload;
 
 const ACCEPTED_EXTENSION = ".md";
+// 後端 embedding 是本地 CPU 推論（onnxruntime，見 backend/app/rag/onnx_embedding.py）。
+// 曾因 Cloud Run 只有 1 vCPU，並行處理搶同一顆 CPU 導致誤判失敗；已在 cloudbuild.yaml
+// 的 backend-deploy 加上 --cpu=2 --concurrency=10 給予足夠運算資源，這裡維持並行處理。
 const CONCURRENCY_LIMIT = 4;
 const DEFAULT_RAG_TOP_K = 5;
 const MAX_RAG_TOP_K = 10;

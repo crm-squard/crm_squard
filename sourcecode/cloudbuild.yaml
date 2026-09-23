@@ -49,6 +49,8 @@ steps:
       # ~500MB，Cloud Run 預設 512Mi 記憶體會不夠用，明確調高避免第一個產品問答請求就爆記憶體
       - '--memory=2Gi'
       - '--port=8000'
+      - '--cpu=2'
+      - '--concurrency=10'
 
   # 3.5 取得已部署的 Backend Cloud Run 服務網址
   - id: 'backend-url'
