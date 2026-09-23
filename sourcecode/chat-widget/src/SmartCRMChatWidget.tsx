@@ -50,11 +50,13 @@ export default function SmartCRMChatWidget({ clientId }: { clientId: string }) {
             logoUrl={config.logoUrl}
             onClose={() => setIsOpen(false)}
           />
-          <ProviderSelect
-            providers={providers}
-            value={provider}
-            onChange={setProvider}
-          />
+          {providers.length > 0 && (
+            <ProviderSelect
+              providers={providers}
+              value={provider}
+              onChange={setProvider}
+            />
+          )}
           <MessageList messages={messages} isSending={isSending} />
           {messages.length < 2 && (
             <div className={widgetUi.quickReplies}>
