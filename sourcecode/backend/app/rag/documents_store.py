@@ -29,6 +29,7 @@ import re
 from typing import Callable, Optional
 
 from llama_index.core import VectorStoreIndex
+from llama_index.core.node_parser import SentenceSplitter
 from llama_index.core.schema import NodeRelationship, RelatedNodeInfo, TextNode
 from sqlalchemy import text as sql_text
 
@@ -75,29 +76,17 @@ def parse_generic_markdown(raw_text: str, source: str) -> list[dict]:
     return chunks
 
 
-# PDF／Word 轉出的純文字沒有 Markdown 標題結構可循（PDF 更是完全沒有語意標記可言），
-# 硬套 parse_generic_markdown 的 H1/H2 規則在沒有 "##" 段落標題時會直接產出 0 個 chunk。
-# 改用「依空行分段落，累積到接近上限就切一個 chunk」的通用規則，不論來源格式都一定能切出
-# 至少一個 chunk。
-_PLAIN_TEXT_CHUNK_MAX_CHARS = 1000
+# PDF／Word 轉出的純文字沒有 Markdown 標題結構可循（PDF 更是完全沒有語意標記可言），硬套
+# parse_generic_markdown 的 H1/H2 規則在沒有 "##" 段落標題時會直接產出 0 個 chunk。改用
+# LlamaIndex 內建的 SentenceSplitter（本專案已經依賴 llama-index-core，見檔案頂端說明）：
+# 依句子邊界、以 token 數（而非字元數）切段，相鄰 chunk 間保留 overlap，避免答案剛好跨在
+# 切點上時檢索不到完整脈絡。chunk_size/chunk_overlap 選比預設值（1024/200）小的 512/50，
+# 對應 RAG 檢索偏好較小、較精準的 chunk。
+_PLAIN_TEXT_SPLITTER = SentenceSplitter(chunk_size=512, chunk_overlap=50)
 
 
 def parse_plain_text(raw_text: str, source: str) -> list[dict]:
-    """給沒有 Markdown 結構的純文字使用（PDF／Word 轉出的內容）：依空行切段落，
-    連續段落累積到接近字數上限就切一個 chunk，避免整份文件塞成一個過大的向量。"""
-    paragraphs = [p.strip() for p in re.split(r"\n\s*\n", raw_text) if p.strip()]
-    grouped: list[str] = []
-    buffer: list[str] = []
-    buffer_len = 0
-    for para in paragraphs:
-        if buffer and buffer_len + len(para) > _PLAIN_TEXT_CHUNK_MAX_CHARS:
-            grouped.append("\n\n".join(buffer))
-            buffer, buffer_len = [], 0
-        buffer.append(para)
-        buffer_len += len(para)
-    if buffer:
-        grouped.append("\n\n".join(buffer))
-
+    """給沒有 Markdown 結構的純文字使用（PDF／Word 轉出的內容），見上方 _PLAIN_TEXT_SPLITTER 說明。"""
     return [
         {
             "text": text,
@@ -106,7 +95,7 @@ def parse_plain_text(raw_text: str, source: str) -> list[dict]:
             "category": "",
             "product_id": "",
         }
-        for i, text in enumerate(grouped)
+        for i, text in enumerate(_PLAIN_TEXT_SPLITTER.split_text(raw_text))
     ]
 
 

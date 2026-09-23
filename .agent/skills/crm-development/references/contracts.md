@@ -144,7 +144,8 @@ bytes**，不是 PDF/Word 轉檔後擷取出來的文字（前端沒辦法在瀏
 `content_hash`／`file_size_bytes` 也是以這個雜湊與原始檔案大小為準，跟解析出多少 chunk 無關。
 
 **支援的檔案格式**：`.md`（純文字，UTF-8，用 H1/H2 標題拆分）、`.pdf`、`.docx`（沒有 Markdown 標題結構，
-依字數切段，見 `app/rag/documents_store.py` 的 `parse_plain_text`）。副檔名以外的格式一律回 `400`；
+改用 LlamaIndex SentenceSplitter 依句子邊界、token 數切段並保留 overlap，見 `app/rag/documents_store.py`
+的 `parse_plain_text`）。副檔名以外的格式一律回 `400`；
 PDF 是掃描圖片、抽不出文字（不支援 OCR）或檔案本身損毀時也回 `400`。
 
 ### `GET /api/admin/documents`
