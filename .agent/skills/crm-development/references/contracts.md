@@ -88,32 +88,38 @@ Widget 呼叫時必須帶入企業客戶識別 Header：`X-Client-ID: <assigned-
 Callback URL／Verify Token」，不是每個產品各自一組，所以 Facebook 粉專與 Instagram 私訊**共用同一個
 端點** `/meta/webhook/{chatbot_id}`，依收到的 `payload.object` 分流處理。
 
-每家公司各自的憑證存在 `chatbots` 表：`facebook_app_secret`／`facebook_verify_token` 是這個 Meta App
-層級的憑證（Facebook／Instagram 共用一份，欄位名是第一版留下的命名，不代表只用於 Facebook）；
-`facebook_page_id`（僅供管理端記錄）、`facebook_page_access_token`（呼叫 Facebook Send API 回覆用）；
-`instagram_business_id`（僅供管理端記錄，也是呼叫 Instagram Send API 網址裡的 ig 帳號 ID）、
-`instagram_access_token`（呼叫 Instagram Send API 回覆用）。`ChatbotInfo` 只回傳 `facebook_page_id`
-與 `instagram_business_id`；其餘欄位跟 LINE 一樣不會出現在任何一般查詢結果，只能透過
-`PUT /api/admin/chatbots/{chatbot_id}` 寫入（不帶＝不變更）。
+每家公司各自的憑證存在 `chatbots` 表：`facebook_verify_token` 是這個 Meta App 層級的憑證
+（Facebook／Instagram 共用一份，用來核對 `GET` 驗證請求）；`facebook_app_secret` 驗證 `object=="page"`
+請求的簽章、`facebook_page_id`（僅供管理端記錄）、`facebook_page_access_token`（呼叫 Facebook Send
+API 回覆用）；`instagram_app_secret` 驗證 `object=="instagram"` 請求的簽章——**這組密鑰跟
+`facebook_app_secret` 不同**，是 Meta 後台建立「Instagram API」子產品時獨立產生的 App Secret，
+用錯密鑰會讓 Instagram 的簽章一律驗證失敗且無聲拒絕；`instagram_business_id`（僅供管理端記錄，也是
+呼叫 Instagram Send API 網址裡的 ig 帳號 ID）、`instagram_access_token`（呼叫 Instagram Send API
+回覆用）。`ChatbotInfo` 只回傳 `facebook_page_id` 與 `instagram_business_id`；其餘欄位跟 LINE 一樣
+不會出現在任何一般查詢結果，只能透過 `PUT /api/admin/chatbots/{chatbot_id}` 寫入（不帶＝不變更）。
 
 - `GET /meta/webhook/{chatbot_id}`：Meta 設定 Webhook 時的驗證請求，帶 `hub.mode`、
   `hub.verify_token`、`hub.challenge`（query string）；`hub.mode == "subscribe"` 且
   `hub.verify_token` 與該公司 `facebook_verify_token` 相符時，原樣回傳 `hub.challenge`（純文字）；
   否則回 `403`。
-- `POST /meta/webhook/{chatbot_id}`：接收訊息事件，驗證 `X-Hub-Signature-256`
-  （HMAC-SHA256，格式 `sha256=<hex>`，簽 raw body，用 `facebook_app_secret`）。依 `payload.object`
-  分流：`"page"` 走 Facebook Messenger（`sender.id` 是 PSID，回覆用 `facebook_page_access_token`
-  呼叫 Facebook Send API）；`"instagram"` 走 Instagram 私訊（`sender.id` 是 IGSID，回覆用
-  `instagram_business_id`／`instagram_access_token` 呼叫 Instagram Send API）；其他 `object`
-  一律略過、不報錯。兩個管道都只處理 `message.text` 存在、且非 `message.is_echo`（機器人自己送出的
-  訊息會被推播回來，必須跳過避免自問自答）的事件；provider 固定 `google`，不帶歷史對話；
-  `log_chat` 的 `client_ip` 依管道記成 `"Facebook"`／`"Instagram"`，方便在聊天紀錄分辨來源。
-  查不到公司、缺 `facebook_app_secret`、簽章不符時分別回 `404`／`500`／`400`；缺該管道的
-  Access Token（例如只設定了 Facebook、沒設定 Instagram）只印 log 略過該事件，不影響其他事件或
-  整支請求；整支請求一律回 `{"status": "ok"}`（Meta 要求 Webhook 在合理時間內回 200，否則會重試）。
-- Instagram Messaging API 採用「沿用粉專連動」的整合方式（跟 Facebook 共用同一個 Meta App、後台
-  設定步驟一致）；Meta 近年也在推廣獨立的 Instagram 帳號登入新版 API，若實際串接時走的是那條新
-  流程，`instagram_access_token` 的取得方式與 Send API 網址可能需要依當下 Meta 文件調整。
+- `POST /meta/webhook/{chatbot_id}`：接收訊息事件，先解析 `payload.object` 決定用哪組密鑰驗證
+  `X-Hub-Signature-256`（HMAC-SHA256，格式 `sha256=<hex>`，簽 raw body）：`"page"` 用
+  `facebook_app_secret`、`"instagram"` 用 `instagram_app_secret`。驗證通過後依 `object` 分流：
+  `"page"` 走 Facebook Messenger（`sender.id` 是 PSID，回覆用 `facebook_page_access_token` 呼叫
+  `https://graph.facebook.com/v21.0/me/messages`）；`"instagram"` 走 Instagram 私訊（`sender.id`
+  是 IGSID，回覆用 `instagram_business_id`／`instagram_access_token` 呼叫
+  `https://graph.instagram.com/v21.0/{instagram_business_id}/messages`——這是「Instagram API with
+  Instagram Login」流程專屬的主機，跟 Facebook 的 `graph.facebook.com` 不同，用錯主機會讓回覆送出
+  失敗）；其他 `object` 一律略過、不報錯。兩個管道都只處理 `message.text` 存在、且非
+  `message.is_echo`（機器人自己送出的訊息會被推播回來，必須跳過避免自問自答）的事件；provider 固定
+  `google`，不帶歷史對話；`log_chat` 的 `client_ip` 依管道記成 `"Facebook"`／`"Instagram"`，方便在
+  聊天紀錄分辨來源。查不到公司、缺對應的 App Secret、簽章不符時分別回 `404`／`500`／`400`；缺該
+  管道的 Access Token（例如只設定了 Facebook、沒設定 Instagram）只印 log 略過該事件，不影響其他
+  事件或整支請求；整支請求一律回 `{"status": "ok"}`（Meta 要求 Webhook 在合理時間內回 200，否則
+  會重試）。
+- Instagram 陌生訊息（對方未追蹤、非聯絡人）第一則會落在 Instagram App 的「邀請」匣，須由粉專
+  端在 App 裡手動「接受」後，Webhook 才會正常觸發；接受之前傳的訊息不會補觸發。這是 Instagram
+  平台本身的防騷擾機制，無法透過 API 或設定繞過。
 
 ## 其他端點
 

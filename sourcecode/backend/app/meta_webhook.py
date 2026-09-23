@@ -27,10 +27,12 @@ from app.chat_log import log_chat
 
 FACEBOOK_SEND_API = "https://graph.facebook.com/v21.0/me/messages"
 
-# Instagram Messaging API 這裡採用「沿用粉專連動」的整合方式（跟 Facebook 共用同一個 Meta App、
-# 後台設定步驟一致）。Meta 近年也在推廣獨立的 Instagram 帳號登入新版 API，若實際串接時 Meta 後台
-# 走的是那條新流程，instagram_access_token 的取得方式與下面這個 Send API 網址可能需要調整。
-INSTAGRAM_SEND_API_TEMPLATE = "https://graph.facebook.com/v21.0/{ig_id}/messages"
+# 走的是「Instagram API with Instagram Login」這條新流程（後台「含有 Instagram 登入的
+# API 設定」分頁，取得的是 instagram_business_basic／instagram_business_manage_messages
+# 權限），這條流程的所有端點主機是 graph.instagram.com，不是 graph.facebook.com——
+# 之前誤用 graph.facebook.com 會讓回覆送出失敗（收到訊息、RAG 也答得出來，但 Send API
+# 呼叫失敗，使用者端完全看不到任何回覆）。
+INSTAGRAM_SEND_API_TEMPLATE = "https://graph.instagram.com/v21.0/{ig_id}/messages"
 
 
 def create_meta_router(
