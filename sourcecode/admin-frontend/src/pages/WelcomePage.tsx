@@ -15,8 +15,11 @@ import ThunderboltOutlined from "@ant-design/icons/ThunderboltOutlined";
 import UpOutlined from "@ant-design/icons/UpOutlined";
 import { useRef, type MouseEvent, type ReactNode } from "react";
 import { Link } from "react-router-dom";
+import ChatWidgetPreview from "../components/ChatWidgetPreview";
 import { welcome } from "../welcomeStyles";
 import { tw } from "../utils/tw";
+
+const WELCOME_CHATBOT_ID = "fba75d15-53a5-4a60-b874-b2224cb36a37";
 
 const stats: Array<{ icon: ReactNode; value: string; label: string }> = [
   {
@@ -110,6 +113,7 @@ export default function WelcomePage() {
 
   return (
     <main className={welcome.page}>
+      <ChatWidgetPreview chatbotId={WELCOME_CHATBOT_ID} />
       {/* 1. Hero */}
       <section className={tw(welcome.section, welcome.heroSection)}>
         <div className={welcome.container}>
