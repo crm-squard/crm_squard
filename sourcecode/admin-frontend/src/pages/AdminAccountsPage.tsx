@@ -7,6 +7,7 @@ import { createAccount, deleteAccount, listAccounts } from "../api/accounts";
 import type { Account } from "../api/auth";
 import AccountManagementCard from "../components/AccountManagementCard";
 import AdminPageLayout from "../components/AdminPageLayout";
+import { ACCOUNT_ROLE_DISPLAY } from "../config/accountRoles";
 
 /**
  * 管理者帳號頁籤：只有 platform_primary／platform_secondary 看得到，跟商家帳號完全分開
@@ -102,11 +103,9 @@ export default function AdminAccountsPage() {
         removeConfirmTitle="確定要移除這個管理者帳號嗎？"
         removeConfirmDescription="移除後該帳號會立刻無法登入。"
         form={form}
-        getRoleLabel={(account) =>
-          account.role === "platform_primary" ? "主管理者" : "副管理者"
-        }
+        getRoleLabel={(account) => ACCOUNT_ROLE_DISPLAY[account.role].label}
         getRoleTagColor={(account) =>
-          account.role === "platform_primary" ? "primary" : "default"
+          ACCOUNT_ROLE_DISPLAY[account.role].tagColor
         }
         onAdd={handleAdd}
         onRemove={handleRemove}

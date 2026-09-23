@@ -15,9 +15,10 @@ import Menu from "antd/es/menu";
 import Tooltip from "antd/es/tooltip";
 import { useEffect, useState } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
-import BrandMark from "./BrandMark";
 import { useAuth } from "../auth/AuthContext";
+import { ACCOUNT_ROLE_DISPLAY } from "../config/accountRoles";
 import { ui } from "../uiStyles";
+import BrandMark from "./BrandMark";
 
 const { Header, Sider, Content } = Layout;
 
@@ -44,6 +45,12 @@ function resolveSelectedKey(pathname: string) {
   return "/chatbots";
 }
 
+function getAccountName(email?: string) {
+  if (!email) return "-";
+  const atIndex = email.indexOf("@");
+  return atIndex > 0 ? email.slice(0, atIndex) : email;
+}
+
 export default function AdminLayout() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -58,6 +65,10 @@ export default function AdminLayout() {
   const menuItems = isPlatformRole
     ? [...navigationItems, ADMIN_ACCOUNTS_ITEM]
     : navigationItems;
+  const accountRoleDisplay = account
+    ? ACCOUNT_ROLE_DISPLAY[account.role]
+    : null;
+  const accountName = getAccountName(account?.email);
 
   async function handleLogout() {
     await logout();
@@ -138,8 +149,16 @@ export default function AdminLayout() {
             />
           </Tooltip>
           <Dropdown
+            rootClassName={ui.accountDropdown}
             menu={{
               items: [
+                {
+                  key: "account-email",
+                  className: ui.accountDropdownEmail,
+                  disabled: true,
+                  label: account?.email ?? "-",
+                },
+                { type: "divider" },
                 { key: "logout", icon: <LogoutOutlined />, label: "登出" },
               ],
               onClick: ({ key }) => {
@@ -155,8 +174,10 @@ export default function AdminLayout() {
             >
               <Avatar icon={<UserOutlined />} />
               <span>
-                <strong>{account?.email ?? "-"}</strong>
-                <small>{account?.role ?? ""}</small>
+                <strong>{accountName}</strong>
+                <small className="text-admin-text-secondary">
+                  {accountRoleDisplay?.label ?? ""}
+                </small>
               </span>
             </Button>
           </Dropdown>
