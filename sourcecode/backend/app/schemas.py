@@ -255,6 +255,9 @@ class ChatbotUpdateRequest(BaseModel):
     facebook_verify_token: Optional[str] = Field(default=None, max_length=200)
     instagram_business_id: Optional[str] = Field(default=None, max_length=200)
     instagram_access_token: Optional[str] = Field(default=None, max_length=2000)
+    # Instagram 這個子產品有自己獨立的 App Secret（跟 facebook_app_secret 不同），
+    # 驗證 Instagram 訊息的 Webhook 簽章要用這組，不能沿用主 App 的密鑰。
+    instagram_app_secret: Optional[str] = Field(default=None, max_length=500)
 
     _check_mcp_trigger_name = field_validator("mcp_trigger_name")(_normalize_mcp_trigger_name)
 

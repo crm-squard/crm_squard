@@ -222,18 +222,8 @@ def create_meta_router(
         if not chatbot:
             raise HTTPException(status_code=404, detail="Chatbot not found")
 
-        # App Secret／Verify Token 是這個 Meta App 層級的憑證，Facebook／Instagram 共用；
-        # 欄位名沿用 facebook_* 是第一版留下的命名，語意上代表「這個 Meta App」而不限於粉專。
-        app_secret = chatbot.get("facebook_app_secret")
-
-        if not app_secret:
-            raise HTTPException(status_code=500, detail="Meta app secret is not configured")
-
         body = await request.body()
         signature = request.headers.get("X-Hub-Signature-256", "")
-
-        if not verify_signature(body, signature, app_secret):
-            raise HTTPException(status_code=400, detail="Invalid Meta signature")
 
         try:
             payload = json.loads(body.decode("utf-8"))
@@ -242,6 +232,23 @@ def create_meta_router(
 
         object_type = payload.get("object")
         entries = payload.get("entry", [])
+
+        # Verify Token 是 Meta App 層級、Facebook／Instagram 共用；但簽章用的 App Secret
+        # 不是——Meta 用「Instagram API」這個子產品自己的 App Secret（跟主 App 的
+        # facebook_app_secret 不同）簽 object=="instagram" 的請求，用主 App 的
+        # facebook_app_secret 簽 object=="page" 的請求。用錯密鑰會讓簽章一律驗證失敗，
+        # 而且是無聲的（webhook 收到請求但直接被拒絕，機器人永遠不會回覆）。
+        app_secret = (
+            chatbot.get("instagram_app_secret")
+            if object_type == "instagram"
+            else chatbot.get("facebook_app_secret")
+        )
+
+        if not app_secret:
+            raise HTTPException(status_code=500, detail="Meta app secret is not configured")
+
+        if not verify_signature(body, signature, app_secret):
+            raise HTTPException(status_code=400, detail="Invalid Meta signature")
 
         for entry in entries:
             for event in entry.get("messaging", []):

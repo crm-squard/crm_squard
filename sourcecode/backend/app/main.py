@@ -594,6 +594,7 @@ def update_chatbot(
         facebook_verify_token=req.facebook_verify_token,
         instagram_business_id=req.instagram_business_id,
         instagram_access_token=req.instagram_access_token,
+        instagram_app_secret=req.instagram_app_secret,
     )
     if chatbot is None:
         raise HTTPException(status_code=404, detail="查無這家公司。")

@@ -26,6 +26,7 @@ interface MetaBotSettingsForm {
   facebook_page_access_token?: string;
   instagram_business_id?: string;
   instagram_access_token?: string;
+  instagram_app_secret?: string;
 }
 
 export default function MetaBotSettingsPage() {
@@ -51,6 +52,7 @@ export default function MetaBotSettingsPage() {
       facebook_page_access_token: "",
       instagram_business_id: chatbot.instagram_business_id ?? "",
       instagram_access_token: "",
+      instagram_app_secret: "",
     });
   }, [chatbot, form]);
 
@@ -84,6 +86,10 @@ export default function MetaBotSettingsPage() {
         ...(values.instagram_access_token
           ? { instagram_access_token: values.instagram_access_token }
           : {}),
+
+        ...(values.instagram_app_secret
+          ? { instagram_app_secret: values.instagram_app_secret }
+          : {}),
       });
 
       form.setFieldsValue({
@@ -91,6 +97,7 @@ export default function MetaBotSettingsPage() {
         facebook_verify_token: "",
         facebook_page_access_token: "",
         instagram_access_token: "",
+        instagram_app_secret: "",
       });
 
       await refreshMe();
@@ -206,6 +213,17 @@ export default function MetaBotSettingsPage() {
               extra="僅供 CRM 記錄，不參與 Webhook 驗證。"
             >
               <Input placeholder="請輸入 Instagram Business Account ID" />
+            </Form.Item>
+
+            <Form.Item
+              name="instagram_app_secret"
+              label="Instagram App Secret"
+              extra="Meta 後台「Instagram API」子產品自己的 App Secret，跟上面 Meta App 設定的 App Secret 不同，用於驗證 Instagram 訊息的 Webhook 簽章；留空表示不變更目前設定。"
+            >
+              <Input.Password
+                autoComplete="new-password"
+                placeholder="請輸入 Instagram App Secret"
+              />
             </Form.Item>
 
             <Form.Item

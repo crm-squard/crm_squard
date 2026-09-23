@@ -65,6 +65,7 @@ export async function updateChatbot(
     facebook_verify_token?: string;
     instagram_business_id?: string;
     instagram_access_token?: string;
+    instagram_app_secret?: string;
   },
 ): Promise<ChatbotInfo> {
   return requestAdminApi<ChatbotInfo>(
