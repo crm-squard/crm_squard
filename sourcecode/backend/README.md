@@ -172,8 +172,9 @@ top-k**，不報錯、行為與沒開一樣。伺服器不支援時，後台開�
 ## 知識庫文件管理
 
 下列 API 依賴 llamaindex 引擎的 pgvector 索引（唯一支援的引擎）。
-新增/更新是上傳 `.md` 檔（`multipart/form-data`），不是 JSON body；**目前只支援 `.md`**，
-其他副檔名或非 UTF-8 編碼一律回 400：
+新增/更新是上傳檔案（`multipart/form-data`），不是 JSON body；**支援 `.md`（需 UTF-8）、`.pdf`、`.docx`**，
+其他副檔名、非 UTF-8 的 `.md`、或 PDF/Word 解析失敗一律回 400（PDF/Word 沒有 Markdown 標題結構，
+依字數切段，見 `app/rag/documents_store.py` 的 `parse_plain_text`）：
 
 | Method | Path | 說明 |
 |---|---|---|

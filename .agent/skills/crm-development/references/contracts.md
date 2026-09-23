@@ -139,7 +139,13 @@ Callback URL／Verify Token」，不是每個產品各自一組，所以 Faceboo
 
 **`client_sha256` 是硬性檢查**：只要帶了 `file`，伺服器就會重新計算雜湊，跟 `client_sha256` 不一致
 會回 `400`（訊息：`檔案內容與上傳前計算的雜湊不符，請重新選檔上傳。`），不是只回傳給前端自行比對——
-設計上就是要擋下請求，避免預檢（precheck）後檔案內容又被改動。
+設計上就是要擋下請求，避免預檢（precheck）後檔案內容又被改動。雜湊比對的對象固定是**原始上傳檔案
+bytes**，不是 PDF/Word 轉檔後擷取出來的文字（前端沒辦法在瀏覽器端重現轉檔結果，只能對原始檔案算雜湊）；
+`content_hash`／`file_size_bytes` 也是以這個雜湊與原始檔案大小為準，跟解析出多少 chunk 無關。
+
+**支援的檔案格式**：`.md`（純文字，UTF-8，用 H1/H2 標題拆分）、`.pdf`、`.docx`（沒有 Markdown 標題結構，
+依字數切段，見 `app/rag/documents_store.py` 的 `parse_plain_text`）。副檔名以外的格式一律回 `400`；
+PDF 是掃描圖片、抽不出文字（不支援 OCR）或檔案本身損毀時也回 `400`。
 
 ### `GET /api/admin/documents`
 
@@ -204,7 +210,8 @@ Form 欄位：`tags`（可重複的同名欄位，對應 `list[str]`，不帶則
 
 回應為 `DocumentInfo`：`path` 是這次的路徑，`content_hash` 就是送出的 `client_sha256`。
 
-錯誤：非 `.md` 或非 UTF-8 回 `400`；帶了 `file` 但 `client_sha256` 與伺服器重算結果不符回 `400`；
+錯誤：非 `.md`／`.pdf`／`.docx`、`.md` 非 UTF-8、或 PDF/Word 解析失敗（損毀、PDF 為掃描圖片抽不出文字）
+均回 `400`；帶了 `file` 但 `client_sha256` 與伺服器重算結果（原始檔案 bytes 的雜湊）不符回 `400`；
 沒帶 `file` 但路徑不存在、雜湊也沒命中任何既有內容（無法生出內容）回 `400`。
 
 ### `DELETE /api/admin/documents/{path}`

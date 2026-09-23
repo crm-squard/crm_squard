@@ -14,7 +14,7 @@ from collections import defaultdict, deque
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
-from typing import Literal
+from typing import Callable, Literal
 
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -335,15 +335,58 @@ def list_documents(chatbot_id: str = Query(...), _account: dict = Depends(auth.r
     return DocumentListResponse(documents=[DocumentInfo(**d) for d in docs])
 
 
-def _read_md_upload(file: UploadFile) -> str:
-    """驗證上傳檔案是 .md，讀成文字。目前只支援純文字 markdown，其他格式一律拒絕。"""
-    if not file.filename or not file.filename.lower().endswith(".md"):
-        raise HTTPException(status_code=400, detail="目前只支援 .md 檔案。")
-    raw_bytes = file.file.read()
+def _extract_pdf_text(raw_bytes: bytes) -> str:
+    """讀出 PDF 每一頁的文字並用空行接起來；掃描圖片型 PDF 抽不出文字會回錯誤，
+    這類檔案需要 OCR 才能處理，目前不支援。"""
+    import io
+
+    from pypdf import PdfReader
+
     try:
-        return raw_bytes.decode("utf-8")
-    except UnicodeDecodeError:
-        raise HTTPException(status_code=400, detail="檔案編碼須為 UTF-8。")
+        pages = [page.extract_text() or "" for page in PdfReader(io.BytesIO(raw_bytes)).pages]
+    except Exception:
+        raise HTTPException(status_code=400, detail="無法解析 PDF 檔案內容，請確認檔案未損毀。")
+    text = "\n\n".join(p for p in pages if p.strip())
+    if not text.strip():
+        raise HTTPException(status_code=400, detail="PDF 檔案沒有可擷取的文字內容（掃描圖片型 PDF 暫不支援）。")
+    return text
+
+
+def _extract_docx_text(raw_bytes: bytes) -> str:
+    """讀出 Word 文件每個段落的文字並用空行接起來；不保留標題階層，統一交給
+    parse_plain_text 依字數切段（見 app/rag/documents_store.py 的說明）。"""
+    import io
+
+    from docx import Document
+
+    try:
+        paragraphs = [p.text for p in Document(io.BytesIO(raw_bytes)).paragraphs]
+    except Exception:
+        raise HTTPException(status_code=400, detail="無法解析 Word 檔案內容，請確認檔案未損毀。")
+    text = "\n\n".join(p for p in paragraphs if p.strip())
+    if not text.strip():
+        raise HTTPException(status_code=400, detail="Word 檔案沒有可擷取的文字內容。")
+    return text
+
+
+def _read_document_upload(file: UploadFile) -> tuple[bytes, str, Callable[[str, str], list[dict]]]:
+    """驗證上傳檔案格式（.md／.pdf／.docx），讀出原始 bytes，並回傳解析成文字後的內容
+    與對應的 chunk parser（.md 保留原本的 H1/H2 標題拆分；PDF/Word 沒有 Markdown 結構，
+    改用 parse_plain_text 依字數切段，見 app/rag/documents_store.py）。"""
+    from app.rag.documents_store import parse_generic_markdown, parse_plain_text
+
+    filename = (file.filename or "").lower()
+    raw_bytes = file.file.read()
+    if filename.endswith(".md"):
+        try:
+            return raw_bytes, raw_bytes.decode("utf-8"), parse_generic_markdown
+        except UnicodeDecodeError:
+            raise HTTPException(status_code=400, detail="檔案編碼須為 UTF-8。")
+    if filename.endswith(".pdf"):
+        return raw_bytes, _extract_pdf_text(raw_bytes), parse_plain_text
+    if filename.endswith(".docx"):
+        return raw_bytes, _extract_docx_text(raw_bytes), parse_plain_text
+    raise HTTPException(status_code=400, detail="目前只支援 .md、.pdf、.docx 檔案。")
 
 
 def _check_client_hash(server_hash: str, client_sha256: str):
@@ -420,17 +463,31 @@ def upsert_document(
 
     `file` 只有在真的需要新內容（新文件／內容變更）時才要帶；純改標籤或掛到既有內容
     （雜湊已經存在別處）不需要上傳檔案。帶了 file 的情況一律先驗證雜湊，跟 client_sha256
-    不符直接回 400（避免預檢後檔案內容又被改動）。
+    不符直接回 400（避免預檢後檔案內容又被改動）——雜湊比對的對象固定是原始檔案 bytes，
+    不是 PDF/Word 轉檔後的擷取文字（見 _read_document_upload()）。
+
+    支援 .md（保留原本的 H1/H2 標題拆分）、.pdf、.docx（沒有 Markdown 結構，依字數切段，
+    見 app/rag/documents_store.py 的 parse_plain_text）。
     """
-    from app.rag.documents_store import hash_content, upsert_document as _upsert_document
+    from app.rag.documents_store import (
+        hash_content,
+        parse_generic_markdown,
+        upsert_document as _upsert_document,
+    )
 
     index = _get_llamaindex_index()
     raw_text = None
+    parser = parse_generic_markdown
+    file_size_bytes = None
     if file is not None:
-        raw_text = _read_md_upload(file)
-        _check_client_hash(hash_content(raw_text), client_sha256)
+        raw_bytes, raw_text, parser = _read_document_upload(file)
+        _check_client_hash(hash_content(raw_bytes), client_sha256)
+        file_size_bytes = len(raw_bytes)
     try:
-        result = _upsert_document(chatbot_id, path, tags, client_sha256, raw_text, index)
+        result = _upsert_document(
+            chatbot_id, path, tags, client_sha256, raw_text, index,
+            parser=parser, file_size_bytes=file_size_bytes,
+        )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:

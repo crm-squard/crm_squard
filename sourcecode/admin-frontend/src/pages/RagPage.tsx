@@ -51,7 +51,7 @@ import { tw } from "../utils/tw";
 const { Text } = Typography;
 const { Dragger } = Upload;
 
-const ACCEPTED_EXTENSION = ".md";
+const ACCEPTED_EXTENSIONS = [".md", ".pdf", ".docx"];
 // 後端 embedding 是本地 CPU 推論（onnxruntime，見 backend/app/rag/onnx_embedding.py）。
 // 曾因 Cloud Run 只有 1 vCPU，並行處理搶同一顆 CPU 導致誤判失敗；已在 cloudbuild.yaml
 // 的 backend-deploy 加上 --cpu=2 --concurrency=10 給予足夠運算資源，這裡維持並行處理。
@@ -80,8 +80,9 @@ interface StaleRow {
   progress: RowProgress;
 }
 
-function isMarkdownFile(file: File): boolean {
-  return file.name.toLowerCase().endsWith(ACCEPTED_EXTENSION);
+function isAcceptedFile(file: File): boolean {
+  const name = file.name.toLowerCase();
+  return ACCEPTED_EXTENSIONS.some((ext) => name.endsWith(ext));
 }
 
 function formatBytes(bytes: number | null): string {
@@ -372,16 +373,16 @@ export default function AdminDocumentsPage() {
   }
 
   function addSelectedFiles(files: File[]) {
-    const mdFiles = files.filter(isMarkdownFile);
-    const rejectedCount = files.length - mdFiles.length;
+    const acceptedFiles = files.filter(isAcceptedFile);
+    const rejectedCount = files.length - acceptedFiles.length;
     if (rejectedCount > 0) setSkippedCount((count) => count + rejectedCount);
-    if (mdFiles.length === 0) return;
+    if (acceptedFiles.length === 0) return;
 
     setSelectedFiles((currentFiles) => {
       const merged = new Map(
         currentFiles.map((file) => [getSelectionKey(file), file]),
       );
-      mdFiles.forEach((file) => merged.set(getSelectionKey(file), file));
+      acceptedFiles.forEach((file) => merged.set(getSelectionKey(file), file));
       return Array.from(merged.values());
     });
     invalidatePrecheck();
@@ -672,10 +673,10 @@ export default function AdminDocumentsPage() {
                     <InboxOutlined />
                   </p>
                   <p className="ant-upload-text">
-                    拖曳 Markdown 檔案或整個資料夾至此
+                    拖曳 Markdown／PDF／Word 檔案或整個資料夾至此
                   </p>
                   <p className="ant-upload-hint">
-                    支援單一檔案、多檔案與資料夾；只會加入 .md
+                    支援單一檔案、多檔案與資料夾；只會加入 .md、.pdf、.docx
                     檔案，不會立即上傳。
                   </p>
                   <Space className={ui.ragPickerActions} wrap>
@@ -704,7 +705,7 @@ export default function AdminDocumentsPage() {
                   ref={filesInputRef}
                   className={ui.visuallyHidden}
                   type="file"
-                  accept={ACCEPTED_EXTENSION}
+                  accept={ACCEPTED_EXTENSIONS.join(",")}
                   multiple
                   onChange={handleFilesInputChange}
                 />
@@ -770,10 +771,10 @@ export default function AdminDocumentsPage() {
                 <div className={ui.ragSelectionSummary}>
                   <Text type="secondary">
                     {selectedFiles.length > 0
-                      ? `已選取 ${selectedFiles.length} 個 .md 檔案`
+                      ? `已選取 ${selectedFiles.length} 個檔案`
                       : "尚未選取檔案"}
                     {skippedCount > 0
-                      ? `，已略過 ${skippedCount} 個非 .md 檔案`
+                      ? `，已略過 ${skippedCount} 個不支援的檔案`
                       : ""}
                   </Text>
                   <Button

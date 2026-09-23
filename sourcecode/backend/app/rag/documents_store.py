@@ -38,8 +38,11 @@ from app.db import get_engine as _get_engine
 Parser = Callable[[str, str], list[dict]]
 
 
-def hash_content(raw_text: str) -> str:
-    return hashlib.sha256(raw_text.encode("utf-8")).hexdigest()
+def hash_content(raw_bytes: bytes) -> str:
+    """雜湊的是原始上傳檔案 bytes，不是解析／轉檔後的文字——PDF/Word 轉出的純文字沒辦法在
+    瀏覽器端重現，client_sha256 只能由前端對原始檔案 bytes 計算，所以身分比對一律以這個為準
+    （見 app/main.py 的 _check_client_hash() 呼叫端）。"""
+    return hashlib.sha256(raw_bytes).hexdigest()
 
 
 # 通用 markdown 拆分邏輯：依 H1（文件標題）/H2（小節標題）切段落，每個 H2 小節是一個 chunk。
@@ -70,6 +73,41 @@ def parse_generic_markdown(raw_text: str, source: str) -> list[dict]:
             "product_id": "",
         })
     return chunks
+
+
+# PDF／Word 轉出的純文字沒有 Markdown 標題結構可循（PDF 更是完全沒有語意標記可言），
+# 硬套 parse_generic_markdown 的 H1/H2 規則在沒有 "##" 段落標題時會直接產出 0 個 chunk。
+# 改用「依空行分段落，累積到接近上限就切一個 chunk」的通用規則，不論來源格式都一定能切出
+# 至少一個 chunk。
+_PLAIN_TEXT_CHUNK_MAX_CHARS = 1000
+
+
+def parse_plain_text(raw_text: str, source: str) -> list[dict]:
+    """給沒有 Markdown 結構的純文字使用（PDF／Word 轉出的內容）：依空行切段落，
+    連續段落累積到接近字數上限就切一個 chunk，避免整份文件塞成一個過大的向量。"""
+    paragraphs = [p.strip() for p in re.split(r"\n\s*\n", raw_text) if p.strip()]
+    grouped: list[str] = []
+    buffer: list[str] = []
+    buffer_len = 0
+    for para in paragraphs:
+        if buffer and buffer_len + len(para) > _PLAIN_TEXT_CHUNK_MAX_CHARS:
+            grouped.append("\n\n".join(buffer))
+            buffer, buffer_len = [], 0
+        buffer.append(para)
+        buffer_len += len(para)
+    if buffer:
+        grouped.append("\n\n".join(buffer))
+
+    return [
+        {
+            "text": text,
+            "source": source,
+            "topic": f"{source}：第 {i + 1} 段",
+            "category": "",
+            "product_id": "",
+        }
+        for i, text in enumerate(grouped)
+    ]
 
 
 def _build_nodes(
@@ -246,11 +284,20 @@ def _finalize_orphan_deletion(doc_id: int, index: VectorStoreIndex) -> None:
 
 
 def _create_document_with_embedding(
-    chatbot_id: str, path: str, raw_text: str, index: VectorStoreIndex, parser: Parser = parse_generic_markdown
+    chatbot_id: str,
+    path: str,
+    raw_text: str,
+    content_hash: str,
+    file_size_bytes: int,
+    index: VectorStoreIndex,
+    parser: Parser = parse_generic_markdown,
 ) -> dict:
-    """真的解析＋embed 一份新內容：新增 kb_documents 一筆，插入對應的向量，回傳新 doc_id 與 chunk 數。"""
-    encoded = raw_text.encode("utf-8")
-    content_hash = hashlib.sha256(encoded).hexdigest()
+    """真的解析＋embed 一份新內容：新增 kb_documents 一筆，插入對應的向量，回傳新 doc_id 與 chunk 數。
+
+    content_hash／file_size_bytes 直接信任呼叫端（app/main.py 的 PUT /api/admin/documents/{path}）
+    已經核對過的原始檔案 client_sha256／bytes 長度，不在這裡從 raw_text 重算——raw_text 對 PDF/Word
+    來說是轉檔後的擷取文字，跟原始檔案 bytes 是兩回事，「內容身分」必須以使用者實際上傳的檔案為準。
+    """
     engine = _get_engine()
     with engine.begin() as conn:
         doc_id = conn.execute(
@@ -260,7 +307,7 @@ def _create_document_with_embedding(
                 VALUES (:chatbot_id, :h, :s, 0) RETURNING doc_id
                 """
             ),
-            {"chatbot_id": chatbot_id, "h": content_hash, "s": len(encoded)},
+            {"chatbot_id": chatbot_id, "h": content_hash, "s": file_size_bytes},
         ).scalar_one()
 
     chunks = parser(raw_text, path)
@@ -283,6 +330,8 @@ def upsert_document(
     client_sha256: str,
     raw_text: Optional[str],
     index: VectorStoreIndex,
+    parser: Parser = parse_generic_markdown,
+    file_size_bytes: Optional[int] = None,
 ) -> dict:
     """
     知識庫文件管理的唯一寫入入口：不需要呼叫端提供任何 doc_id，純粹依「公司 + 路徑」跟
@@ -317,7 +366,9 @@ def upsert_document(
     if raw_text is None:
         raise ValueError("需要上傳檔案內容才能新增或更新這份文件。")
 
-    created = _create_document_with_embedding(chatbot_id, path, raw_text, index)
+    created = _create_document_with_embedding(
+        chatbot_id, path, raw_text, client_sha256, file_size_bytes, index, parser=parser
+    )
     orphan = _relabel_and_collect_orphan(chatbot_id, path, created["doc_id"], tags, old_doc_id)
     if orphan is not None:
         _finalize_orphan_deletion(orphan, index)
