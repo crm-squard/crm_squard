@@ -100,7 +100,13 @@ export const ui = {
     "flex items-center justify-end gap-3 pt-1 max-[620px]:flex-col-reverse max-[620px]:items-stretch [&_.ant-btn]:min-w-24",
   ),
   settingsAccountForm: tw(
-    "mt-4 flex gap-2 max-[620px]:flex-col [&_.ant-form-item]:mb-0 max-[620px]:[&_.ant-form-item]:w-full max-[620px]:[&_.ant-input]:w-full",
+    "mb-4! flex gap-2 max-[620px]:flex-col [&_.ant-form-item]:mb-0 max-[620px]:[&_.ant-form-item]:w-full max-[620px]:[&_.ant-input]:w-full",
+  ),
+  accountRoleTagPrimary: tw(
+    "m-0! rounded-full! bg-admin-agent-avatar-bg! px-3! py-1! font-semibold! text-admin-agent-avatar!",
+  ),
+  accountRoleTagDefault: tw(
+    "m-0! rounded-full! bg-admin-surface-subtle! px-3! py-1! font-semibold! text-admin-text-subtle!",
   ),
   pageHeading: tw(
     "flex min-h-19 items-start justify-between gap-6 [&_h1]:mt-0 [&_h1]:mb-1.25 [&_h1]:text-[clamp(27px,2.3vw,34px)] [&_h1]:tracking-[-.035em] [&_h1]:text-admin-heading [&_p]:m-0 [&_p]:text-sm [&_p]:text-admin-muted [&_time]:pt-2.5 [&_time]:text-caption [&_time]:text-admin-muted max-[899px]:[&_time]:hidden",

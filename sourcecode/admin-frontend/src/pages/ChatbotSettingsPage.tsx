@@ -3,7 +3,6 @@ import Button from "antd/es/button";
 import Card from "antd/es/card";
 import Form from "antd/es/form";
 import Input from "antd/es/input";
-import List from "antd/es/list";
 import message from "antd/es/message";
 import Popconfirm from "antd/es/popconfirm";
 import Tooltip from "antd/es/tooltip";
@@ -18,12 +17,12 @@ import {
   updateChatbot,
 } from "../api/chatbots";
 import { useAuth } from "../auth/AuthContext";
+import AccountManagementCard from "../components/AccountManagementCard";
 import AdminPageLayout from "../components/AdminPageLayout";
-import CardLoading from "../components/CardLoading";
 import ChatbotSettingsTabs from "../components/ChatbotSettingsTabs";
 import { ui } from "../uiStyles";
 
-const { Text, Paragraph } = Typography;
+const { Text } = Typography;
 const { TextArea } = Input;
 const DEFAULT_MCP_TRIGGER_NAME = "MCP";
 const DEFAULT_QUICK_REPLIES = ["無線滑鼠支援多少 DPI？", "退貨要幾天內申請？"];
@@ -396,78 +395,29 @@ export default function ChatbotSettingsPage() {
         ) : null}
       </Card>
 
-      <Card className={ui.settingsCard} title="管理商家帳號">
-        {accountsLoading ? (
-          <CardLoading label="商家帳號讀取中" />
-        ) : (
-          <>
-            <List
-              dataSource={accounts}
-              locale={{ emptyText: "目前只有你自己在管理這家商家服務。" }}
-              renderItem={(account) => (
-                <List.Item
-                  actions={
-                    canManageAccounts && account.id !== currentAccount?.id
-                      ? [
-                          <Popconfirm
-                            key="remove"
-                            title="確定要移除這個帳號嗎？"
-                            onConfirm={() => handleRemoveAccount(account.id)}
-                          >
-                            <Button danger size="small">
-                              移除
-                            </Button>
-                          </Popconfirm>,
-                        ]
-                      : []
-                  }
-                >
-                  <List.Item.Meta
-                    title={account.email}
-                    description={
-                      account.chatbot_role === "primary" ? "主帳號" : "協作帳號"
-                    }
-                  />
-                </List.Item>
-              )}
-            />
-            {canManageAccounts ? (
-              <Form
-                className={ui.settingsAccountForm}
-                form={accountForm}
-                layout="inline"
-                onFinish={handleAddAccount}
-              >
-                <Form.Item
-                  name="email"
-                  rules={[
-                    {
-                      required: true,
-                      type: "email",
-                      message: "請輸入有效的 gmail 地址",
-                    },
-                  ]}
-                >
-                  <Input placeholder="要新增的 gmail 地址" />
-                </Form.Item>
-                <Form.Item>
-                  <Button
-                    type="primary"
-                    htmlType="submit"
-                    loading={addingAccount}
-                  >
-                    新增帳號
-                  </Button>
-                </Form.Item>
-              </Form>
-            ) : (
-              <Paragraph type="secondary">
-                只有主帳號能新增或移除協作帳號。
-              </Paragraph>
-            )}
-          </>
-        )}
-      </Card>
+      <AccountManagementCard
+        title="管理商家帳號"
+        accounts={accounts}
+        loading={accountsLoading}
+        loadingLabel="商家帳號讀取中"
+        adding={addingAccount}
+        canManage={canManageAccounts}
+        currentAccountId={currentAccount?.id}
+        emptyText="目前只有你自己在管理這家商家服務。"
+        readonlyText="只有主帳號能新增或移除協作帳號。"
+        inputPlaceholder="要新增的 gmail 地址"
+        addButtonText="新增帳號"
+        removeConfirmTitle="確定要移除這個帳號嗎？"
+        form={accountForm}
+        getRoleLabel={(account) =>
+          account.chatbot_role === "primary" ? "主帳號" : "協作帳號"
+        }
+        getRoleTagColor={(account) =>
+          account.chatbot_role === "primary" ? "primary" : "default"
+        }
+        onAdd={handleAddAccount}
+        onRemove={handleRemoveAccount}
+      />
 
       <div className={ui.settingsActions}>
         {/* <Popconfirm
