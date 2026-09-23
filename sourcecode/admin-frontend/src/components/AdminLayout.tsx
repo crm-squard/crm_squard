@@ -1,4 +1,3 @@
-import CustomerServiceOutlined from "@ant-design/icons/CustomerServiceOutlined";
 import HomeOutlined from "@ant-design/icons/HomeOutlined";
 import LogoutOutlined from "@ant-design/icons/LogoutOutlined";
 import MenuOutlined from "@ant-design/icons/MenuOutlined";
@@ -26,7 +25,6 @@ const navigationItems = [
   { key: "/chatbots", icon: <RobotOutlined />, label: "ChatBot" },
   // { key: "/dashboard", icon: <HomeOutlined />, label: "儀表板" },
   // { key: "/orders", icon: <ShoppingOutlined />, label: "訂單管理" },
-  { key: "/summary", icon: <CustomerServiceOutlined />, label: "客服摘要" },
 ];
 
 // 「管理者帳號」頁籤只給 platform_primary／platform_secondary 看，商家帳號完全看不到這個入口。
@@ -40,7 +38,6 @@ function resolveSelectedKey(pathname: string) {
   if (pathname.startsWith("/orders")) return "/orders";
   if (pathname.startsWith("/chatbots")) return "/chatbots";
   if (pathname.startsWith("/dashboard")) return "/dashboard";
-  if (pathname.startsWith("/summary")) return "/summary";
   if (pathname.startsWith("/admin-accounts")) return "/admin-accounts";
   return "/chatbots";
 }
