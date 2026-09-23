@@ -270,7 +270,7 @@ substitutions:
   # （companies 表的 company_id，非隨意字串；見 admin-frontend 的公司設定頁）。
   # 之後要換成別家商家，或要多商家並存時改用 corp-frontend/index.html 支援的
   # ?company_id=xxx 網址參數（見 sourcecode/corp-frontend/index.html 的說明）。
-  _CHAT_WIDGET_CLIENT_ID: '663cfdab-5063-497a-b4e6-47993a0e8524'
+  _CHAT_WIDGET_CLIENT_ID: 'fa0e0ad1-ae3b-4ade-bc09-ae1f552ef55e'
   # 多租戶帳號（Google 登入）的 OAuth Client ID；backend 用來驗證 ID token 的簽發對象
   # （GOOGLE_CLIENT_ID），admin-frontend 用來顯示登入按鈕（VITE_GOOGLE_CLIENT_ID），
   # 兩邊必須是同一組值。留空的話 admin-frontend 會顯示「尚未設定」提示、無法登入，
