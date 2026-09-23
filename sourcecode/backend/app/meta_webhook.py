@@ -235,6 +235,10 @@ def create_meta_router(
         object_type = payload.get("object")
         entries = payload.get("entry", [])
 
+        # 暫時記錄原始 payload 結構，排查 Instagram 事件為何沒有進入任何處理分支
+        # （懷疑實際事件結構跟 Facebook Messenger 的 entry[].messaging[] 不一致）。
+        print(f"[Meta Webhook Debug] object={object_type} payload={json.dumps(payload, ensure_ascii=False)[:3000]}")
+
         # Verify Token 是 Meta App 層級、Facebook／Instagram 共用；但簽章用的 App Secret
         # 不是——Meta 用「Instagram API」這個子產品自己的 App Secret（跟主 App 的
         # facebook_app_secret 不同）簽 object=="instagram" 的請求，用主 App 的
