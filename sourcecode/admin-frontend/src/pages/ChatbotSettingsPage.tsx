@@ -10,7 +10,6 @@ import Typography from "antd/es/typography";
 import { useCallback, useEffect, useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { createAccount, deleteAccount, listAccounts } from "../api/accounts";
-import type { Account } from "../api/auth";
 import {
   deleteChatbot,
   getChatbotMcpToken,
@@ -20,6 +19,7 @@ import { useAuth } from "../auth/AuthContext";
 import AccountManagementCard from "../components/AccountManagementCard";
 import AdminPageLayout from "../components/AdminPageLayout";
 import ChatbotSettingsTabs from "../components/ChatbotSettingsTabs";
+import type { Account } from "../types/auth";
 import { ui } from "../uiStyles";
 
 const { Text } = Typography;

@@ -5,11 +5,12 @@ import Form, { type FormInstance } from "antd/es/form";
 import Input from "antd/es/input";
 import Popconfirm from "antd/es/popconfirm";
 import Table from "antd/es/table";
-import Tag from "antd/es/tag";
 import Typography from "antd/es/typography";
 import type { ReactNode } from "react";
-import type { Account } from "../api/auth";
+import type { AccountRoleTagColor } from "../config/accountRoles";
+import type { Account } from "../types/auth";
 import { ui } from "../uiStyles";
+import AccountRoleTag from "./AccountRoleTag";
 import CardLoading from "./CardLoading";
 
 const { Paragraph } = Typography;
@@ -17,13 +18,6 @@ const { Paragraph } = Typography;
 interface AccountFormValues {
   email: string;
 }
-
-export type AccountRoleTagColor = "primary" | "default";
-
-const ACCOUNT_ROLE_TAG_CLASS_NAMES: Record<AccountRoleTagColor, string> = {
-  primary: ui.accountRoleTagPrimary,
-  default: ui.accountRoleTagDefault,
-};
 
 interface AccountManagementCardProps {
   title?: ReactNode;
@@ -114,14 +108,9 @@ export default function AccountManagementCard({
                 key: "role",
                 width: 160,
                 render: (_, account) => (
-                  <Tag
-                    className={
-                      ACCOUNT_ROLE_TAG_CLASS_NAMES[getRoleTagColor(account)]
-                    }
-                    bordered={false}
-                  >
+                  <AccountRoleTag color={getRoleTagColor(account)}>
                     {getRoleLabel(account)}
-                  </Tag>
+                  </AccountRoleTag>
                 ),
               },
               {

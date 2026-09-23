@@ -1,4 +1,4 @@
-import type { ChatbotInfo } from "./auth";
+import type { ChatbotInfo } from "../types/auth";
 import { requestAdminApi } from "./apiClient";
 
 export async function listChatbots(token: string): Promise<ChatbotInfo[]> {

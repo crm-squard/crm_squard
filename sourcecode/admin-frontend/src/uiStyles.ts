@@ -44,6 +44,12 @@ export const ui = {
   account: tw(
     "h-auto! border-0! bg-transparent! p-0! text-left! text-[#738099] hover:bg-transparent! [&_.ant-avatar]:bg-[#c8d0dc] [&_small]:text-xs [&_span]:grid [&_span]:leading-[1.25] max-[620px]:[&_span]:hidden [&_strong]:text-caption",
   ),
+  accountDropdown: tw(
+    "w-40! max-w-40! min-w-40! [&_.ant-dropdown-menu]:w-full!",
+  ),
+  accountDropdownEmail: tw(
+    "cursor-default! text-xs! text-admin-text-subtle! opacity-100! [&_.ant-dropdown-menu-title-content]:break-all",
+  ),
   adminContent: tw(
     "min-w-0 px-7 pt-5.5 pb-10 max-[899px]:px-4 max-[899px]:pt-5 max-[899px]:pb-8",
   ),
