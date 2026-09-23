@@ -235,10 +235,6 @@ def create_meta_router(
         object_type = payload.get("object")
         entries = payload.get("entry", [])
 
-        # 暫時記錄原始 payload 結構，排查 Instagram 事件為何沒有進入任何處理分支
-        # （懷疑實際事件結構跟 Facebook Messenger 的 entry[].messaging[] 不一致）。
-        print(f"[Meta Webhook Debug] object={object_type} payload={json.dumps(payload, ensure_ascii=False)[:3000]}")
-
         # Verify Token 是 Meta App 層級、Facebook／Instagram 共用；但簽章用的 App Secret
         # 不是——Meta 用「Instagram API」這個子產品自己的 App Secret（跟主 App 的
         # facebook_app_secret 不同）簽 object=="instagram" 的請求，用主 App 的
@@ -256,22 +252,22 @@ def create_meta_router(
         if not verify_signature(body, signature, app_secret):
             raise HTTPException(status_code=400, detail="Invalid Meta signature")
 
-        for entry in entries:
-            for event in entry.get("messaging", []):
-                message = event.get("message", {})
+        if object_type == "page":
+            for entry in entries:
+                for event in entry.get("messaging", []):
+                    message = event.get("message", {})
 
-                # 機器人自己剛送出去的訊息也會被推播回來（is_echo），必須跳過，
-                # 否則會自問自答造成無窮迴圈。postback 等其他事件類型第一版先不處理。
-                if not message or message.get("is_echo"):
-                    continue
+                    # 機器人自己剛送出去的訊息也會被推播回來（is_echo），必須跳過，
+                    # 否則會自問自答造成無窮迴圈。postback 等其他事件類型第一版先不處理。
+                    if not message or message.get("is_echo"):
+                        continue
 
-                user_text = (message.get("text") or "").strip()
-                sender_id = (event.get("sender") or {}).get("id")
+                    user_text = (message.get("text") or "").strip()
+                    sender_id = (event.get("sender") or {}).get("id")
 
-                if not user_text or not sender_id:
-                    continue
+                    if not user_text or not sender_id:
+                        continue
 
-                if object_type == "page":
                     page_access_token = chatbot.get("facebook_page_access_token")
                     if not page_access_token:
                         print("[Facebook Chat Error] page access token is not configured")
@@ -280,7 +276,30 @@ def create_meta_router(
                     reply_text = await _answer_and_log(user_text, chatbot_id, "Facebook")
                     send_facebook_message(sender_id, reply_text, page_access_token)
 
-                elif object_type == "instagram":
+        elif object_type == "instagram":
+            # Instagram 走「含 Instagram 登入的 API 設定」這條新流程，事件格式跟 Facebook
+            # Messenger 的 entry[].messaging[] 完全不同：是 entry[].changes[]，每個
+            # change 有 field（要挑 "messages"）跟 value（裡面才是 sender/recipient/
+            # message），這是用 Meta 後台「messages 欄位」內建測試工具送出官方範例 payload
+            # 實際比對出來的結構；之前誤用 messaging[] 解析，導致訊息進來後迴圈完全找不到
+            # 資料可處理，收到 200 但沒有任何 log、也不會回覆。
+            for entry in entries:
+                for change in entry.get("changes", []):
+                    if change.get("field") != "messages":
+                        continue
+
+                    value = change.get("value", {})
+                    message = value.get("message", {})
+
+                    if not message or value.get("is_echo"):
+                        continue
+
+                    user_text = (message.get("text") or "").strip()
+                    sender_id = (value.get("sender") or {}).get("id")
+
+                    if not user_text or not sender_id:
+                        continue
+
                     instagram_business_id = chatbot.get("instagram_business_id")
                     instagram_access_token = chatbot.get("instagram_access_token")
                     if not instagram_business_id or not instagram_access_token:
@@ -292,7 +311,7 @@ def create_meta_router(
                         sender_id, reply_text, instagram_business_id, instagram_access_token
                     )
 
-                # 其他 object 類型（例如未來的 whatsapp_business_account）先略過，不報錯。
+        # 其他 object 類型（例如未來的 whatsapp_business_account）先略過，不報錯。
 
         # Meta 要求 Webhook 在合理時間內回 200，否則會重試；即使沒有可處理的事件也要回 200。
         return {"status": "ok"}
