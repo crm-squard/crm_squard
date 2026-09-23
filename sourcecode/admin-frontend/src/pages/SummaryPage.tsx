@@ -3,12 +3,12 @@ import Card from "antd/es/card";
 import Collapse from "antd/es/collapse";
 import DatePicker from "antd/es/date-picker";
 import Empty from "antd/es/empty";
-import Spin from "antd/es/spin";
 import Tag from "antd/es/tag";
 import Typography from "antd/es/typography";
 import dayjs, { type Dayjs } from "dayjs";
 import { useEffect, useState } from "react";
 import AdminPageLayout from "../components/AdminPageLayout";
+import CardLoading from "../components/CardLoading";
 import { useAuth } from "../auth/AuthContext";
 import { getDailySummary, type DailySummary } from "../api/summary";
 import { ui } from "../uiStyles";
@@ -92,7 +92,7 @@ export default function SummaryPage() {
     >
       <Card>
         {loading ? (
-          <Spin />
+          <CardLoading label="客服摘要讀取中" />
         ) : error ? (
           <Alert type="error" showIcon message={error} />
         ) : data ? (

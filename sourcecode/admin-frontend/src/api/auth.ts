@@ -1,3 +1,5 @@
+import { requestAdminApi } from "./apiClient";
+
 export type AccountRole =
   | "platform_primary"
   | "platform_secondary"
@@ -54,48 +56,29 @@ export interface LoginResponse {
   account: Account;
 }
 
-// 跟 documents.ts 打同一個 backend 服務（8000 埠），沿用同一組 base URL 慣例。
-const API_BASE_URL =
-  import.meta.env.VITE_RAG_API_URL || "http://localhost:8000";
-
-async function throwIfNotOk(response: Response): Promise<void> {
-  if (!response.ok) {
-    const body = await response.text().catch(() => "");
-    throw new Error(`後端回應狀態碼 ${response.status}: ${body}`);
-  }
-}
-
 export async function loginWithGoogle(idToken: string): Promise<LoginResponse> {
-  const response = await fetch(`${API_BASE_URL}/api/auth/google`, {
+  return requestAdminApi<LoginResponse>("/api/auth/google", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ id_token: idToken }),
+    json: { id_token: idToken },
   });
-  await throwIfNotOk(response);
-  return (await response.json()) as LoginResponse;
 }
 
 /** 開發用一鍵登入（後端預設關閉，只有本機且明確開啟時才有作用，否則回 404）。 */
 export async function loginWithDevAccount(): Promise<LoginResponse> {
-  const response = await fetch(`${API_BASE_URL}/api/auth/dev-login`, {
+  return requestAdminApi<LoginResponse>("/api/auth/dev-login", {
     method: "POST",
   });
-  await throwIfNotOk(response);
-  return (await response.json()) as LoginResponse;
 }
 
 export async function logout(token: string): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/api/auth/logout`, {
+  await requestAdminApi<void>("/api/auth/logout", {
     method: "POST",
-    headers: { Authorization: `Bearer ${token}` },
+    token,
   });
-  await throwIfNotOk(response);
 }
 
 export async function getMe(token: string): Promise<MeResponse> {
-  const response = await fetch(`${API_BASE_URL}/api/auth/me`, {
-    headers: { Authorization: `Bearer ${token}` },
+  return requestAdminApi<MeResponse>("/api/auth/me", {
+    token,
   });
-  await throwIfNotOk(response);
-  return (await response.json()) as MeResponse;
 }

@@ -211,6 +211,7 @@ export const ui = {
     "mb-4.5 grid grid-cols-[minmax(220px,1.2fr)_minmax(220px,1fr)_auto] gap-3 max-[620px]:grid-cols-1",
   ),
   summaryChart: tw("grid gap-2.5"),
+  cardLoading: tw("grid min-h-60 place-items-center"),
   summaryChartRow: tw(
     "grid grid-cols-[minmax(120px,180px)_1fr_auto] items-center gap-3 text-caption",
   ),

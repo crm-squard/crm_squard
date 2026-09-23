@@ -7,6 +7,7 @@ import { Navigate } from "react-router-dom";
 import { listAuditLog, type AuditLogEntry } from "../api/auditLog";
 import { useAuth } from "../auth/AuthContext";
 import AdminPageLayout from "../components/AdminPageLayout";
+import CardLoading from "../components/CardLoading";
 import ChatbotSettingsTabs from "../components/ChatbotSettingsTabs";
 import { ui } from "../uiStyles";
 
@@ -68,19 +69,22 @@ export default function AuditLogPage() {
         <Paragraph type="secondary">
           商家服務最近的異動紀錄：建立或刪除、設定變更、知識庫文件及協作帳號異動。
         </Paragraph>
-        <List
-          dataSource={entries}
-          loading={loading}
-          locale={{ emptyText: "目前沒有紀錄。" }}
-          renderItem={(entry) => (
-            <List.Item>
-              <List.Item.Meta
-                title={ACTION_LABELS[entry.action] ?? entry.action}
-                description={`${entry.actor_email ?? "未知帳號"} · ${entry.created_at ?? ""}`}
-              />
-            </List.Item>
-          )}
-        />
+        {loading ? (
+          <CardLoading label="稽核紀錄讀取中" />
+        ) : (
+          <List
+            dataSource={entries}
+            locale={{ emptyText: "目前沒有紀錄。" }}
+            renderItem={(entry) => (
+              <List.Item>
+                <List.Item.Meta
+                  title={ACTION_LABELS[entry.action] ?? entry.action}
+                  description={`${entry.actor_email ?? "未知帳號"} · ${entry.created_at ?? ""}`}
+                />
+              </List.Item>
+            )}
+          />
+        )}
       </Card>
     </AdminPageLayout>
   );

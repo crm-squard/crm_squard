@@ -15,6 +15,7 @@ import { useEffect, useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { createChatbot, deleteChatbot } from "../api/chatbots";
 import { useAuth } from "../auth/AuthContext";
+import { standardSpinProps } from "../config/spin";
 import AdminPageLayout from "../components/AdminPageLayout";
 import CopyableIdentifier from "../components/CopyableIdentifier";
 import { ui } from "../uiStyles";
@@ -148,7 +149,7 @@ export default function ChatbotsPage() {
 
       {isRefreshing ? (
         <div className={ui.routeLoading} role="status">
-          <Spin size="small" />
+          <Spin {...standardSpinProps} />
           <span>載入 ChatBot 列表…</span>
         </div>
       ) : chatbots.length === 0 ? (

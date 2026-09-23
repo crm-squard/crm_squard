@@ -20,7 +20,6 @@ import Modal from "antd/es/modal";
 import Popconfirm from "antd/es/popconfirm";
 import Select from "antd/es/select";
 import Space from "antd/es/space";
-import Spin from "antd/es/spin";
 import Switch from "antd/es/switch";
 import Table from "antd/es/table";
 import Tag from "antd/es/tag";
@@ -29,6 +28,7 @@ import Upload from "antd/es/upload";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Navigate, useBeforeUnload, useBlocker } from "react-router-dom";
 import AdminPageLayout from "../components/AdminPageLayout";
+import CardLoading from "../components/CardLoading";
 import ChatbotSettingsTabs from "../components/ChatbotSettingsTabs";
 import {
   deleteDocument,
@@ -999,7 +999,9 @@ export default function AdminDocumentsPage() {
           </Button>
         </div>
 
-        <Spin spinning={loading}>
+        {loading ? (
+          <CardLoading label="文件列表讀取中" />
+        ) : (
           <Table<DocumentInfo>
             rowKey="path"
             dataSource={filteredDocuments}
@@ -1079,7 +1081,7 @@ export default function AdminDocumentsPage() {
               },
             ]}
           />
-        </Spin>
+        )}
       </Card>
     </AdminPageLayout>
   );

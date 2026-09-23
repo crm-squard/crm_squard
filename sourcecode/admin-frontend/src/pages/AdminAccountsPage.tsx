@@ -12,6 +12,7 @@ import { useAuth } from "../auth/AuthContext";
 import { createAccount, deleteAccount, listAccounts } from "../api/accounts";
 import type { Account } from "../api/auth";
 import AdminPageLayout from "../components/AdminPageLayout";
+import CardLoading from "../components/CardLoading";
 import { ui } from "../uiStyles";
 
 const { Paragraph } = Typography;
@@ -25,20 +26,26 @@ export default function AdminAccountsPage() {
   const { token, account: currentAccount } = useAuth();
   const [messageApi, contextHolder] = message.useMessage();
   const [accounts, setAccounts] = useState<Account[]>([]);
+  const [accountsLoading, setAccountsLoading] = useState(true);
   const [form] = Form.useForm<{ email: string }>();
   const [adding, setAdding] = useState(false);
 
   const isPrimary = currentAccount?.role === "platform_primary";
 
   const loadAccounts = useCallback(() => {
-    if (!token) return;
+    if (!token) {
+      setAccountsLoading(false);
+      return;
+    }
+    setAccountsLoading(true);
     listAccounts(token)
       .then(setAccounts)
       .catch((err) =>
         messageApi.error(
           err instanceof Error ? err.message : "帳號清單載入失敗",
         ),
-      );
+      )
+      .finally(() => setAccountsLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
@@ -91,61 +98,67 @@ export default function AdminAccountsPage() {
       beforeHeader={contextHolder}
     >
       <Card className={ui.settingsCard}>
-        <List
-          dataSource={accounts}
-          locale={{ emptyText: "目前沒有管理者帳號。" }}
-          renderItem={(acc) => (
-            <List.Item
-              actions={
-                isPrimary && acc.id !== currentAccount?.id
-                  ? [
-                      <Popconfirm
-                        key="remove"
-                        title="確定要移除這個管理者帳號嗎？"
-                        description="移除後該帳號會立刻無法登入。"
-                        onConfirm={() => handleRemove(acc.id)}
-                      >
-                        <Button danger size="small">
-                          移除
-                        </Button>
-                      </Popconfirm>,
-                    ]
-                  : []
-              }
-            >
-              <List.Item.Meta title={acc.email} description={acc.role} />
-            </List.Item>
-          )}
-        />
-        {isPrimary ? (
-          <Form
-            className={ui.settingsAccountForm}
-            form={form}
-            layout="inline"
-            onFinish={handleAdd}
-          >
-            <Form.Item
-              name="email"
-              rules={[
-                {
-                  required: true,
-                  type: "email",
-                  message: "請輸入有效的 gmail 地址",
-                },
-              ]}
-            >
-              <Input placeholder="要新增的副管理者 gmail 地址" />
-            </Form.Item>
-            <Form.Item>
-              <Button type="primary" htmlType="submit" loading={adding}>
-                新增副管理者
-              </Button>
-            </Form.Item>
-          </Form>
+        {accountsLoading ? (
+          <CardLoading label="管理者帳號讀取中" />
         ) : (
-          <Paragraph className={ui.marginTop4} type="secondary">
-            只有主管理者帳號能新增/移除副管理者。
-          </Paragraph>
+          <>
+            <List
+              dataSource={accounts}
+              locale={{ emptyText: "目前沒有管理者帳號。" }}
+              renderItem={(acc) => (
+                <List.Item
+                  actions={
+                    isPrimary && acc.id !== currentAccount?.id
+                      ? [
+                          <Popconfirm
+                            key="remove"
+                            title="確定要移除這個管理者帳號嗎？"
+                            description="移除後該帳號會立刻無法登入。"
+                            onConfirm={() => handleRemove(acc.id)}
+                          >
+                            <Button danger size="small">
+                              移除
+                            </Button>
+                          </Popconfirm>,
+                        ]
+                      : []
+                  }
+                >
+                  <List.Item.Meta title={acc.email} description={acc.role} />
+                </List.Item>
+              )}
+            />
+            {isPrimary ? (
+              <Form
+                className={ui.settingsAccountForm}
+                form={form}
+                layout="inline"
+                onFinish={handleAdd}
+              >
+                <Form.Item
+                  name="email"
+                  rules={[
+                    {
+                      required: true,
+                      type: "email",
+                      message: "請輸入有效的 gmail 地址",
+                    },
+                  ]}
+                >
+                  <Input placeholder="要新增的副管理者 gmail 地址" />
+                </Form.Item>
+                <Form.Item>
+                  <Button type="primary" htmlType="submit" loading={adding}>
+                    新增副管理者
+                  </Button>
+                </Form.Item>
+              </Form>
+            ) : (
+              <Paragraph className={ui.marginTop4} type="secondary">
+                只有主管理者帳號能新增/移除副管理者。
+              </Paragraph>
+            )}
+          </>
         )}
       </Card>
     </AdminPageLayout>
