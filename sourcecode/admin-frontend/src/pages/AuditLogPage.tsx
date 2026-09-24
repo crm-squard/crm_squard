@@ -4,13 +4,14 @@ import Select from "antd/es/select";
 import Table from "antd/es/table";
 import Tag from "antd/es/tag";
 import Typography from "antd/es/typography";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Navigate } from "react-router-dom";
-import { listAuditLog, type AuditLogEntry } from "../api/auditLog";
+import type { AuditLogEntry } from "../api/auditLog";
 import { useAuth } from "../auth/AuthContext";
 import AdminPageLayout from "../components/AdminPageLayout";
 import ChatbotSettingsTabs from "../components/ChatbotSettingsTabs";
 import { ui } from "../uiStyles";
+import { useAuditLogQuery } from "../hooks/useAdminQueries";
 
 const { Paragraph, Text } = Typography;
 
@@ -57,35 +58,11 @@ function formatCreatedAt(value: string | null): string {
 
 export default function AuditLogPage() {
   const { token, selectedChatbotId } = useAuth();
-  const [messageApi, contextHolder] = message.useMessage();
-  const [entries, setEntries] = useState<AuditLogEntry[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [, contextHolder] = message.useMessage();
+  const auditLogQuery = useAuditLogQuery(token, selectedChatbotId);
+  const entries = auditLogQuery.data ?? [];
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
-
-  useEffect(() => {
-    if (!token || !selectedChatbotId) return;
-
-    let isCurrent = true;
-    setLoading(true);
-    listAuditLog(token, selectedChatbotId)
-      .then((result) => {
-        if (isCurrent) setEntries(result);
-      })
-      .catch((error) => {
-        if (!isCurrent) return;
-        messageApi.error(
-          error instanceof Error ? error.message : "稽核紀錄載入失敗",
-        );
-      })
-      .finally(() => {
-        if (isCurrent) setLoading(false);
-      });
-
-    return () => {
-      isCurrent = false;
-    };
-  }, [messageApi, selectedChatbotId, token]);
 
   if (!token) return <Navigate to="/login" replace />;
   if (!selectedChatbotId) return <Navigate to="/chatbots" replace />;
@@ -118,7 +95,7 @@ export default function AuditLogPage() {
         <Table<AuditLogEntry>
           rowKey="id"
           dataSource={entries}
-          loading={loading}
+          loading={auditLogQuery.isLoading}
           pagination={{
             current: currentPage,
             pageSize,

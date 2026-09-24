@@ -1,13 +1,16 @@
 import Form from "antd/es/form";
 import message from "antd/es/message";
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import { Navigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
-import { createAccount, deleteAccount, listAccounts } from "../api/accounts";
+import { createAccount, deleteAccount } from "../api/accounts";
 import AccountManagementCard from "../components/AccountManagementCard";
 import AdminPageLayout from "../components/AdminPageLayout";
 import { ACCOUNT_ROLE_DISPLAY } from "../config/accountRoles";
 import type { Account } from "../types/auth";
+import { queryClient } from "../queryClient";
+import { queryKeys } from "../api/queryKeys";
+import { useAccountsQuery } from "../hooks/useAdminQueries";
 
 /**
  * 管理者帳號頁籤：只有 platform_primary／platform_secondary 看得到，跟商家帳號完全分開
@@ -17,33 +20,12 @@ import type { Account } from "../types/auth";
 export default function AdminAccountsPage() {
   const { token, account: currentAccount } = useAuth();
   const [messageApi, contextHolder] = message.useMessage();
-  const [accounts, setAccounts] = useState<Account[]>([]);
-  const [accountsLoading, setAccountsLoading] = useState(true);
+  const accountsQuery = useAccountsQuery(token);
+  const accounts = accountsQuery.data ?? [];
   const [form] = Form.useForm<{ email: string }>();
   const [adding, setAdding] = useState(false);
 
   const isPrimary = currentAccount?.role === "platform_primary";
-
-  const loadAccounts = useCallback(() => {
-    if (!token) {
-      setAccountsLoading(false);
-      return;
-    }
-    setAccountsLoading(true);
-    listAccounts(token)
-      .then(setAccounts)
-      .catch((err) =>
-        messageApi.error(
-          err instanceof Error ? err.message : "帳號清單載入失敗",
-        ),
-      )
-      .finally(() => setAccountsLoading(false));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token]);
-
-  useEffect(() => {
-    loadAccounts();
-  }, [loadAccounts]);
 
   if (!token) return <Navigate to="/login" replace />;
   if (
@@ -63,7 +45,9 @@ export default function AdminAccountsPage() {
         role: "platform_secondary",
       });
       form.resetFields();
-      loadAccounts();
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.accounts.platform,
+      });
       messageApi.success("已新增副管理者帳號");
     } catch (err) {
       messageApi.error(err instanceof Error ? err.message : "新增失敗");
@@ -76,7 +60,9 @@ export default function AdminAccountsPage() {
     if (!token) return;
     try {
       await deleteAccount(token, accountId);
-      loadAccounts();
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.accounts.platform,
+      });
       messageApi.success("已移除帳號");
     } catch (err) {
       messageApi.error(err instanceof Error ? err.message : "移除失敗");
@@ -91,7 +77,7 @@ export default function AdminAccountsPage() {
     >
       <AccountManagementCard
         accounts={accounts}
-        loading={accountsLoading}
+        loading={accountsQuery.isLoading}
         loadingLabel="管理者帳號讀取中"
         adding={adding}
         canManage={isPrimary}

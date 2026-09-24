@@ -7,7 +7,7 @@ import message from "antd/es/message";
 import Tooltip from "antd/es/tooltip";
 import Typography from "antd/es/typography";
 import { Navigate, useLocation } from "react-router-dom";
-import { useAuth } from "../auth/AuthContext";
+import { useSelectedChatbot } from "../hooks/useSelectedChatbot";
 import ChatbotSettingsTabs from "../components/ChatbotSettingsTabs";
 import AdminPageLayout from "../components/AdminPageLayout";
 import { ui } from "../uiStyles";
@@ -27,14 +27,13 @@ const { Paragraph, Text } = Typography;
 
 export default function ChatbotPlaceholderPage() {
   const location = useLocation();
-  const { selectedChatbotId, chatbots } = useAuth();
+  const { selectedChatbotId, chatbot } = useSelectedChatbot();
   const [messageApi, contextHolder] = message.useMessage();
   const content = pageContent[location.pathname];
 
   if (!selectedChatbotId) return <Navigate to="/chatbots" replace />;
   if (!content) return <Navigate to="/chatbots" replace />;
 
-  const chatbot = chatbots.find((item) => item.id === selectedChatbotId);
   const adminFrontendUrl = (
     import.meta.env.VITE_ADMIN_FRONTEND_URL || "http://localhost:5174/"
   ).replace(/\/$/, "");

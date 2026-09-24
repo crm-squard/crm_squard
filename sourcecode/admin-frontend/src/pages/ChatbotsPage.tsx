@@ -11,13 +11,17 @@ import Input from "antd/es/input";
 import message from "antd/es/message";
 import Modal from "antd/es/modal";
 import Spin from "antd/es/spin";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
-import { createChatbot, deleteChatbot } from "../api/chatbots";
 import { useAuth } from "../auth/AuthContext";
 import { standardSpinProps } from "../config/spin";
 import AdminPageLayout from "../components/AdminPageLayout";
 import CopyableIdentifier from "../components/CopyableIdentifier";
+import {
+  useChatbotsQuery,
+  useCreateChatbotMutation,
+  useDeleteChatbotMutation,
+} from "../hooks/useAdminQueries";
 import { ui } from "../uiStyles";
 
 function formatLastEditedAt(value: string | null): string {
@@ -40,36 +44,14 @@ function getInitial(name: string): string {
 export default function ChatbotsPage() {
   const navigate = useNavigate();
   const [messageApi, contextHolder] = message.useMessage();
-  const { token, chatbots, selectedChatbotId, selectChatbot, refreshMe } =
-    useAuth();
+  const { token, selectedChatbotId, selectChatbot } = useAuth();
+  const chatbotsQuery = useChatbotsQuery(token);
   const [form] = Form.useForm<{ name: string }>();
-  const [isRefreshing, setIsRefreshing] = useState(true);
   const [createOpen, setCreateOpen] = useState(false);
-  const [creating, setCreating] = useState(false);
+  const createMutation = useCreateChatbotMutation(token ?? "");
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
-  const [deleting, setDeleting] = useState(false);
-
-  useEffect(() => {
-    if (!token) return;
-
-    let isCurrent = true;
-    void refreshMe()
-      .catch((err) => {
-        if (!isCurrent) return;
-        messageApi.error(
-          err instanceof Error ? err.message : "ChatBot 列表載入失敗",
-        );
-      })
-      .finally(() => {
-        if (isCurrent) setIsRefreshing(false);
-      });
-
-    return () => {
-      isCurrent = false;
-    };
-    // refreshMe 會因 AuthContext state 更新而變更參照；列表只需在進入頁面時重新整理一次。
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token]);
+  const deleteMutation = useDeleteChatbotMutation(token ?? "");
+  const chatbots = chatbotsQuery.data ?? [];
 
   if (!token) return <Navigate to="/login" replace />;
   const authToken = token;
@@ -92,12 +74,10 @@ export default function ChatbotsPage() {
       return;
     }
 
-    setCreating(true);
     try {
-      const created = await createChatbot(authToken, {
+      const created = await createMutation.mutateAsync({
         name: values.name.trim(),
       });
-      await refreshMe();
       selectChatbot(created.id);
       setCreateOpen(false);
       messageApi.success("已新增 ChatBot");
@@ -106,27 +86,21 @@ export default function ChatbotsPage() {
       messageApi.error(
         error instanceof Error ? error.message : "新增 ChatBot 失敗",
       );
-    } finally {
-      setCreating(false);
     }
   }
 
   async function handleDelete() {
     if (!pendingDeleteId) return;
 
-    setDeleting(true);
     try {
-      await deleteChatbot(authToken, pendingDeleteId);
+      await deleteMutation.mutateAsync(pendingDeleteId);
       if (selectedChatbotId === pendingDeleteId) selectChatbot(null);
-      await refreshMe();
       setPendingDeleteId(null);
       messageApi.success("已刪除 ChatBot");
     } catch (err) {
       messageApi.error(
         err instanceof Error ? err.message : "刪除 ChatBot 失敗",
       );
-    } finally {
-      setDeleting(false);
     }
   }
 
@@ -147,7 +121,7 @@ export default function ChatbotsPage() {
         </Button>
       </div>
 
-      {isRefreshing ? (
+      {chatbotsQuery.isLoading ? (
         <div className={ui.routeLoading} role="status">
           <Spin {...standardSpinProps} />
           <span>載入 ChatBot 列表…</span>
@@ -227,7 +201,7 @@ export default function ChatbotsPage() {
       )}
       <Modal
         cancelText="取消"
-        confirmLoading={creating}
+        confirmLoading={createMutation.isPending}
         okText="新增"
         onCancel={() => setCreateOpen(false)}
         onOk={handleCreate}
@@ -249,7 +223,7 @@ export default function ChatbotsPage() {
       </Modal>
       <Modal
         cancelText="取消"
-        confirmLoading={deleting}
+        confirmLoading={deleteMutation.isPending}
         okButtonProps={{ danger: true }}
         okText="刪除"
         onCancel={() => setPendingDeleteId(null)}

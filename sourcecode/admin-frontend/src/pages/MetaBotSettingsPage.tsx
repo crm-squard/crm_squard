@@ -13,6 +13,8 @@ import { useAuth } from "../auth/AuthContext";
 import AdminPageLayout from "../components/AdminPageLayout";
 import ChatbotSettingsTabs from "../components/ChatbotSettingsTabs";
 import { ui } from "../uiStyles";
+import { useUpdateChatbotMutation } from "../hooks/useAdminQueries";
+import { useSelectedChatbot } from "../hooks/useSelectedChatbot";
 
 const { Text } = Typography;
 
@@ -30,13 +32,13 @@ interface MetaBotSettingsForm {
 }
 
 export default function MetaBotSettingsPage() {
-  const { token, chatbots, selectedChatbotId, refreshMe } = useAuth();
+  const { token } = useAuth();
+  const { chatbot, selectedChatbotId } = useSelectedChatbot();
+  const updateMutation = useUpdateChatbotMutation(token ?? "");
 
   const [messageApi, contextHolder] = message.useMessage();
   const [form] = Form.useForm<MetaBotSettingsForm>();
   const [saving, setSaving] = useState(false);
-
-  const chatbot = chatbots.find((item) => item.id === selectedChatbotId);
 
   const webhookUrl = selectedChatbotId
     ? `${API_BASE_URL}/meta/webhook/${encodeURIComponent(selectedChatbotId)}`
@@ -67,29 +69,32 @@ export default function MetaBotSettingsPage() {
     setSaving(true);
 
     try {
-      await updateChatbot(token, selectedChatbotId, {
-        facebook_page_id: values.facebook_page_id ?? "",
-        instagram_business_id: values.instagram_business_id ?? "",
+      await updateMutation.mutateAsync({
+        chatbotId: selectedChatbotId,
+        params: {
+          facebook_page_id: values.facebook_page_id ?? "",
+          instagram_business_id: values.instagram_business_id ?? "",
 
-        ...(values.facebook_app_secret
-          ? { facebook_app_secret: values.facebook_app_secret }
-          : {}),
+          ...(values.facebook_app_secret
+            ? { facebook_app_secret: values.facebook_app_secret }
+            : {}),
 
-        ...(values.facebook_verify_token
-          ? { facebook_verify_token: values.facebook_verify_token }
-          : {}),
+          ...(values.facebook_verify_token
+            ? { facebook_verify_token: values.facebook_verify_token }
+            : {}),
 
-        ...(values.facebook_page_access_token
-          ? { facebook_page_access_token: values.facebook_page_access_token }
-          : {}),
+          ...(values.facebook_page_access_token
+            ? { facebook_page_access_token: values.facebook_page_access_token }
+            : {}),
 
-        ...(values.instagram_access_token
-          ? { instagram_access_token: values.instagram_access_token }
-          : {}),
+          ...(values.instagram_access_token
+            ? { instagram_access_token: values.instagram_access_token }
+            : {}),
 
-        ...(values.instagram_app_secret
-          ? { instagram_app_secret: values.instagram_app_secret }
-          : {}),
+          ...(values.instagram_app_secret
+            ? { instagram_app_secret: values.instagram_app_secret }
+            : {}),
+        },
       });
 
       form.setFieldsValue({
@@ -100,7 +105,6 @@ export default function MetaBotSettingsPage() {
         instagram_app_secret: "",
       });
 
-      await refreshMe();
       messageApi.success("已儲存 Facebook / Instagram 設定");
     } catch (error) {
       messageApi.error(

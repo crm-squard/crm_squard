@@ -15,7 +15,9 @@ import {
   logout as logoutApi,
 } from "../api/auth";
 import { setUnauthorizedHandler } from "../api/apiClient";
-import type { Account, ChatbotInfo } from "../types/auth";
+import { queryKeys } from "../api/queryKeys";
+import { queryClient } from "../queryClient";
+import type { Account } from "../types/auth";
 
 const STORAGE_KEY = "admin_auth_state";
 
@@ -26,13 +28,11 @@ interface PersistedAuthState {
 
 interface AuthState extends PersistedAuthState {
   account: Account | null;
-  chatbots: ChatbotInfo[];
 }
 
 const EMPTY_STATE: AuthState = {
   token: null,
   account: null,
-  chatbots: [],
   selectedChatbotId: null,
 };
 
@@ -46,7 +46,6 @@ function loadStoredState(): AuthState {
     return {
       token: parsed.token ?? null,
       account: null,
-      chatbots: [],
       selectedChatbotId: parsed.selectedChatbotId ?? null,
     };
   } catch {
@@ -67,7 +66,6 @@ function persistState(state: PersistedAuthState) {
 interface AuthContextValue {
   token: string | null;
   account: Account | null;
-  chatbots: ChatbotInfo[];
   selectedChatbotId: string | null;
   isInitializing: boolean;
   initializationError: string | null;
@@ -75,7 +73,6 @@ interface AuthContextValue {
   loginWithDev: () => Promise<void>;
   logout: () => Promise<void>;
   selectChatbot: (chatbotId: string | null) => void;
-  refreshMe: () => Promise<void>;
   retryInitialization: () => void;
 }
 
@@ -96,10 +93,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     persistState(next);
   }, []);
 
+  const clearSession = useCallback(() => {
+    queryClient.clear();
+    updateState(EMPTY_STATE);
+  }, [updateState]);
+
   useLayoutEffect(() => {
     if (!state.token) return;
-    return setUnauthorizedHandler(() => updateState(EMPTY_STATE));
-  }, [state.token, updateState]);
+    return setUnauthorizedHandler(clearSession);
+  }, [clearSession, state.token]);
 
   useEffect(() => {
     if (!state.token || state.account) {
@@ -113,21 +115,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setIsInitializing(true);
     setInitializationError(null);
 
-    getMe(token)
+    queryClient
+      .fetchQuery({
+        queryKey: queryKeys.session.me,
+        queryFn: () => getMe(token),
+      })
       .then((me) => {
         if (!isCurrent) return;
         setState((current) => {
           if (current.token !== token) return current;
-          const selectedChatbotId = me.chatbots.some(
-            (chatbot) => chatbot.id === current.selectedChatbotId,
-          )
-            ? current.selectedChatbotId
-            : null;
+          queryClient.setQueryData(queryKeys.chatbots.list, me.chatbots);
           const next: AuthState = {
             ...current,
             account: me.account,
-            chatbots: me.chatbots,
-            selectedChatbotId,
           };
           persistState(next);
           return next;
@@ -157,11 +157,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const loginWithIdToken = useCallback(
     async (idToken: string) => {
       const { token, account } = await loginWithGoogle(idToken);
-      const me = await getMe(token);
+      const me = await queryClient.fetchQuery({
+        queryKey: queryKeys.session.me,
+        queryFn: () => getMe(token),
+      });
+      queryClient.setQueryData(queryKeys.chatbots.list, me.chatbots);
       updateState({
         token,
         account: me.account,
-        chatbots: me.chatbots,
         selectedChatbotId: null,
       });
       void account; // getMe 回傳的 account 已含相同資訊，登入回應僅用於取得 token
@@ -172,11 +175,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // 開發用一鍵登入：只在開發模式的登入頁顯示入口，後端另有多重限制（見 backend/app/main.py）
   const loginWithDev = useCallback(async () => {
     const { token } = await loginWithDevAccount();
-    const me = await getMe(token);
+    const me = await queryClient.fetchQuery({
+      queryKey: queryKeys.session.me,
+      queryFn: () => getMe(token),
+    });
+    queryClient.setQueryData(queryKeys.chatbots.list, me.chatbots);
     updateState({
       token,
       account: me.account,
-      chatbots: me.chatbots,
       selectedChatbotId: null,
     });
   }, [updateState]);
@@ -189,8 +195,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // 後端撤銷失敗也要清掉本機狀態，避免使用者卡在已登入畫面
       }
     }
-    updateState(EMPTY_STATE);
-  }, [state.token, updateState]);
+    clearSession();
+  }, [clearSession, state.token]);
 
   const selectChatbot = useCallback(
     (chatbotId: string | null) => {
@@ -199,17 +205,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [state, updateState],
   );
 
-  const refreshMe = useCallback(async () => {
-    if (!state.token) return;
-    const me = await getMe(state.token);
-    updateState({ ...state, account: me.account, chatbots: me.chatbots });
-  }, [state, updateState]);
-
   const value = useMemo<AuthContextValue>(
     () => ({
       token: state.token,
       account: state.account,
-      chatbots: state.chatbots,
       selectedChatbotId: state.selectedChatbotId,
       isInitializing,
       initializationError,
@@ -217,7 +216,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       loginWithDev,
       logout,
       selectChatbot,
-      refreshMe,
       retryInitialization,
     }),
     [
@@ -228,7 +226,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       loginWithDev,
       logout,
       selectChatbot,
-      refreshMe,
       retryInitialization,
     ],
   );
