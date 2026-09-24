@@ -10,7 +10,7 @@ export const widgetUi = {
   panel: tw(
     "flex h-[min(580px,calc(100dvh-48px))] w-[380px] max-w-full animate-widget-pop flex-col overflow-hidden rounded-(--ccw-border-radius) bg-(--ccw-surface) shadow-widget-panel motion-reduce:animate-none max-[480px]:h-dvh max-[480px]:w-screen max-[480px]:rounded-none",
   ),
-  quickReplies: tw("flex flex-wrap gap-2 px-3.5 py-2.5"),
+  quickReplies: tw("flex shrink-0 flex-wrap gap-2"),
   chip: tw(
     "cursor-pointer rounded-full border border-solid border-widget-border bg-(--ccw-surface) px-3 py-1.5 text-chip text-(--ccw-primary-strong) hover:border-(--ccw-primary) focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-(--ccw-focus)",
   ),

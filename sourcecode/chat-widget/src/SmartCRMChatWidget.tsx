@@ -57,20 +57,23 @@ export default function SmartCRMChatWidget({ clientId }: { clientId: string }) {
               onChange={setProvider}
             />
           )}
-          <MessageList messages={messages} isSending={isSending} />
-          {messages.length < 2 && (
-            <div className={widgetUi.quickReplies}>
-              {config.quickReplies.map((question) => (
-                <button
-                  key={question}
-                  className={widgetUi.chip}
-                  onClick={() => handleSend(question)}
-                >
-                  {question}
-                </button>
-              ))}
-            </div>
-          )}
+          <MessageList
+            messages={messages}
+            isSending={isSending}
+            header={
+              <div className={widgetUi.quickReplies}>
+                {config.quickReplies.map((question) => (
+                  <button
+                    key={question}
+                    className={widgetUi.chip}
+                    onClick={() => handleSend(question)}
+                  >
+                    {question}
+                  </button>
+                ))}
+              </div>
+            }
+          />
           <ChatComposer
             value={input}
             onChange={setInput}
