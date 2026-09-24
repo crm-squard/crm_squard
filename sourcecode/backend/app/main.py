@@ -8,6 +8,7 @@ FastAPI 入口。
 import os
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
+import asyncio
 import re
 import time
 from collections import defaultdict, deque
@@ -903,7 +904,10 @@ async def _handle_chat(
     agent = get_agent()
     # 讀這家公司在後台設定的 k 與 rerank 偏好；查不到公司（沒帶或不合法的 X-Client-ID）就用系統預設。
     # rerank 偏好只是「想開」，伺服器不支援時（例如 Cloud Run）檢索層會靜默退回一般向量檢索。
-    answer, retrieved = agent.generate_answer(
+    # generate_answer 是同步函式（檢索 + 等線上 LLM 回應，動輒數秒），直接呼叫會佔住 event loop，
+    # 讓同一實例上其他使用者的請求排隊；丟到執行緒池執行才能真正並行處理多位使用者。
+    answer, retrieved = await asyncio.to_thread(
+        agent.generate_answer,
         text, history=history, provider=provider, chatbot_id=chatbot_id,
         top_k=chatbot["rag_top_k"] if chatbot else None,
         use_rerank=bool(chatbot and chatbot["rerank_enabled"]),
