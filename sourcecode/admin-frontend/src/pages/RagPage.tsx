@@ -32,7 +32,6 @@ import CardLoading from "../components/CardLoading";
 import ChatbotSettingsTabs from "../components/ChatbotSettingsTabs";
 import {
   deleteDocument,
-  fetchDocuments,
   precheckDocuments,
   sha256Hex,
   upsertDocument,
@@ -46,6 +45,13 @@ import { useAuth } from "../auth/AuthContext";
 import ChatWidgetPreview from "../components/ChatWidgetPreview";
 import { updateChatbot } from "../api/chatbots";
 import { ui } from "../uiStyles";
+import { queryKeys } from "../api/queryKeys";
+import { queryClient } from "../queryClient";
+import {
+  useDocumentsQuery,
+  useUpdateChatbotMutation,
+} from "../hooks/useAdminQueries";
+import { useSelectedChatbot } from "../hooks/useSelectedChatbot";
 import { tw } from "../utils/tw";
 
 const { Text } = Typography;
@@ -205,8 +211,11 @@ function TagChipsInput({
 }
 
 export default function AdminDocumentsPage() {
-  const { token, selectedChatbotId, chatbots, refreshMe } = useAuth();
-  const chatbot = chatbots.find((item) => item.id === selectedChatbotId);
+  const { token } = useAuth();
+  const { chatbot, selectedChatbotId } = useSelectedChatbot();
+  const updateMutation = useUpdateChatbotMutation(token ?? "");
+  const documentsQuery = useDocumentsQuery(token, selectedChatbotId);
+  const loadDocuments = () => documentsQuery.refetch();
   const [settingsForm] = Form.useForm<{
     rag_top_k: number;
     rerank_enabled: boolean;
@@ -218,7 +227,7 @@ export default function AdminDocumentsPage() {
   const folderInputRef = useRef<HTMLInputElement>(null);
   const fileDragDepthRef = useRef(0);
   const [documents, setDocuments] = useState<DocumentInfo[]>([]);
-  const [loading, setLoading] = useState(true);
+  const loading = documentsQuery.isLoading;
   const [notice, setNotice] = useState<string | null>(null);
 
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
@@ -240,6 +249,10 @@ export default function AdminDocumentsPage() {
   const navigationBlocker = useBlocker(hasUnanalyzedFiles);
 
   useEffect(() => {
+    setDocuments([]);
+  }, [selectedChatbotId]);
+
+  useEffect(() => {
     if (!chatbot) return;
     settingsForm.setFieldsValue({
       rag_top_k: chatbot.rag_top_k ?? DEFAULT_RAG_TOP_K,
@@ -254,13 +267,15 @@ export default function AdminDocumentsPage() {
     if (!token || !selectedChatbotId) return;
     setSavingSettings(true);
     try {
-      await updateChatbot(token, selectedChatbotId, {
-        rag_top_k: values.rag_top_k,
-        ...(values.rerank_enabled !== !!chatbot?.rerank_enabled
-          ? { rerank_enabled: values.rerank_enabled }
-          : {}),
+      await updateMutation.mutateAsync({
+        chatbotId: selectedChatbotId,
+        params: {
+          rag_top_k: values.rag_top_k,
+          ...(values.rerank_enabled !== !!chatbot?.rerank_enabled
+            ? { rerank_enabled: values.rerank_enabled }
+            : {}),
+        },
       });
-      await refreshMe();
       messageApi.success("已儲存知識設定");
     } catch (error) {
       messageApi.error(error instanceof Error ? error.message : "儲存失敗");
@@ -294,24 +309,10 @@ export default function AdminDocumentsPage() {
     });
   }, [modalApi, navigationBlocker]);
 
-  async function loadDocuments() {
-    if (!token || !selectedChatbotId) return;
-    setLoading(true);
-    try {
-      const docs = await fetchDocuments(token, selectedChatbotId);
-      setDocuments(docs);
-    } catch (err) {
-      messageApi.error(err instanceof Error ? err.message : "載入文件列表失敗");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  // selectedChatbotId 變動（使用者切換公司）時要重新拉取該公司的文件列表。
+  // query key 包含 selectedChatbotId；切換公司時不會短暫顯示另一家文件。
   useEffect(() => {
-    loadDocuments();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token, selectedChatbotId]);
+    if (documentsQuery.data) setDocuments(documentsQuery.data);
+  }, [documentsQuery.data]);
 
   useEffect(() => {
     function hasFiles(event: DragEvent): boolean {
@@ -569,7 +570,10 @@ export default function AdminDocumentsPage() {
     setNotice(null);
     try {
       await deleteDocument(token, selectedChatbotId, path);
-      setDocuments((prev) => prev.filter((doc) => doc.path !== path));
+      queryClient.setQueryData<DocumentInfo[]>(
+        queryKeys.documents.byChatbot(selectedChatbotId),
+        (current) => current?.filter((doc) => doc.path !== path),
+      );
     } catch (err) {
       messageApi.error(err instanceof Error ? err.message : "刪除文件失敗");
     }

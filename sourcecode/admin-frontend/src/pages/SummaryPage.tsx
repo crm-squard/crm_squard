@@ -8,13 +8,14 @@ import Typography from "antd/es/typography";
 import type { ColumnsType } from "antd/es/table";
 import dayjs, { type Dayjs } from "dayjs";
 import type { ReactNode } from "react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Navigate } from "react-router-dom";
 import AdminPageLayout from "../components/AdminPageLayout";
 import CardLoading from "../components/CardLoading";
 import ChatbotSettingsTabs from "../components/ChatbotSettingsTabs";
 import { useAuth } from "../auth/AuthContext";
-import { getPeriodSummary, type PeriodSummary } from "../api/summary";
+import type { PeriodSummary } from "../api/summary";
+import { useSummaryQuery } from "../hooks/useAdminQueries";
 import { ui } from "../uiStyles";
 
 const { Paragraph, Text } = Typography;
@@ -71,35 +72,13 @@ export default function SummaryPage() {
   const [dateRange, setDateRange] = useState<[Dayjs, Dayjs]>(() =>
     getWeekRange(getUtcToday()),
   );
-  const [data, setData] = useState<PeriodSummary | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!token || !selectedChatbotId) return;
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-    getPeriodSummary(
-      token,
-      selectedChatbotId,
-      dateRange[0].format("YYYY-MM-DD"),
-      dateRange[1].format("YYYY-MM-DD"),
-    )
-      .then((result) => {
-        if (!cancelled) setData(result);
-      })
-      .catch((err) => {
-        if (!cancelled)
-          setError(err instanceof Error ? err.message : "讀取摘要失敗");
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [token, selectedChatbotId, dateRange]);
+  const summaryQuery = useSummaryQuery(
+    token,
+    selectedChatbotId,
+    dateRange[0].format("YYYY-MM-DD"),
+    dateRange[1].format("YYYY-MM-DD"),
+  );
+  const { data } = summaryQuery;
 
   if (!selectedChatbotId) return <Navigate to="/chatbots" replace />;
 
@@ -162,7 +141,7 @@ export default function SummaryPage() {
           <DatePicker.RangePicker
             aria-label="客服摘要週期"
             allowClear={false}
-            disabled={loading}
+            disabled={summaryQuery.isFetching}
             disabledDate={(current) =>
               current && current.isAfter(getUtcToday(), "day")
             }
@@ -174,10 +153,10 @@ export default function SummaryPage() {
             }}
           />
         </div>
-        {loading ? (
+        {summaryQuery.isLoading ? (
           <CardLoading label="客服摘要讀取中" />
-        ) : error ? (
-          <Alert type="error" showIcon message={error} />
+        ) : summaryQuery.error ? (
+          <Alert type="error" showIcon message={summaryQuery.error.message} />
         ) : data ? (
           data.question_count === 0 ? (
             <Empty description="這個週期沒有使用者提問紀錄" />

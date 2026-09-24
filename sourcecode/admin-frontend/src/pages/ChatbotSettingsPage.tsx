@@ -7,20 +7,24 @@ import message from "antd/es/message";
 import Popconfirm from "antd/es/popconfirm";
 import Tooltip from "antd/es/tooltip";
 import Typography from "antd/es/typography";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
-import { createAccount, deleteAccount, listAccounts } from "../api/accounts";
-import {
-  deleteChatbot,
-  getChatbotMcpToken,
-  updateChatbot,
-} from "../api/chatbots";
+import { createAccount, deleteAccount } from "../api/accounts";
+import { getChatbotMcpToken } from "../api/chatbots";
 import { useAuth } from "../auth/AuthContext";
 import AccountManagementCard from "../components/AccountManagementCard";
 import AdminPageLayout from "../components/AdminPageLayout";
 import ChatbotSettingsTabs from "../components/ChatbotSettingsTabs";
 import type { Account } from "../types/auth";
 import { ui } from "../uiStyles";
+import { queryClient } from "../queryClient";
+import { queryKeys } from "../api/queryKeys";
+import {
+  useAccountsQuery,
+  useDeleteChatbotMutation,
+  useUpdateChatbotMutation,
+} from "../hooks/useAdminQueries";
+import { useSelectedChatbot } from "../hooks/useSelectedChatbot";
 
 const { Text } = Typography;
 const { TextArea } = Input;
@@ -44,60 +48,29 @@ export default function ChatbotSettingsPage() {
   const {
     token,
     account: currentAccount,
-    chatbots,
     selectedChatbotId,
     selectChatbot,
-    refreshMe,
   } = useAuth();
+  const { chatbot } = useSelectedChatbot();
   const [messageApi, contextHolder] = message.useMessage();
   const [form] = Form.useForm<ChatbotSettingsForm>();
   const [accountForm] = Form.useForm<{ email: string }>();
   const [saving, setSaving] = useState(false);
-  const [deleting, setDeleting] = useState(false);
   const [revealedMcpToken, setRevealedMcpToken] = useState<string | null>(null);
   const [revealingToken, setRevealingToken] = useState(false);
   const [clearingToken, setClearingToken] = useState(false);
-  const [accounts, setAccounts] = useState<Account[]>([]);
-  const [accountsLoading, setAccountsLoading] = useState(true);
+  const accountsQuery = useAccountsQuery(token, selectedChatbotId ?? undefined);
+  const accounts = accountsQuery.data ?? [];
+  const updateMutation = useUpdateChatbotMutation(token ?? "");
+  const deleteMutation = useDeleteChatbotMutation(token ?? "");
   const [addingAccount, setAddingAccount] = useState(false);
   const triggerNameInput = Form.useWatch("mcp_trigger_name", form);
   const triggerName =
     (triggerNameInput ?? "").trim().replace(/^[@＠]+/, "") ||
     DEFAULT_MCP_TRIGGER_NAME;
-  const chatbot = chatbots.find((item) => item.id === selectedChatbotId);
-
-  const loadAccounts = useCallback(() => {
-    if (!token || !selectedChatbotId) {
-      setAccountsLoading(false);
-      return;
-    }
-    setAccountsLoading(true);
-    listAccounts(token, selectedChatbotId)
-      .then(setAccounts)
-      .catch((error) =>
-        messageApi.error(
-          error instanceof Error ? error.message : "帳號清單載入失敗",
-        ),
-      )
-      .finally(() => setAccountsLoading(false));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token, selectedChatbotId]);
-
-  useEffect(() => {
-    loadAccounts();
-  }, [loadAccounts]);
-
   useEffect(() => {
     setRevealedMcpToken(null);
   }, [selectedChatbotId]);
-
-  useEffect(() => {
-    if (!token || !selectedChatbotId) return;
-    refreshMe().catch(() => {
-      // 更新失敗時沿用現有快取，不中斷設定頁。
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token, selectedChatbotId]);
 
   useEffect(() => {
     if (!chatbot) return;
@@ -127,17 +100,19 @@ export default function ChatbotSettingsPage() {
         .filter(Boolean);
 
       if (!selectedChatbotId) return;
-      await updateChatbot(token, selectedChatbotId, {
-        name: values.name.trim(),
-        mcp_url: values.mcp_url ?? "",
-        mcp_trigger_name: values.mcp_trigger_name ?? "",
-        ...(values.mcp_token ? { mcp_token: values.mcp_token } : {}),
-        welcome_message: values.welcome_message ?? "",
-        quick_replies: quickReplies,
+      await updateMutation.mutateAsync({
+        chatbotId: selectedChatbotId,
+        params: {
+          name: values.name.trim(),
+          mcp_url: values.mcp_url ?? "",
+          mcp_trigger_name: values.mcp_trigger_name ?? "",
+          ...(values.mcp_token ? { mcp_token: values.mcp_token } : {}),
+          welcome_message: values.welcome_message ?? "",
+          quick_replies: quickReplies,
+        },
       });
       form.setFieldValue("mcp_token", "");
       setRevealedMcpToken(null);
-      await refreshMe();
       messageApi.success("已儲存 ChatBot 設定");
     } catch (error) {
       messageApi.error(error instanceof Error ? error.message : "儲存失敗");
@@ -164,9 +139,11 @@ export default function ChatbotSettingsPage() {
     if (!token || !selectedChatbotId) return;
     setClearingToken(true);
     try {
-      await updateChatbot(token, selectedChatbotId, { mcp_token: "" });
+      await updateMutation.mutateAsync({
+        chatbotId: selectedChatbotId,
+        params: { mcp_token: "" },
+      });
       setRevealedMcpToken(null);
-      await refreshMe();
       messageApi.success("已清除 MCP 金鑰");
     } catch (error) {
       messageApi.error(error instanceof Error ? error.message : "清除金鑰失敗");
@@ -185,7 +162,9 @@ export default function ChatbotSettingsPage() {
         chatbot_id: selectedChatbotId,
       });
       accountForm.resetFields();
-      loadAccounts();
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.accounts.byChatbot(selectedChatbotId),
+      });
       messageApi.success("已新增管理帳號");
     } catch (error) {
       messageApi.error(error instanceof Error ? error.message : "新增失敗");
@@ -198,7 +177,9 @@ export default function ChatbotSettingsPage() {
     if (!token || !selectedChatbotId) return;
     try {
       await deleteAccount(token, accountId, selectedChatbotId);
-      loadAccounts();
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.accounts.byChatbot(selectedChatbotId),
+      });
       messageApi.success("已移除管理帳號");
     } catch (error) {
       messageApi.error(error instanceof Error ? error.message : "移除失敗");
@@ -207,17 +188,13 @@ export default function ChatbotSettingsPage() {
 
   async function handleDeleteChatbot() {
     if (!token || !selectedChatbotId) return;
-    setDeleting(true);
     try {
-      await deleteChatbot(token, selectedChatbotId);
+      await deleteMutation.mutateAsync(selectedChatbotId);
       selectChatbot(null);
-      await refreshMe();
       messageApi.success("已刪除商家服務");
       navigate("/chatbots", { replace: true });
     } catch (error) {
       messageApi.error(error instanceof Error ? error.message : "刪除失敗");
-    } finally {
-      setDeleting(false);
     }
   }
 
@@ -398,7 +375,7 @@ export default function ChatbotSettingsPage() {
       <AccountManagementCard
         title="管理商家帳號"
         accounts={accounts}
-        loading={accountsLoading}
+        loading={accountsQuery.isLoading}
         loadingLabel="商家帳號讀取中"
         adding={addingAccount}
         canManage={canManageAccounts}
@@ -426,7 +403,7 @@ export default function ChatbotSettingsPage() {
           onConfirm={handleDeleteChatbot}
           okButtonProps={{ danger: true }}
         >
-          <Button danger loading={deleting}>
+          <Button danger loading={deleteMutation.isPending}>
             刪除這家商家服務
           </Button>
         </Popconfirm> */}

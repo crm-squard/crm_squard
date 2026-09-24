@@ -13,6 +13,8 @@ import { useAuth } from "../auth/AuthContext";
 import AdminPageLayout from "../components/AdminPageLayout";
 import ChatbotSettingsTabs from "../components/ChatbotSettingsTabs";
 import { ui } from "../uiStyles";
+import { useUpdateChatbotMutation } from "../hooks/useAdminQueries";
+import { useSelectedChatbot } from "../hooks/useSelectedChatbot";
 
 const { Text } = Typography;
 
@@ -26,13 +28,13 @@ interface LineBotSettingsForm {
 }
 
 export default function LineBotSettingsPage() {
-  const { token, chatbots, selectedChatbotId, refreshMe } = useAuth();
+  const { token } = useAuth();
+  const { chatbot, selectedChatbotId } = useSelectedChatbot();
+  const updateMutation = useUpdateChatbotMutation(token ?? "");
 
   const [messageApi, contextHolder] = message.useMessage();
   const [form] = Form.useForm<LineBotSettingsForm>();
   const [saving, setSaving] = useState(false);
-
-  const chatbot = chatbots.find((item) => item.id === selectedChatbotId);
 
   const webhookUrl = selectedChatbotId
     ? `${API_BASE_URL}/line/webhook/${encodeURIComponent(selectedChatbotId)}`
@@ -59,16 +61,19 @@ export default function LineBotSettingsPage() {
     setSaving(true);
 
     try {
-      await updateChatbot(token, selectedChatbotId, {
-        line_channel_id: values.line_channel_id ?? "",
+      await updateMutation.mutateAsync({
+        chatbotId: selectedChatbotId,
+        params: {
+          line_channel_id: values.line_channel_id ?? "",
 
-        ...(values.line_channel_secret
-          ? { line_channel_secret: values.line_channel_secret }
-          : {}),
+          ...(values.line_channel_secret
+            ? { line_channel_secret: values.line_channel_secret }
+            : {}),
 
-        ...(values.line_channel_access_token
-          ? { line_channel_access_token: values.line_channel_access_token }
-          : {}),
+          ...(values.line_channel_access_token
+            ? { line_channel_access_token: values.line_channel_access_token }
+            : {}),
+        },
       });
 
       form.setFieldsValue({
@@ -76,7 +81,6 @@ export default function LineBotSettingsPage() {
         line_channel_access_token: "",
       });
 
-      await refreshMe();
       messageApi.success("已儲存 LINE BOT 設定");
     } catch (error) {
       messageApi.error(
