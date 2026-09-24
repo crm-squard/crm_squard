@@ -9,6 +9,7 @@ import os
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
 import re
+import threading
 import time
 from collections import defaultdict, deque
 from contextlib import asynccontextmanager
@@ -70,6 +71,14 @@ DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 MAX_CLIENT_ID_LENGTH = 128
 
 
+def _preload_agent():
+    try:
+        get_agent()
+    except Exception as e:
+        # 預載失敗不影響服務啟動；第一個聊天請求會重試並在 /api/chat 的例外處理中回報
+        print(f"[Warning] Backend startup agent preload failed: {e}")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # 啟動時預載 DB；避免在啟動階段載入重型模型導致 Cloud Run 健康檢查逾時
@@ -85,6 +94,10 @@ async def lifespan(app: FastAPI):
         accounts_store._ensure_schema()
     except Exception as e:
         print(f"[Warning] Backend startup accounts_store schema init failed: {e}")
+    # 背景預載 agent（embedding 模型 + pgvector 連線，實測約 5～7 秒）：用背景執行緒而不是
+    # 直接在啟動階段載入，服務可以先通過 Cloud Run 健康檢查；預載完成前進來的第一個
+    # /api/chat 請求仍會自己呼叫 get_agent()，行為不變，只是多數情況下不用再等冷啟動。
+    threading.Thread(target=_preload_agent, name="preload-agent", daemon=True).start()
     yield
 
 

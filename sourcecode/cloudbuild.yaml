@@ -51,6 +51,11 @@ steps:
       - '--port=8000'
       - '--cpu=2'
       - '--concurrency=10'
+      # 不在這裡指定 --min-instances：gcloud run deploy 沒帶該旗標時會保留現有值，
+      # 平日 10:00-18:00 的常駐由 Cloud Scheduler 切換（見 scripts/cloudrun-warm-schedule.sh），
+      # 避免每次部署把排程設定的值蓋掉。
+      # 啟動階段暫時多給 CPU，加速載入 embedding 模型與 llama_index 相關套件
+      - '--cpu-boost'
 
   # 3.5 取得已部署的 Backend Cloud Run 服務網址
   - id: 'backend-url'
