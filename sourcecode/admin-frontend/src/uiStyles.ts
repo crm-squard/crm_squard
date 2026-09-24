@@ -231,7 +231,18 @@ export const ui = {
   summaryTable: tw(
     "[&_.ant-table-cell]:align-top [&_.ant-table-cell:first-child]:font-medium [&_.ant-table-cell:first-child]:text-[#20345e]",
   ),
-  summaryCategoryTags: tw("flex flex-wrap gap-1.5 [&_.ant-tag]:m-0"),
+  summaryChart: tw("grid gap-3"),
+  summaryChartList: tw("m-0 grid list-none gap-1 p-0"),
+  summaryChartRow: tw(
+    "grid w-full cursor-pointer grid-cols-[minmax(96px,160px)_1fr_40px] items-center gap-3 rounded-compact border-0 bg-transparent px-2 py-1.5 text-left hover:bg-admin-surface-subtle aria-pressed:bg-admin-agent-avatar-bg max-[620px]:grid-cols-[96px_1fr_32px]",
+  ),
+  summaryChartLabel: tw("truncate text-caption text-admin-text"),
+  summaryChartTrack: tw("h-3 overflow-hidden rounded-full bg-admin-border"),
+  summaryChartCount: tw("text-right text-caption text-admin-text-secondary"),
+  summaryBarTopic: tw("block h-full rounded-full bg-admin-primary"),
+  summaryBarMcp: tw("block h-full rounded-full bg-violet-500"),
+  summaryBarAttention: tw("block h-full rounded-full bg-amber-500"),
+  summaryBarMeaningless: tw("block h-full rounded-full bg-slate-400"),
   summaryTableParagraph: tw("m-0! whitespace-pre-wrap"),
   summaryTableList: tw(
     "m-0 grid list-none gap-1.5 p-0 [&_li]:rounded-compact [&_li]:bg-admin-surface-subtle [&_li]:px-3 [&_li]:py-2 [&_li]:text-caption [&_li]:text-[#334360]",

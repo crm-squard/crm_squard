@@ -291,7 +291,7 @@ def admin_summary(
     _account: dict = Depends(auth.require_chatbot_access),
 ):
     """
-    管理者查看指定公司、固定週區間（UTC）使用者提問的主題摘要。
+    管理者查看指定公司、自選區間（UTC，最多 31 日）使用者提問的主題摘要。
 
     chatbot_id 必填 + require_chatbot_access：只有 platform 帳號或綁定這家公司的帳號
     才能看到這家公司的顧客提問內容，比照 /api/admin/documents* 的驗證模式。
@@ -306,20 +306,12 @@ def admin_summary(
         raise HTTPException(status_code=400, detail="start_date 與 end_date 必須是有效日期")
 
     today = datetime.now(timezone.utc).date()
-    current_week_start = today - timedelta(days=today.weekday())
     if start > end:
         raise HTTPException(status_code=400, detail="start_date 不得晚於 end_date")
-    if (end - start).days > 6:
-        raise HTTPException(status_code=400, detail="摘要查詢區間最多七日")
+    if (end - start).days > 30:
+        raise HTTPException(status_code=400, detail="摘要查詢區間最多一個月（31 日）")
     if end > today:
         raise HTTPException(status_code=400, detail="end_date 不得晚於今天")
-    if start.weekday() != 0:
-        raise HTTPException(status_code=400, detail="start_date 必須為週一")
-    if start == current_week_start:
-        if end != today:
-            raise HTTPException(status_code=400, detail="本週摘要的 end_date 必須為今天")
-    elif end.weekday() != 6:
-        raise HTTPException(status_code=400, detail="歷史週摘要的 end_date 必須為週日")
 
     try:
         result = summarize_period(start_date, end_date, chatbot_id)

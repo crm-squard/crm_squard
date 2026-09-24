@@ -3,6 +3,7 @@ import { requestAdminApi } from "./apiClient";
 export interface QuestionCategory {
   name: string;
   count: number;
+  questions: string[];
 }
 
 export interface PeriodSummary {
@@ -12,6 +13,7 @@ export interface PeriodSummary {
   categories: QuestionCategory[];
   meaningless_questions: string[];
   needs_merchant_attention: string[];
+  mcp_questions: string[];
   summary: string;
 }
 

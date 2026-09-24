@@ -46,6 +46,8 @@ class ChatResponse(BaseModel):
 class QuestionCategory(BaseModel):
     name: str
     count: int
+    # 屬於這個主題的原始提問（逐字），前端點長條時展開查看
+    questions: List[str] = Field(default_factory=list)
 
 
 class PeriodSummaryResponse(BaseModel):
@@ -58,6 +60,8 @@ class PeriodSummaryResponse(BaseModel):
     # 需商家關注：問題合理但太獨特無法歸類，或機器人明顯答不出來（見 app/summary.py 的
     # NO_INFO_ANSWER 訊號輔助判斷），管理者可能要補充知識庫或人工介入
     needs_merchant_attention: List[str] = Field(default_factory=list)
+    # 以「@<MCP 機器人名稱>」開頭的 MCP 指令：獨立一類，不算無意義也不算需商家關注
+    mcp_questions: List[str] = Field(default_factory=list)
     summary: str
 
 

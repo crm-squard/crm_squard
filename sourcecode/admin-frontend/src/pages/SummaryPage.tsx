@@ -24,11 +24,95 @@ function getUtcToday() {
   return dayjs(new Date().toISOString().slice(0, 10));
 }
 
-function getWeekRange(date: Dayjs): [Dayjs, Dayjs] {
-  const startDate = date.subtract((date.day() + 6) % 7, "day").startOf("day");
-  const endDate = startDate.add(6, "day");
+// 後端限制區間最多 31 日（含起訖）；預設帶入最近 7 天。
+const MAX_RANGE_DAYS = 31;
+
+function getDefaultRange(): [Dayjs, Dayjs] {
   const today = getUtcToday();
-  return [startDate, endDate.isAfter(today, "day") ? today : endDate];
+  return [today.subtract(6, "day"), today];
+}
+
+interface ChartItem {
+  key: string;
+  label: string;
+  barClassName: string;
+  questions: string[];
+  count: number;
+}
+
+// 長條圖：常見主題各一條，其後固定為 MCP、需商家關注、無意義訊息；點任一條顯示該類原始提問。
+function buildChartItems(data: PeriodSummary): ChartItem[] {
+  const topics = [...data.categories]
+    .sort((a, b) => b.count - a.count)
+    .map((category) => ({
+      key: `topic:${category.name}`,
+      label: category.name,
+      barClassName: ui.summaryBarTopic,
+      questions: category.questions ?? [],
+      count: category.count,
+    }));
+  const groups = [
+    {
+      key: "mcp",
+      label: "MCP 訊息",
+      barClassName: ui.summaryBarMcp,
+      questions: data.mcp_questions ?? [],
+    },
+    {
+      key: "attention",
+      label: "需商家關注",
+      barClassName: ui.summaryBarAttention,
+      questions: data.needs_merchant_attention,
+    },
+    {
+      key: "meaningless",
+      label: "無意義訊息",
+      barClassName: ui.summaryBarMeaningless,
+      questions: data.meaningless_questions,
+    },
+  ].map((group) => ({ ...group, count: group.questions.length }));
+  return [...topics, ...groups];
+}
+
+function SummaryBarChart({ items }: { items: ChartItem[] }) {
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const maxCount = Math.max(1, ...items.map((item) => item.count));
+  const selected = items.find((item) => item.key === selectedKey);
+  return (
+    <div className={ui.summaryChart}>
+      <ul aria-label="提問分類長條圖" className={ui.summaryChartList}>
+        {items.map((item) => (
+          <li key={item.key}>
+            <button
+              type="button"
+              aria-pressed={item.key === selectedKey}
+              className={ui.summaryChartRow}
+              onClick={() =>
+                setSelectedKey(item.key === selectedKey ? null : item.key)
+              }
+            >
+              <span className={ui.summaryChartLabel}>{item.label}</span>
+              <span className={ui.summaryChartTrack}>
+                <span
+                  className={item.barClassName}
+                  style={{ width: `${(item.count / maxCount) * 100}%` }}
+                />
+              </span>
+              <span className={ui.summaryChartCount}>{item.count}</span>
+            </button>
+          </li>
+        ))}
+      </ul>
+      {selected ? (
+        <div>
+          <Text strong>{`${selected.label}（${selected.count}）`}</Text>
+          <MessageList items={selected.questions} />
+        </div>
+      ) : (
+        <Text type="secondary">點選長條可查看該分類的提問內容</Text>
+      )}
+    </div>
+  );
 }
 
 interface SummaryTableRow {
@@ -69,9 +153,7 @@ function MessageList({ items }: { items: string[] }) {
  */
 export default function SummaryPage() {
   const { token, selectedChatbotId } = useAuth();
-  const [dateRange, setDateRange] = useState<[Dayjs, Dayjs]>(() =>
-    getWeekRange(getUtcToday()),
-  );
+  const [dateRange, setDateRange] = useState<[Dayjs, Dayjs]>(getDefaultRange);
   const summaryQuery = useSummaryQuery(
     token,
     selectedChatbotId,
@@ -90,24 +172,6 @@ export default function SummaryPage() {
           content: <Tag color="blue">{data.question_count} 則提問</Tag>,
         },
         {
-          key: "categories",
-          label: "常見主題",
-          content:
-            data.categories.length === 0 ? (
-              <Text type="secondary">無可歸納的常見主題</Text>
-            ) : (
-              <div className={ui.summaryCategoryTags}>
-                {[...data.categories]
-                  .sort((a, b) => b.count - a.count)
-                  .map((category) => (
-                    <Tag
-                      key={category.name}
-                    >{`${category.name}（${category.count}）`}</Tag>
-                  ))}
-              </div>
-            ),
-        },
-        {
           key: "summary",
           label: "摘要",
           content: (
@@ -117,14 +181,14 @@ export default function SummaryPage() {
           ),
         },
         {
-          key: "needs_merchant_attention",
-          label: "需商家關注",
-          content: <MessageList items={data.needs_merchant_attention} />,
-        },
-        {
-          key: "meaningless_questions",
-          label: "無意義訊息",
-          content: <MessageList items={data.meaningless_questions} />,
+          key: "chart",
+          label: "分類統計",
+          content: (
+            <SummaryBarChart
+              key={`${data.start_date}_${data.end_date}`}
+              items={buildChartItems(data)}
+            />
+          ),
         },
       ]
     : [];
@@ -132,24 +196,29 @@ export default function SummaryPage() {
   return (
     <AdminPageLayout
       title="客服摘要"
-      description="查看指定週期內使用者向聊天機器人提問的主題摘要。"
+      description="查看指定期間（最多一個月）內使用者向聊天機器人提問的主題摘要。"
     >
       <ChatbotSettingsTabs />
       <Card className={ui.settingsCard}>
         <div className={ui.summaryPeriodControl}>
-          <Text type="secondary">摘要週期（週一至週日）</Text>
+          <Text type="secondary">摘要期間（最多 31 日）</Text>
           <DatePicker.RangePicker
-            aria-label="客服摘要週期"
+            aria-label="客服摘要期間"
             allowClear={false}
             disabled={summaryQuery.isFetching}
-            disabledDate={(current) =>
-              current && current.isAfter(getUtcToday(), "day")
-            }
+            disabledDate={(current, info) => {
+              if (current.isAfter(getUtcToday(), "day")) return true;
+              // 選了起日或迄日後，另一端限制在 31 日內。
+              const anchor = info.from;
+              return (
+                !!anchor &&
+                Math.abs(current.diff(anchor, "day")) >= MAX_RANGE_DAYS
+              );
+            }}
             format="YYYY-MM-DD"
             value={dateRange}
-            onCalendarChange={(dates) => {
-              const selectedDate = dates?.[0];
-              if (selectedDate) setDateRange(getWeekRange(selectedDate));
+            onChange={(dates) => {
+              if (dates?.[0] && dates[1]) setDateRange([dates[0], dates[1]]);
             }}
           />
         </div>
@@ -159,7 +228,7 @@ export default function SummaryPage() {
           <Alert type="error" showIcon message={summaryQuery.error.message} />
         ) : data ? (
           data.question_count === 0 ? (
-            <Empty description="這個週期沒有使用者提問紀錄" />
+            <Empty description="這個期間沒有使用者提問紀錄" />
           ) : (
             <Table<SummaryTableRow>
               aria-label="客服摘要資料表"
