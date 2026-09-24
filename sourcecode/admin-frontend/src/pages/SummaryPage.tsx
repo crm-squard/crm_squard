@@ -1,11 +1,13 @@
 import Alert from "antd/es/alert";
 import Card from "antd/es/card";
-import Collapse from "antd/es/collapse";
 import DatePicker from "antd/es/date-picker";
 import Empty from "antd/es/empty";
 import Tag from "antd/es/tag";
+import Table from "antd/es/table";
 import Typography from "antd/es/typography";
+import type { ColumnsType } from "antd/es/table";
 import dayjs, { type Dayjs } from "dayjs";
+import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { Navigate } from "react-router-dom";
 import AdminPageLayout from "../components/AdminPageLayout";
@@ -15,7 +17,7 @@ import { useAuth } from "../auth/AuthContext";
 import { getPeriodSummary, type PeriodSummary } from "../api/summary";
 import { ui } from "../uiStyles";
 
-const { Paragraph, Text, Title } = Typography;
+const { Paragraph, Text } = Typography;
 
 function getUtcToday() {
   return dayjs(new Date().toISOString().slice(0, 10));
@@ -28,32 +30,34 @@ function getWeekRange(date: Dayjs): [Dayjs, Dayjs] {
   return [startDate, endDate.isAfter(today, "day") ? today : endDate];
 }
 
-/** 常見主題次數長條圖：純 CSS 呈現，資料量小（通常個位數~十幾個主題），不需要另外引入圖表套件。 */
-function CategoryChart({
-  categories,
-}: {
-  categories: PeriodSummary["categories"];
-}) {
-  if (categories.length === 0) return null;
-  const sorted = [...categories].sort((a, b) => b.count - a.count);
-  const max = Math.max(...sorted.map((c) => c.count), 1);
+interface SummaryTableRow {
+  key: string;
+  label: string;
+  content: ReactNode;
+}
+
+const summaryColumns: ColumnsType<SummaryTableRow> = [
+  {
+    title: "摘要欄位",
+    dataIndex: "label",
+    key: "label",
+    width: 180,
+  },
+  {
+    title: "內容",
+    dataIndex: "content",
+    key: "content",
+  },
+];
+
+function MessageList({ items }: { items: string[] }) {
+  if (items.length === 0) return <Text type="secondary">無</Text>;
   return (
-    <div className={ui.summaryChart}>
-      {sorted.map((category) => (
-        <div key={category.name} className={ui.summaryChartRow}>
-          <span className={ui.summaryChartLabel} title={category.name}>
-            {category.name}
-          </span>
-          <span className={ui.summaryChartTrack}>
-            <span
-              className={ui.summaryChartBar}
-              style={{ width: `${(category.count / max) * 100}%` }}
-            />
-          </span>
-          <span className={ui.summaryChartCount}>{category.count}</span>
-        </div>
+    <ul className={ui.summaryTableList}>
+      {items.map((item, index) => (
+        <li key={`${item}-${index}`}>{item}</li>
       ))}
-    </div>
+    </ul>
   );
 }
 
@@ -99,6 +103,53 @@ export default function SummaryPage() {
 
   if (!selectedChatbotId) return <Navigate to="/chatbots" replace />;
 
+  const summaryRows: SummaryTableRow[] = data
+    ? [
+        {
+          key: "question_count",
+          label: "提問數",
+          content: <Tag color="blue">{data.question_count} 則提問</Tag>,
+        },
+        {
+          key: "categories",
+          label: "常見主題",
+          content:
+            data.categories.length === 0 ? (
+              <Text type="secondary">無可歸納的常見主題</Text>
+            ) : (
+              <div className={ui.summaryCategoryTags}>
+                {[...data.categories]
+                  .sort((a, b) => b.count - a.count)
+                  .map((category) => (
+                    <Tag
+                      key={category.name}
+                    >{`${category.name}（${category.count}）`}</Tag>
+                  ))}
+              </div>
+            ),
+        },
+        {
+          key: "summary",
+          label: "摘要",
+          content: (
+            <Paragraph className={ui.summaryTableParagraph}>
+              {data.summary}
+            </Paragraph>
+          ),
+        },
+        {
+          key: "needs_merchant_attention",
+          label: "需商家關注",
+          content: <MessageList items={data.needs_merchant_attention} />,
+        },
+        {
+          key: "meaningless_questions",
+          label: "無意義訊息",
+          content: <MessageList items={data.meaningless_questions} />,
+        },
+      ]
+    : [];
+
   return (
     <AdminPageLayout
       title="客服摘要"
@@ -131,50 +182,16 @@ export default function SummaryPage() {
           data.question_count === 0 ? (
             <Empty description="這個週期沒有使用者提問紀錄" />
           ) : (
-            <>
-              <Tag color="blue">{data.question_count} 則提問</Tag>
-              <CategoryChart categories={data.categories} />
-              <Paragraph className={ui.preWrap}>{data.summary}</Paragraph>
-
-              {data.needs_merchant_attention.length > 0 && (
-                <div className={ui.summaryAttentionSection}>
-                  <Title className={ui.summaryAttentionTitle} level={5}>
-                    需商家關注（{data.needs_merchant_attention.length}）
-                  </Title>
-                  <Paragraph
-                    className={ui.summaryAttentionDescription}
-                    type="secondary"
-                  >
-                    這些問題與業務相關，但機器人可能答不出來，或太獨特無法歸類，建議人工確認。
-                  </Paragraph>
-                  <ul className={ui.summaryAttentionList}>
-                    {data.needs_merchant_attention.map((q, i) => (
-                      <li key={i}>{q}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              {data.meaningless_questions.length > 0 && (
-                <Collapse
-                  ghost
-                  className={ui.marginTop4}
-                  items={[
-                    {
-                      key: "meaningless",
-                      label: `無意義訊息（${data.meaningless_questions.length}）`,
-                      children: (
-                        <ul className={ui.summaryMeaninglessList}>
-                          {data.meaningless_questions.map((q, i) => (
-                            <li key={i}>{q}</li>
-                          ))}
-                        </ul>
-                      ),
-                    },
-                  ]}
-                />
-              )}
-            </>
+            <Table<SummaryTableRow>
+              aria-label="客服摘要資料表"
+              className={ui.summaryTable}
+              columns={summaryColumns}
+              dataSource={summaryRows}
+              pagination={false}
+              rowKey="key"
+              size="small"
+              tableLayout="fixed"
+            />
           )
         ) : null}
       </Card>
