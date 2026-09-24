@@ -787,7 +787,7 @@ export default function AdminDocumentsPage() {
                     disabled={selectedFiles.length === 0}
                     onClick={analyzeSelection}
                   >
-                    上傳分析檔案
+                    上傳檔案
                   </Button>
                 </div>
 
