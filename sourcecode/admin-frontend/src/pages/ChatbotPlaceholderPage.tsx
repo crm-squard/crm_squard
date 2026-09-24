@@ -28,7 +28,6 @@ const { Paragraph, Text } = Typography;
 export default function ChatbotPlaceholderPage() {
   const location = useLocation();
   const { selectedChatbotId, chatbots } = useAuth();
-  console.log("selectedChatbotId", selectedChatbotId, "chatbots", chatbots);
   const [messageApi, contextHolder] = message.useMessage();
   const content = pageContent[location.pathname];
 
