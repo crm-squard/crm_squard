@@ -12,7 +12,7 @@ import re
 import time
 from collections import defaultdict, deque
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from typing import Callable, Literal
 
@@ -36,7 +36,7 @@ from app.schemas import (
     ChatbotListResponse,
     ChatbotUpdateRequest,
     McpTokenResponse,
-    DailySummaryResponse,
+    PeriodSummaryResponse,
     DocumentInfo,
     DocumentListResponse,
     GoogleLoginRequest,
@@ -53,7 +53,7 @@ from app.agent import get_agent
 from app.chat_log import init_db as init_chat_log_db, log_chat, log_tool_calls
 from app.mcp_chat import answer_with_mcp, parse_mcp_command
 from app.rag import reranker
-from app.summary import summarize_day
+from app.summary import summarize_period
 from app.providers import is_configured
 from app.line_webhook import create_line_router
 from app.meta_webhook import create_meta_router
@@ -282,31 +282,52 @@ def widget_config(_client_id: str = Depends(_require_client_id)):
     )
 
 
-@app.get("/api/admin/summary", response_model=DailySummaryResponse)
+@app.get("/api/admin/summary", response_model=PeriodSummaryResponse)
 def admin_summary(
     chatbot_id: str = Query(...),
-    date: str | None = None,
+    start_date: str = Query(...),
+    end_date: str = Query(...),
     _account: dict = Depends(auth.require_chatbot_access),
 ):
     """
-    管理者查看指定公司、指定日期（預設今天，UTC）使用者提問的主題摘要。
+    管理者查看指定公司、固定週區間（UTC）使用者提問的主題摘要。
 
     chatbot_id 必填 + require_chatbot_access：只有 platform 帳號或綁定這家公司的帳號
     才能看到這家公司的顧客提問內容，比照 /api/admin/documents* 的驗證模式。
     """
-    if date is None:
-        date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    elif not DATE_PATTERN.match(date):
-        raise HTTPException(status_code=400, detail="date 格式須為 YYYY-MM-DD")
+    if not DATE_PATTERN.match(start_date) or not DATE_PATTERN.match(end_date):
+        raise HTTPException(status_code=400, detail="start_date 與 end_date 格式須為 YYYY-MM-DD")
 
     try:
-        result = summarize_day(date, chatbot_id)
+        start = datetime.strptime(start_date, "%Y-%m-%d").date()
+        end = datetime.strptime(end_date, "%Y-%m-%d").date()
+    except ValueError:
+        raise HTTPException(status_code=400, detail="start_date 與 end_date 必須是有效日期")
+
+    today = datetime.now(timezone.utc).date()
+    current_week_start = today - timedelta(days=today.weekday())
+    if start > end:
+        raise HTTPException(status_code=400, detail="start_date 不得晚於 end_date")
+    if (end - start).days > 6:
+        raise HTTPException(status_code=400, detail="摘要查詢區間最多七日")
+    if end > today:
+        raise HTTPException(status_code=400, detail="end_date 不得晚於今天")
+    if start.weekday() != 0:
+        raise HTTPException(status_code=400, detail="start_date 必須為週一")
+    if start == current_week_start:
+        if end != today:
+            raise HTTPException(status_code=400, detail="本週摘要的 end_date 必須為今天")
+    elif end.weekday() != 6:
+        raise HTTPException(status_code=400, detail="歷史週摘要的 end_date 必須為週日")
+
+    try:
+        result = summarize_period(start_date, end_date, chatbot_id)
     except Exception as e:
         # 同 /api/chat：未預期的例外要在應用程式層處理掉，回傳正常的錯誤回應，
         # 避免整個請求掛掉變成 Cloud Run 層級的 502/503（不帶 CORS 標頭）。
         print(f"[Summary Error] {e}")
         raise HTTPException(status_code=502, detail="產生摘要時發生錯誤，請稍後再試。")
-    return DailySummaryResponse(**result)
+    return PeriodSummaryResponse(**result)
 
 
 def _get_llamaindex_index():

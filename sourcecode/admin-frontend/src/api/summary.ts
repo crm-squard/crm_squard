@@ -5,8 +5,9 @@ export interface QuestionCategory {
   count: number;
 }
 
-export interface DailySummary {
-  date: string;
+export interface PeriodSummary {
+  start_date: string;
+  end_date: string;
   question_count: number;
   categories: QuestionCategory[];
   meaningless_questions: string[];
@@ -14,14 +15,18 @@ export interface DailySummary {
   summary: string;
 }
 
-export async function getDailySummary(
+export async function getPeriodSummary(
   token: string,
   chatbotId: string,
-  date?: string,
-): Promise<DailySummary> {
-  const searchParams = new URLSearchParams({ chatbot_id: chatbotId });
-  if (date) searchParams.set("date", date);
-  return requestAdminApi<DailySummary>(
+  startDate: string,
+  endDate: string,
+): Promise<PeriodSummary> {
+  const searchParams = new URLSearchParams({
+    chatbot_id: chatbotId,
+    start_date: startDate,
+    end_date: endDate,
+  });
+  return requestAdminApi<PeriodSummary>(
     `/api/admin/summary?${searchParams.toString()}`,
     { token },
   );

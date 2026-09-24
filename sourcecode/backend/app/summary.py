@@ -1,8 +1,8 @@
 """
-當日提問摘要：給管理者看「今天使用者都在問什麼」的功能。
+期間提問摘要：給管理者看指定週期內使用者都在問什麼的功能。
 
 流程：
-1. 從 chat_log 撈出指定日期的所有提問（含 response_text，用來輔助判斷「需商家關注」）
+1. 從 chat_log 撈出指定日期區間的所有提問（含 response_text，用來輔助判斷「需商家關注」）
 2. 問題數量較多時先分批各自分類，避免一次把所有問題塞進 LLM context
    （本地小模型 context 有限，問題一多會爆或品質變差；線上模型 context 較大，
    批次可以拉高，但太大一批品質仍會下降，所以線上模型用 _SUMMARY_BATCH_SIZE_ONLINE，
@@ -27,7 +27,7 @@ LLM 選擇：優先用有設定金鑰的線上 provider（依 _SUMMARY_PROVIDER_
 import json
 
 from app.agent import NO_INFO_ANSWER
-from app.chat_log import get_messages_for_date
+from app.chat_log import get_messages_for_range
 from app.providers import generate_with_provider, is_configured
 
 SUMMARY_BATCH_SIZE = 30
@@ -141,11 +141,16 @@ def _dedup_keep_order(items: list[str]) -> list[str]:
     return result
 
 
-def summarize_day(date: str, chatbot_id: str) -> dict:
-    """date 格式為 YYYY-MM-DD（UTC）。回傳指定公司當天提問數量、主題分類統計與摘要文字。"""
-    rows = get_messages_for_date(date, chatbot_id)
+def summarize_period(start_date: str, end_date: str, chatbot_id: str) -> dict:
+    """日期格式為 YYYY-MM-DD（UTC）。回傳指定公司在此區間的提問摘要。"""
+    rows = get_messages_for_range(start_date, end_date, chatbot_id)
     if not rows:
-        return {"date": date, "question_count": 0, "summary": "當天沒有使用者提問紀錄。"}
+        return {
+            "start_date": start_date,
+            "end_date": end_date,
+            "question_count": 0,
+            "summary": "這個週期沒有使用者提問紀錄。",
+        }
 
     questions = [r["message"] for r in rows]
     # 機器人當時回「查無此資訊」的提問：不管 LLM 怎麼分類，都強制併入「需商家關注」。
@@ -172,7 +177,8 @@ def summarize_day(date: str, chatbot_id: str) -> dict:
         categories, summary = _reduce_categories(batch_category_lists, provider)
 
     return {
-        "date": date,
+        "start_date": start_date,
+        "end_date": end_date,
         "question_count": len(questions),
         "categories": categories,
         "meaningless_questions": meaningless_questions,

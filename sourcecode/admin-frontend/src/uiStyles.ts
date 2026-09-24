@@ -222,30 +222,16 @@ export const ui = {
   ragTableTools: tw(
     "mb-4.5 grid grid-cols-[minmax(220px,1.2fr)_minmax(220px,1fr)_auto] gap-3 max-[620px]:grid-cols-1",
   ),
-  summaryChart: tw("grid gap-2.5"),
+  summaryPeriodControl: tw(
+    "mb-4.5 flex items-center justify-between gap-3 max-[620px]:flex-col max-[620px]:items-stretch",
+  ),
+  summaryTable: tw(
+    "[&_.ant-table-cell]:align-top [&_.ant-table-cell:first-child]:font-medium [&_.ant-table-cell:first-child]:text-[#20345e]",
+  ),
+  summaryCategoryTags: tw("flex flex-wrap gap-1.5 [&_.ant-tag]:m-0"),
+  summaryTableParagraph: tw("m-0! whitespace-pre-wrap"),
+  summaryTableList: tw(
+    "m-0 grid list-none gap-1.5 p-0 [&_li]:rounded-compact [&_li]:bg-admin-surface-subtle [&_li]:px-3 [&_li]:py-2 [&_li]:text-caption [&_li]:text-[#334360]",
+  ),
   cardLoading: tw("grid min-h-60 place-items-center"),
-  summaryChartRow: tw(
-    "grid grid-cols-[minmax(120px,180px)_1fr_auto] items-center gap-3 text-caption",
-  ),
-  summaryChartLabel: tw(
-    "overflow-hidden text-ellipsis whitespace-nowrap text-[#334360]",
-  ),
-  summaryChartTrack: tw(
-    "h-4.5 overflow-hidden rounded-full bg-admin-surface-subtle",
-  ),
-  summaryChartBar: tw(
-    "h-full rounded-full bg-admin-primary transition-[width]",
-  ),
-  summaryChartCount: tw("text-right font-semibold text-[#10234b]"),
-  summaryAttentionSection: tw(
-    "mt-5 rounded-control border border-solid border-[#ffd8a8] bg-[#fff8ef] p-4.5",
-  ),
-  summaryAttentionTitle: tw("m-0"),
-  summaryAttentionDescription: tw("mt-1 mb-0"),
-  summaryAttentionList: tw(
-    "m-0 mt-2 grid list-none gap-1.5 p-0 [&_li]:rounded-compact [&_li]:bg-white [&_li]:px-3 [&_li]:py-2 [&_li]:text-caption [&_li]:text-[#5a4321]",
-  ),
-  summaryMeaninglessList: tw(
-    "m-0 mt-2 grid list-none gap-1.25 p-0 [&_li]:text-caption [&_li]:text-admin-text-subtle",
-  ),
 };

@@ -221,6 +221,6 @@ metadata，含 `content_hash`/`uploaded_at`/`file_size_bytes`）就是唯一資�
 
 回傳可選的 LLM 清單與是否已設定 key，供前端畫下拉選單用。
 
-### `GET /api/admin/summary?date=YYYY-MM-DD`
+### `GET /api/admin/summary?chatbot_id=<id>&start_date=YYYY-MM-DD&end_date=YYYY-MM-DD`
 
-回傳指定日期（預設今天，UTC）使用者提問的主題摘要，`date` 省略時查今天。
+回傳指定 UTC 週區間使用者提問的主題摘要。歷史週的 `start_date` 必須為週一、`end_date` 必須為週日；本週的 `end_date` 必須是今天，查詢範圍最多七日。

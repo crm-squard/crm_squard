@@ -1,60 +1,77 @@
 import Alert from "antd/es/alert";
 import Card from "antd/es/card";
-import Collapse from "antd/es/collapse";
 import DatePicker from "antd/es/date-picker";
 import Empty from "antd/es/empty";
 import Tag from "antd/es/tag";
+import Table from "antd/es/table";
 import Typography from "antd/es/typography";
+import type { ColumnsType } from "antd/es/table";
 import dayjs, { type Dayjs } from "dayjs";
+import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { Navigate } from "react-router-dom";
 import AdminPageLayout from "../components/AdminPageLayout";
 import CardLoading from "../components/CardLoading";
 import ChatbotSettingsTabs from "../components/ChatbotSettingsTabs";
 import { useAuth } from "../auth/AuthContext";
-import { getDailySummary, type DailySummary } from "../api/summary";
+import { getPeriodSummary, type PeriodSummary } from "../api/summary";
 import { ui } from "../uiStyles";
 
-const { Paragraph, Title } = Typography;
+const { Paragraph, Text } = Typography;
 
-/** 常見主題次數長條圖：純 CSS 呈現，資料量小（通常個位數~十幾個主題），不需要另外引入圖表套件。 */
-function CategoryChart({
-  categories,
-}: {
-  categories: DailySummary["categories"];
-}) {
-  if (categories.length === 0) return null;
-  const sorted = [...categories].sort((a, b) => b.count - a.count);
-  const max = Math.max(...sorted.map((c) => c.count), 1);
+function getUtcToday() {
+  return dayjs(new Date().toISOString().slice(0, 10));
+}
+
+function getWeekRange(date: Dayjs): [Dayjs, Dayjs] {
+  const startDate = date.subtract((date.day() + 6) % 7, "day").startOf("day");
+  const endDate = startDate.add(6, "day");
+  const today = getUtcToday();
+  return [startDate, endDate.isAfter(today, "day") ? today : endDate];
+}
+
+interface SummaryTableRow {
+  key: string;
+  label: string;
+  content: ReactNode;
+}
+
+const summaryColumns: ColumnsType<SummaryTableRow> = [
+  {
+    title: "摘要欄位",
+    dataIndex: "label",
+    key: "label",
+    width: 180,
+  },
+  {
+    title: "內容",
+    dataIndex: "content",
+    key: "content",
+  },
+];
+
+function MessageList({ items }: { items: string[] }) {
+  if (items.length === 0) return <Text type="secondary">無</Text>;
   return (
-    <div className={ui.summaryChart}>
-      {sorted.map((category) => (
-        <div key={category.name} className={ui.summaryChartRow}>
-          <span className={ui.summaryChartLabel} title={category.name}>
-            {category.name}
-          </span>
-          <span className={ui.summaryChartTrack}>
-            <span
-              className={ui.summaryChartBar}
-              style={{ width: `${(category.count / max) * 100}%` }}
-            />
-          </span>
-          <span className={ui.summaryChartCount}>{category.count}</span>
-        </div>
+    <ul className={ui.summaryTableList}>
+      {items.map((item, index) => (
+        <li key={`${item}-${index}`}>{item}</li>
       ))}
-    </div>
+    </ul>
   );
 }
 
 /**
- * 客服摘要：當日提問主題摘要（對應儀表板「今日對話」卡片原本寫的「對話分析功能規劃中」）。
+ * 客服摘要：指定週期內的提問主題摘要。
  * 依 AuthContext.selectedChatbotId 過濾，跟 RAG 頁面一樣的模式——切換公司時這裡也要
  * 重新拉取，只看得到目前選定公司的顧客提問內容。
  */
 export default function SummaryPage() {
   const { token, selectedChatbotId } = useAuth();
-  const [date, setDate] = useState<Dayjs>(() => dayjs());
-  const [data, setData] = useState<DailySummary | null>(null);
+  const [dateRange, setDateRange] = useState<[Dayjs, Dayjs]>(() =>
+    getWeekRange(getUtcToday()),
+  );
+  const [data, setData] = useState<PeriodSummary | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -63,7 +80,12 @@ export default function SummaryPage() {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    getDailySummary(token, selectedChatbotId, date.format("YYYY-MM-DD"))
+    getPeriodSummary(
+      token,
+      selectedChatbotId,
+      dateRange[0].format("YYYY-MM-DD"),
+      dateRange[1].format("YYYY-MM-DD"),
+    )
       .then((result) => {
         if (!cancelled) setData(result);
       })
@@ -77,77 +99,99 @@ export default function SummaryPage() {
     return () => {
       cancelled = true;
     };
-  }, [token, selectedChatbotId, date]);
+  }, [token, selectedChatbotId, dateRange]);
 
   if (!selectedChatbotId) return <Navigate to="/chatbots" replace />;
+
+  const summaryRows: SummaryTableRow[] = data
+    ? [
+        {
+          key: "question_count",
+          label: "提問數",
+          content: <Tag color="blue">{data.question_count} 則提問</Tag>,
+        },
+        {
+          key: "categories",
+          label: "常見主題",
+          content:
+            data.categories.length === 0 ? (
+              <Text type="secondary">無可歸納的常見主題</Text>
+            ) : (
+              <div className={ui.summaryCategoryTags}>
+                {[...data.categories]
+                  .sort((a, b) => b.count - a.count)
+                  .map((category) => (
+                    <Tag
+                      key={category.name}
+                    >{`${category.name}（${category.count}）`}</Tag>
+                  ))}
+              </div>
+            ),
+        },
+        {
+          key: "summary",
+          label: "摘要",
+          content: (
+            <Paragraph className={ui.summaryTableParagraph}>
+              {data.summary}
+            </Paragraph>
+          ),
+        },
+        {
+          key: "needs_merchant_attention",
+          label: "需商家關注",
+          content: <MessageList items={data.needs_merchant_attention} />,
+        },
+        {
+          key: "meaningless_questions",
+          label: "無意義訊息",
+          content: <MessageList items={data.meaningless_questions} />,
+        },
+      ]
+    : [];
 
   return (
     <AdminPageLayout
       title="客服摘要"
-      description="查看指定日期使用者向聊天機器人提問的主題摘要。"
-      headerExtra={
-        <DatePicker
-          value={date}
-          onChange={(value) => value && setDate(value)}
-          allowClear={false}
-          disabledDate={(current) => current && current > dayjs().endOf("day")}
-        />
-      }
+      description="查看指定週期內使用者向聊天機器人提問的主題摘要。"
     >
       <ChatbotSettingsTabs />
       <Card className={ui.settingsCard}>
+        <div className={ui.summaryPeriodControl}>
+          <Text type="secondary">摘要週期（週一至週日）</Text>
+          <DatePicker.RangePicker
+            aria-label="客服摘要週期"
+            allowClear={false}
+            disabled={loading}
+            disabledDate={(current) =>
+              current && current.isAfter(getUtcToday(), "day")
+            }
+            format="YYYY-MM-DD"
+            value={dateRange}
+            onCalendarChange={(dates) => {
+              const selectedDate = dates?.[0];
+              if (selectedDate) setDateRange(getWeekRange(selectedDate));
+            }}
+          />
+        </div>
         {loading ? (
           <CardLoading label="客服摘要讀取中" />
         ) : error ? (
           <Alert type="error" showIcon message={error} />
         ) : data ? (
           data.question_count === 0 ? (
-            <Empty description="這天沒有使用者提問紀錄" />
+            <Empty description="這個週期沒有使用者提問紀錄" />
           ) : (
-            <>
-              <Tag color="blue">{data.question_count} 則提問</Tag>
-              <CategoryChart categories={data.categories} />
-              <Paragraph className={ui.preWrap}>{data.summary}</Paragraph>
-
-              {data.needs_merchant_attention.length > 0 && (
-                <div className={ui.summaryAttentionSection}>
-                  <Title className={ui.summaryAttentionTitle} level={5}>
-                    需商家關注（{data.needs_merchant_attention.length}）
-                  </Title>
-                  <Paragraph
-                    className={ui.summaryAttentionDescription}
-                    type="secondary"
-                  >
-                    這些問題與業務相關，但機器人可能答不出來，或太獨特無法歸類，建議人工確認。
-                  </Paragraph>
-                  <ul className={ui.summaryAttentionList}>
-                    {data.needs_merchant_attention.map((q, i) => (
-                      <li key={i}>{q}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              {data.meaningless_questions.length > 0 && (
-                <Collapse
-                  ghost
-                  className={ui.marginTop4}
-                  items={[
-                    {
-                      key: "meaningless",
-                      label: `無意義訊息（${data.meaningless_questions.length}）`,
-                      children: (
-                        <ul className={ui.summaryMeaninglessList}>
-                          {data.meaningless_questions.map((q, i) => (
-                            <li key={i}>{q}</li>
-                          ))}
-                        </ul>
-                      ),
-                    },
-                  ]}
-                />
-              )}
-            </>
+            <Table<SummaryTableRow>
+              aria-label="客服摘要資料表"
+              className={ui.summaryTable}
+              columns={summaryColumns}
+              dataSource={summaryRows}
+              pagination={false}
+              rowKey="key"
+              size="small"
+              tableLayout="fixed"
+            />
           )
         ) : null}
       </Card>

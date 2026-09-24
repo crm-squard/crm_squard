@@ -6,7 +6,7 @@
 import json
 import sqlite3
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from app.config import settings
 
@@ -113,19 +113,23 @@ def get_tool_calls_for_chatbot(chatbot_id: str, limit: int = 100) -> list[dict]:
     ]
 
 
-def get_messages_for_date(date: str, chatbot_id: str) -> list[dict]:
+def get_messages_for_range(start_date: str, end_date: str, chatbot_id: str) -> list[dict]:
     """
-    取得指定日期（YYYY-MM-DD，UTC）、指定公司當天所有使用者提問，依時間排序。
+    取得指定 UTC 日期區間（YYYY-MM-DD，含起日與結束日）、指定公司所有使用者提問，依時間排序。
     chatbot_id 必填——摘要依公司隔離，不提供全域彙總（避免看到其他公司的顧客提問內容）。
 
     同時回傳 response_text：summary.py 用它判斷機器人當時是不是回「查無此資訊」
     （app.agent.NO_INFO_ANSWER），藉此輔助分類「需商家關注」的問題，不用完全依賴 LLM 自己判斷。
     """
+    end_exclusive = (
+        datetime.strptime(end_date, "%Y-%m-%d") + timedelta(days=1)
+    ).strftime("%Y-%m-%d")
     with _connect() as conn:
         _ensure_chatbot_id_column(conn)
         rows = conn.execute(
-            "SELECT message, response_text FROM chat_log WHERE created_at LIKE ? AND chatbot_id = ? "
+            "SELECT message, response_text FROM chat_log "
+            "WHERE created_at >= ? AND created_at < ? AND chatbot_id = ? "
             "ORDER BY created_at",
-            (f"{date}%", chatbot_id),
+            (start_date, end_exclusive, chatbot_id),
         ).fetchall()
     return [{"message": row[0], "response_text": row[1]} for row in rows]
