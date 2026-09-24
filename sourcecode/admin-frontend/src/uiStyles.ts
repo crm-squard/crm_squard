@@ -222,6 +222,9 @@ export const ui = {
   ragTableTools: tw(
     "mb-4.5 grid grid-cols-[minmax(220px,1.2fr)_minmax(220px,1fr)_auto] gap-3 max-[620px]:grid-cols-1",
   ),
+  summaryPeriodControl: tw(
+    "mb-4.5 flex items-center justify-between gap-3 max-[620px]:flex-col max-[620px]:items-stretch",
+  ),
   summaryChart: tw("grid gap-2.5"),
   cardLoading: tw("grid min-h-60 place-items-center"),
   summaryChartRow: tw(

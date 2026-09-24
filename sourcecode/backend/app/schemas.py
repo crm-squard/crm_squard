@@ -48,8 +48,9 @@ class QuestionCategory(BaseModel):
     count: int
 
 
-class DailySummaryResponse(BaseModel):
-    date: str
+class PeriodSummaryResponse(BaseModel):
+    start_date: str
+    end_date: str
     question_count: int
     categories: List[QuestionCategory] = Field(default_factory=list)
     # 無意義問題（測試訊息、亂打字、與業務無關的閒聊）：純備查，不需要管理者採取行動

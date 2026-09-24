@@ -12,16 +12,27 @@ import AdminPageLayout from "../components/AdminPageLayout";
 import CardLoading from "../components/CardLoading";
 import ChatbotSettingsTabs from "../components/ChatbotSettingsTabs";
 import { useAuth } from "../auth/AuthContext";
-import { getDailySummary, type DailySummary } from "../api/summary";
+import { getPeriodSummary, type PeriodSummary } from "../api/summary";
 import { ui } from "../uiStyles";
 
-const { Paragraph, Title } = Typography;
+const { Paragraph, Text, Title } = Typography;
+
+function getUtcToday() {
+  return dayjs(new Date().toISOString().slice(0, 10));
+}
+
+function getWeekRange(date: Dayjs): [Dayjs, Dayjs] {
+  const startDate = date.subtract((date.day() + 6) % 7, "day").startOf("day");
+  const endDate = startDate.add(6, "day");
+  const today = getUtcToday();
+  return [startDate, endDate.isAfter(today, "day") ? today : endDate];
+}
 
 /** 常見主題次數長條圖：純 CSS 呈現，資料量小（通常個位數~十幾個主題），不需要另外引入圖表套件。 */
 function CategoryChart({
   categories,
 }: {
-  categories: DailySummary["categories"];
+  categories: PeriodSummary["categories"];
 }) {
   if (categories.length === 0) return null;
   const sorted = [...categories].sort((a, b) => b.count - a.count);
@@ -47,14 +58,16 @@ function CategoryChart({
 }
 
 /**
- * 客服摘要：當日提問主題摘要（對應儀表板「今日對話」卡片原本寫的「對話分析功能規劃中」）。
+ * 客服摘要：指定週期內的提問主題摘要。
  * 依 AuthContext.selectedChatbotId 過濾，跟 RAG 頁面一樣的模式——切換公司時這裡也要
  * 重新拉取，只看得到目前選定公司的顧客提問內容。
  */
 export default function SummaryPage() {
   const { token, selectedChatbotId } = useAuth();
-  const [date, setDate] = useState<Dayjs>(() => dayjs());
-  const [data, setData] = useState<DailySummary | null>(null);
+  const [dateRange, setDateRange] = useState<[Dayjs, Dayjs]>(() =>
+    getWeekRange(getUtcToday()),
+  );
+  const [data, setData] = useState<PeriodSummary | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -63,7 +76,12 @@ export default function SummaryPage() {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    getDailySummary(token, selectedChatbotId, date.format("YYYY-MM-DD"))
+    getPeriodSummary(
+      token,
+      selectedChatbotId,
+      dateRange[0].format("YYYY-MM-DD"),
+      dateRange[1].format("YYYY-MM-DD"),
+    )
       .then((result) => {
         if (!cancelled) setData(result);
       })
@@ -77,32 +95,41 @@ export default function SummaryPage() {
     return () => {
       cancelled = true;
     };
-  }, [token, selectedChatbotId, date]);
+  }, [token, selectedChatbotId, dateRange]);
 
   if (!selectedChatbotId) return <Navigate to="/chatbots" replace />;
 
   return (
     <AdminPageLayout
       title="客服摘要"
-      description="查看指定日期使用者向聊天機器人提問的主題摘要。"
-      headerExtra={
-        <DatePicker
-          value={date}
-          onChange={(value) => value && setDate(value)}
-          allowClear={false}
-          disabledDate={(current) => current && current > dayjs().endOf("day")}
-        />
-      }
+      description="查看指定週期內使用者向聊天機器人提問的主題摘要。"
     >
       <ChatbotSettingsTabs />
       <Card className={ui.settingsCard}>
+        <div className={ui.summaryPeriodControl}>
+          <Text type="secondary">摘要週期（週一至週日）</Text>
+          <DatePicker.RangePicker
+            aria-label="客服摘要週期"
+            allowClear={false}
+            disabled={loading}
+            disabledDate={(current) =>
+              current && current.isAfter(getUtcToday(), "day")
+            }
+            format="YYYY-MM-DD"
+            value={dateRange}
+            onCalendarChange={(dates) => {
+              const selectedDate = dates?.[0];
+              if (selectedDate) setDateRange(getWeekRange(selectedDate));
+            }}
+          />
+        </div>
         {loading ? (
           <CardLoading label="客服摘要讀取中" />
         ) : error ? (
           <Alert type="error" showIcon message={error} />
         ) : data ? (
           data.question_count === 0 ? (
-            <Empty description="這天沒有使用者提問紀錄" />
+            <Empty description="這個週期沒有使用者提問紀錄" />
           ) : (
             <>
               <Tag color="blue">{data.question_count} 則提問</Tag>
