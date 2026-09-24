@@ -105,6 +105,9 @@ export const ui = {
   settingsActions: tw(
     "flex items-center justify-end gap-3 pt-1 max-[620px]:flex-col-reverse max-[620px]:items-stretch [&_.ant-btn]:min-w-24",
   ),
+  auditLogTableToolbar: tw(
+    "mb-4.5 flex items-center justify-end gap-2 max-[620px]:items-stretch max-[620px]:[&_.ant-select]:w-full",
+  ),
   settingsAccountForm: tw(
     "mb-4! flex gap-2 max-[620px]:flex-col [&_.ant-form-item]:mb-0 max-[620px]:[&_.ant-form-item]:w-full max-[620px]:[&_.ant-input]:w-full",
   ),
