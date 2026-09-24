@@ -173,6 +173,7 @@ def _ensure_schema() -> None:
                 path       TEXT NOT NULL,
                 tags       TEXT[] NOT NULL DEFAULT '{}',
                 created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
                 UNIQUE (chatbot_id, path)
             )
             """
@@ -185,6 +186,24 @@ def _ensure_schema() -> None:
         ))
         conn.execute(sql_text(
             "CREATE INDEX IF NOT EXISTS kb_document_labels_chatbot_id_idx ON kb_document_labels (chatbot_id)"
+        ))
+        # 舊資料庫的 labels 表沒有 updated_at；以既有建立時間回填後再設為必填，
+        # 讓 migration 與新 schema 都能安全使用同一個排序欄位。
+        conn.execute(sql_text(
+            "ALTER TABLE kb_document_labels ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ"
+        ))
+        conn.execute(sql_text(
+            "UPDATE kb_document_labels SET updated_at = created_at WHERE updated_at IS NULL"
+        ))
+        conn.execute(sql_text(
+            "ALTER TABLE kb_document_labels ALTER COLUMN updated_at SET DEFAULT now()"
+        ))
+        conn.execute(sql_text(
+            "ALTER TABLE kb_document_labels ALTER COLUMN updated_at SET NOT NULL"
+        ))
+        conn.execute(sql_text(
+            "CREATE INDEX IF NOT EXISTS kb_document_labels_chatbot_updated_at_idx "
+            "ON kb_document_labels (chatbot_id, updated_at DESC)"
         ))
     _schema_ready = True
 
@@ -245,7 +264,8 @@ def _relabel_and_collect_orphan(
                 """
                 INSERT INTO kb_document_labels (doc_id, chatbot_id, path, tags)
                 VALUES (:doc_id, :chatbot_id, :path, :tags)
-                ON CONFLICT (chatbot_id, path) DO UPDATE SET doc_id = EXCLUDED.doc_id, tags = EXCLUDED.tags
+                ON CONFLICT (chatbot_id, path) DO UPDATE
+                SET doc_id = EXCLUDED.doc_id, tags = EXCLUDED.tags, updated_at = now()
                 """
             ),
             {"doc_id": doc_id, "chatbot_id": chatbot_id, "path": path, "tags": tags},
@@ -370,10 +390,10 @@ def list_documents(chatbot_id: str) -> list[dict]:
     _ensure_schema()
     sql = sql_text(
         """
-        SELECT l.path, l.tags, d.chunk_count, d.file_size_bytes, d.created_at, d.content_hash
+        SELECT l.path, l.tags, d.chunk_count, d.file_size_bytes, l.updated_at, d.content_hash
         FROM kb_document_labels l JOIN kb_documents d ON d.doc_id = l.doc_id
         WHERE l.chatbot_id = :chatbot_id
-        ORDER BY l.path
+        ORDER BY l.updated_at DESC, l.path ASC
         """
     )
     engine = _get_engine()
@@ -385,7 +405,7 @@ def list_documents(chatbot_id: str) -> list[dict]:
             "tags": list(row.tags) if row.tags is not None else [],
             "chunk_count": row.chunk_count,
             "file_size_bytes": row.file_size_bytes,
-            "uploaded_at": row.created_at.isoformat() if row.created_at is not None else None,
+            "uploaded_at": row.updated_at.isoformat() if row.updated_at is not None else None,
             "content_hash": row.content_hash,
         }
         for row in rows

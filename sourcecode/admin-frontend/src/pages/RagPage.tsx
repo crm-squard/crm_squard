@@ -1057,7 +1057,7 @@ export default function AdminDocumentsPage() {
                 render: formatBytes,
               },
               {
-                title: "更新時間",
+                title: "最後更新時間",
                 dataIndex: "uploaded_at",
                 key: "uploaded_at",
                 width: 190,
