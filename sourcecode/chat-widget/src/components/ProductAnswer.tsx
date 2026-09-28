@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { ChevronDown, ChevronUp } from "lucide-react";
 import type { SourceRef } from "../api-types";
 import { tw } from "../utils/tw";
 import { widgetUi } from "../widgetStyles";
@@ -24,7 +25,10 @@ export default function ProductAnswer({ text, sources }: ProductAnswerProps) {
       aria-expanded={expanded}
       onClick={() => setExpanded((value) => !value)}
     >
-      相關主題（{topics.length}）{expanded ? "▲" : "▼"}
+      <span className="flex-1 text-left font-bold">相關主題（{topics.length}）</span>
+      <span className="ml-auto" aria-hidden="true">
+        {expanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+      </span>
     </button>
   );
   return (
@@ -32,22 +36,25 @@ export default function ProductAnswer({ text, sources }: ProductAnswerProps) {
       <div className={tw(widgetUi.bubble, widgetUi.bubbleBot)}>
         <p className={widgetUi.bubbleText}>{text}</p>
         {topics.length > 0 ? (
-          <div>
+          <div className="mt-4 rounded-lg bg-widget-background p-2">
             {toggle}
             {expanded && (
               <>
-                <ul className="m-0 mt-2 list-none p-0">
+                <ul className="m-0 mt-2 list-disc space-y-2 pl-0">
                   {topics.map((item, index) => (
                     <li
                       key={index}
                       className="flex justify-between gap-2 text-label text-widget-muted"
                     >
-                      <span>{item.topic || item.source}</span>
-                      <span>{toScore(item.distance)} 分</span>
+                      <span className="flex items-start rounded-b-xl text-left before:m-1.5 before:h-1 before:w-1 before:flex-none before:rounded-xl before:bg-widget-muted before:content-['']">
+                        {item.topic || item.source}
+                      </span>
+                      <span className="flex-none">
+                        {toScore(item.distance)} 分
+                      </span>
                     </li>
                   ))}
                 </ul>
-                {toggle}
               </>
             )}
           </div>

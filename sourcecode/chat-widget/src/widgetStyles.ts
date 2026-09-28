@@ -53,7 +53,7 @@ export const widgetUi = {
   ),
   bubbleText: tw("m-0 whitespace-pre-wrap"),
   sourceTag: tw(
-    "mt-2 inline-block rounded-full bg-widget-background px-2.25 py-0.5 text-label text-widget-muted",
+    "flex w-full p-0 text-label text-widget-muted [background:none]",
   ),
   typing: tw("flex items-center gap-1 p-3.25"),
   dot: tw(

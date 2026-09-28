@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from "react";
+import { Fragment, useEffect, useRef, type ReactNode } from "react";
 import type { ChatMessage } from "../types";
 import { assertNever } from "../utils/messages";
 import { tw } from "../utils/tw";
@@ -60,9 +60,11 @@ export default function MessageList({
   }, [messages, isSending]);
   return (
     <div className={widgetUi.messages} ref={listRef}>
-      {header}
       {messages.map((message, index) => (
-        <Message key={index} message={message} />
+        <Fragment key={index}>
+          <Message message={message} />
+          {index === 0 && header}
+        </Fragment>
       ))}
       {isSending && <TypingIndicator />}
     </div>
