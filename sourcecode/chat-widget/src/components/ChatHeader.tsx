@@ -31,6 +31,7 @@ export default function ChatHeader({
         </div>
       </div>
       <button
+        type="button"
         className={widgetUi.closeButton}
         aria-label="收合聊天視窗"
         onClick={onClose}
