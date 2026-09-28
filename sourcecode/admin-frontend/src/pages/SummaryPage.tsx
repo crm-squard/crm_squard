@@ -98,7 +98,6 @@ function SummaryBarChart({ items }: { items: ChartItem[] }) {
           height={300}
           innerRadius={0.62}
           legend={{ position: "bottom" }}
-          label={{ text: "value", position: "inside", content: "{value}" }}
           tooltip={{ items: [{ field: "value", name: "提問數" }] }}
           interaction={{
             elementSelect: { single: true },
