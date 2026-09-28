@@ -231,21 +231,22 @@ export const ui = {
   summaryTable: tw(
     "[&_.ant-table-cell]:align-top [&_.ant-table-cell:first-child]:font-medium [&_.ant-table-cell:first-child]:text-[#20345e]",
   ),
-  summaryChart: tw("grid gap-3"),
-  summaryChartList: tw("m-0 grid list-none gap-1 p-0"),
-  summaryChartRow: tw(
-    "grid w-full cursor-pointer grid-cols-[minmax(96px,160px)_1fr_40px] items-center gap-3 rounded-compact border-0 bg-transparent px-2 py-1.5 text-left hover:bg-admin-surface-subtle aria-pressed:bg-admin-agent-avatar-bg max-[620px]:grid-cols-[96px_1fr_32px]",
+  summaryChartLayout: tw(
+    "grid min-w-0 grid-cols-[minmax(0,1.25fr)_minmax(260px,0.75fr)] gap-5 max-[760px]:grid-cols-1",
   ),
-  summaryChartLabel: tw("truncate text-caption text-admin-text"),
-  summaryChartTrack: tw("h-3 overflow-hidden rounded-full bg-admin-border"),
-  summaryChartCount: tw("text-right text-caption text-admin-text-secondary"),
-  summaryBarTopic: tw("block h-full rounded-full bg-admin-primary"),
-  summaryBarMcp: tw("block h-full rounded-full bg-violet-500"),
-  summaryBarAttention: tw("block h-full rounded-full bg-amber-500"),
-  summaryBarMeaningless: tw("block h-full rounded-full bg-slate-400"),
+  summaryChart: tw(
+    "grid min-w-0 gap-3 overflow-hidden rounded-none [&_.g2-legend]:max-w-full [&_.g2-legend]:flex-wrap [&+section]:border-admin-border max-[760px]:[&+section]:border-t min-[760px]:[&+section]:border-l",
+  ),
+  summaryPieChart: tw(
+    "max-w-full min-w-0 max-[620px]:[&_.g2-legend-item]:text-caption [&_canvas]:max-w-full",
+  ),
+  summaryChartDetails: tw("p-3.5"),
+  summaryChartDetailsHeading: tw(
+    "flex items-start justify-between gap-3 max-[620px]:flex-wrap",
+  ),
   summaryTableParagraph: tw("m-0! whitespace-pre-wrap"),
   summaryTableList: tw(
-    "m-0 grid list-none gap-1.5 p-0 [&_li]:rounded-compact [&_li]:bg-admin-surface-subtle [&_li]:px-3 [&_li]:py-2 [&_li]:text-caption [&_li]:text-[#334360]",
+    "m-0 list-none p-0 [&_li]:pt-2 [&_li]:text-caption [&_li]:text-[#334360]",
   ),
   cardLoading: tw("grid min-h-60 place-items-center"),
 };

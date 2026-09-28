@@ -5,6 +5,7 @@ import Empty from "antd/es/empty";
 import Tag from "antd/es/tag";
 import Table from "antd/es/table";
 import Typography from "antd/es/typography";
+import { Pie } from "@ant-design/plots";
 import type { ColumnsType } from "antd/es/table";
 import dayjs, { type Dayjs } from "dayjs";
 import type { ReactNode } from "react";
@@ -35,19 +36,23 @@ function getDefaultRange(): [Dayjs, Dayjs] {
 interface ChartItem {
   key: string;
   label: string;
-  barClassName: string;
   questions: string[];
   count: number;
 }
 
-// 長條圖：常見主題各一條，其後固定為 MCP、需商家關注、無意義訊息；點任一條顯示該類原始提問。
+interface ChartDatum {
+  key: string;
+  label: string;
+  value: number;
+}
+
+// 分類統計：常見主題各一區，其後固定為 MCP、需商家關注、無意義訊息。
 function buildChartItems(data: PeriodSummary): ChartItem[] {
   const topics = [...data.categories]
     .sort((a, b) => b.count - a.count)
     .map((category) => ({
       key: `topic:${category.name}`,
       label: category.name,
-      barClassName: ui.summaryBarTopic,
       questions: category.questions ?? [],
       count: category.count,
     }));
@@ -55,19 +60,16 @@ function buildChartItems(data: PeriodSummary): ChartItem[] {
     {
       key: "mcp",
       label: "MCP 訊息",
-      barClassName: ui.summaryBarMcp,
       questions: data.mcp_questions ?? [],
     },
     {
       key: "attention",
       label: "需商家關注",
-      barClassName: ui.summaryBarAttention,
       questions: data.needs_merchant_attention,
     },
     {
       key: "meaningless",
       label: "無意義訊息",
-      barClassName: ui.summaryBarMeaningless,
       questions: data.meaningless_questions,
     },
   ].map((group) => ({ ...group, count: group.questions.length }));
@@ -76,41 +78,71 @@ function buildChartItems(data: PeriodSummary): ChartItem[] {
 
 function SummaryBarChart({ items }: { items: ChartItem[] }) {
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
-  const maxCount = Math.max(1, ...items.map((item) => item.count));
   const selected = items.find((item) => item.key === selectedKey);
+  const chartData: ChartDatum[] = items.map(({ key, label, count }) => ({
+    key,
+    label,
+    value: count,
+  }));
+
   return (
-    <div className={ui.summaryChart}>
-      <ul aria-label="提問分類長條圖" className={ui.summaryChartList}>
-        {items.map((item) => (
-          <li key={item.key}>
-            <button
-              type="button"
-              aria-pressed={item.key === selectedKey}
-              className={ui.summaryChartRow}
-              onClick={() =>
-                setSelectedKey(item.key === selectedKey ? null : item.key)
-              }
-            >
-              <span className={ui.summaryChartLabel}>{item.label}</span>
-              <span className={ui.summaryChartTrack}>
-                <span
-                  className={item.barClassName}
-                  style={{ width: `${(item.count / maxCount) * 100}%` }}
-                />
-              </span>
-              <span className={ui.summaryChartCount}>{item.count}</span>
-            </button>
-          </li>
-        ))}
-      </ul>
-      {selected ? (
-        <div>
-          <Text strong>{`${selected.label}（${selected.count}）`}</Text>
-          <MessageList items={selected.questions} />
-        </div>
-      ) : (
-        <Text type="secondary">點選長條可查看該分類的提問內容</Text>
-      )}
+    <div className={ui.summaryChartLayout}>
+      <div className={ui.summaryChart}>
+        <Pie
+          aria-label="提問分類圓餅圖"
+          data={chartData}
+          angleField="value"
+          colorField="label"
+          autoFit
+          className={ui.summaryPieChart}
+          height={300}
+          innerRadius={0.62}
+          legend={{ position: "bottom" }}
+          label={{ text: "value", position: "inside", content: "{value}" }}
+          tooltip={{ items: [{ field: "value", name: "提問數" }] }}
+          interaction={{
+            elementSelect: { single: true },
+            legendFilter: false,
+          }}
+          state={{
+            selected: { lineWidth: 0, strokeOpacity: 0 },
+            unselected: { lineWidth: 0, strokeOpacity: 0 },
+          }}
+          style={{
+            fillOpacity: (datum: ChartDatum) =>
+              !selectedKey || datum.key === selectedKey ? 1 : 0.28,
+            lineWidth: 0,
+            strokeOpacity: 0,
+          }}
+          onReady={(plot) => {
+            plot.chart.on(
+              "element:select",
+              (event: { data?: { data?: unknown } }) => {
+                const eventData = event.data?.data;
+                const datum = (
+                  Array.isArray(eventData) ? eventData[0] : eventData
+                ) as ChartDatum | undefined;
+                if (datum?.key) setSelectedKey(datum.key);
+              },
+            );
+            plot.chart.on("element:unselect", () => setSelectedKey(null));
+          }}
+        />
+        {/* <Text type="secondary">點選圖表區塊，查看分類明細</Text> */}
+      </div>
+      <section aria-live="polite" className={ui.summaryChartDetails}>
+        {selected ? (
+          <>
+            <div className={ui.summaryChartDetailsHeading}>
+              <Text strong>{selected.label}</Text>
+              <Tag color="blue">{selected.count} 則提問</Tag>
+            </div>
+            <MessageList items={selected.questions} />
+          </>
+        ) : (
+          <Text type="secondary">點選圖表區塊，查看分類明細</Text>
+        )}
+      </section>
     </div>
   );
 }
@@ -126,7 +158,7 @@ const summaryColumns: ColumnsType<SummaryTableRow> = [
     title: "摘要欄位",
     dataIndex: "label",
     key: "label",
-    width: 180,
+    width: 100,
   },
   {
     title: "內容",
