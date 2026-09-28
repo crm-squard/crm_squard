@@ -127,7 +127,6 @@ function SummaryBarChart({ items }: { items: ChartItem[] }) {
             plot.chart.on("element:unselect", () => setSelectedKey(null));
           }}
         />
-        {/* <Text type="secondary">點選圖表區塊，查看分類明細</Text> */}
       </div>
       <section aria-live="polite" className={ui.summaryChartDetails}>
         {selected ? (
