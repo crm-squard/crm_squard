@@ -252,6 +252,10 @@ def create_meta_router(
         if not verify_signature(body, signature, app_secret):
             raise HTTPException(status_code=400, detail="Invalid Meta signature")
 
+        # 暫時記錄原始 payload，排查真實 Instagram 訊息進來後為何沒有任何處理紀錄
+        # （懷疑是 message_reactions／seen 等非文字訊息事件，而不是真正的 messages 事件）。
+        print(f"[Meta Webhook Debug] object={object_type} payload={json.dumps(payload, ensure_ascii=False)[:3000]}")
+
         if object_type == "page":
             for entry in entries:
                 for event in entry.get("messaging", []):
