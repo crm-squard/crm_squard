@@ -10,21 +10,15 @@ const ACCOUNT_ROLE_TAG_CLASS_NAMES: Record<AccountRoleTagColor, string> = {
 
 interface AccountRoleTagProps {
   color: AccountRoleTagColor;
-  fontSize?: number;
   children: ReactNode;
 }
 
 export default function AccountRoleTag({
   color,
-  fontSize = 12,
   children,
 }: AccountRoleTagProps) {
   return (
-    <Tag
-      className={ACCOUNT_ROLE_TAG_CLASS_NAMES[color]}
-      bordered={false}
-      style={{ fontSize }}
-    >
+    <Tag className={ACCOUNT_ROLE_TAG_CLASS_NAMES[color]} bordered={false}>
       {children}
     </Tag>
   );

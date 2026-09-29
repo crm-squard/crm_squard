@@ -14,7 +14,7 @@ export const welcome = {
   page: tw("min-h-screen bg-welcome-bg text-welcome-text", reducedMotion),
   container: tw("mx-auto w-full max-w-6xl px-6 max-[767px]:px-5"),
   section: tw("py-20 max-[1023px]:py-16 max-[767px]:py-12"),
-  sectionBorder: tw("border-t border-solid border-welcome-border"),
+  sectionBorder: tw("border-t border-welcome-border"),
 
   // 1. Hero
   heroSection: tw("pt-24 pb-20 max-[1023px]:pt-18 max-[767px]:pt-14"),
@@ -44,7 +44,7 @@ export const welcome = {
     "mx-auto max-w-[42rem] overflow-hidden rounded-xl border border-solid border-welcome-border bg-welcome-bg-card shadow-[0_24px_60px_rgb(0_0_0/0.35)]",
   ),
   demoWindowHeader: tw(
-    "flex items-center gap-1.5 border-b border-solid border-welcome-border px-4 py-3",
+    "flex items-center gap-1.5 border-b border-welcome-border px-4 py-3",
   ),
   demoDot: tw("size-3 rounded-full"),
   demoDotRed: tw("bg-red-500"),
@@ -52,7 +52,7 @@ export const welcome = {
   demoDotGreen: tw("bg-emerald-500"),
   demoBody: tw("flex max-[480px]:flex-col"),
   demoSidebar: tw(
-    "grid w-14 shrink-0 place-items-center border-r border-solid border-welcome-border bg-welcome-bg text-xl text-welcome-accent max-[480px]:hidden",
+    "grid w-14 shrink-0 place-items-center border-r border-welcome-border bg-welcome-bg text-xl text-welcome-accent max-[480px]:hidden",
   ),
   demoChat: tw("grid min-w-0 flex-1 gap-3 p-5 max-[767px]:p-4"),
   demoBubble: tw(

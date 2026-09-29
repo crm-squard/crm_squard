@@ -1,3 +1,4 @@
+import Button from "antd/es/button";
 import Spin from "antd/es/spin";
 import type { ReactNode } from "react";
 import { Navigate } from "react-router-dom";
@@ -10,9 +11,7 @@ const initializationErrorStyles = {
   content: tw("grid max-w-lg gap-3"),
   title: tw("m-0 text-lg text-admin-heading"),
   message: tw("m-0 text-caption text-admin-text-subtle"),
-  retryButton: tw(
-    "mx-auto cursor-pointer rounded-control border border-solid border-admin-primary bg-admin-primary px-4 py-2 font-semibold text-white hover:opacity-90",
-  ),
+  retryButton: tw("mx-auto w-fit"),
 };
 
 export default function RequireAuth({ children }: { children: ReactNode }) {
@@ -28,13 +27,13 @@ export default function RequireAuth({ children }: { children: ReactNode }) {
           <p className={initializationErrorStyles.message}>
             {initializationError}
           </p>
-          <button
+          <Button
             className={initializationErrorStyles.retryButton}
-            type="button"
             onClick={retryInitialization}
+            type="primary"
           >
             重新嘗試
-          </button>
+          </Button>
         </div>
       </div>
     );
