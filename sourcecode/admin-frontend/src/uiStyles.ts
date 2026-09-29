@@ -75,7 +75,7 @@ export const ui = {
     "flex min-w-0 items-center gap-3 [&_h3]:m-0 [&_h3]:overflow-hidden [&_h3]:text-base [&_h3]:text-ellipsis [&_h3]:whitespace-nowrap [&_h3]:text-admin-agent-title",
   ),
   chatbotTitleButton: tw(
-    "block max-w-full cursor-pointer overflow-hidden border-0 bg-transparent p-0 text-left text-base font-bold text-ellipsis whitespace-nowrap text-admin-agent-title hover:text-admin-agent-action focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-admin-agent-action",
+    "block! h-auto! max-w-full! overflow-hidden! p-0! text-left! text-base! font-bold! text-ellipsis! whitespace-nowrap! text-admin-agent-title! hover:text-admin-agent-action!",
   ),
   chatbotAvatar: tw(
     "grid size-10 shrink-0 place-items-center rounded-full bg-admin-agent-avatar-bg text-base text-admin-agent-avatar",
@@ -112,10 +112,10 @@ export const ui = {
     "mb-4! flex gap-2 max-[620px]:flex-col [&_.ant-form-item]:mb-0 max-[620px]:[&_.ant-form-item]:w-full max-[620px]:[&_.ant-input]:w-full",
   ),
   accountRoleTagPrimary: tw(
-    "m-0! rounded-full! bg-admin-agent-avatar-bg! px-3! py-1! font-semibold! text-admin-agent-avatar!",
+    "m-0! rounded-full! bg-admin-agent-avatar-bg! px-3! py-1! text-caption! font-semibold! text-admin-agent-avatar!",
   ),
   accountRoleTagDefault: tw(
-    "m-0! rounded-full! bg-admin-surface-subtle! px-3! py-1! font-semibold! text-admin-text-subtle!",
+    "m-0! rounded-full! bg-admin-surface-subtle! px-3! py-1! text-caption! font-semibold! text-admin-text-subtle!",
   ),
   pageHeading: tw(
     "flex min-h-19 items-start justify-between gap-6 [&_h1]:mt-0 [&_h1]:mb-1.25 [&_h1]:text-[clamp(27px,2.3vw,34px)] [&_h1]:tracking-[-.035em] [&_h1]:text-admin-heading [&_p]:m-0 [&_p]:text-sm [&_p]:text-admin-muted [&_time]:pt-2.5 [&_time]:text-caption [&_time]:text-admin-muted max-[899px]:[&_time]:hidden",

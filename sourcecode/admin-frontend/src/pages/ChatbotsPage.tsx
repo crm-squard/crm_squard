@@ -146,15 +146,15 @@ export default function ChatbotsPage() {
                     {getInitial(chatbot.name)}
                   </div>
                   <h3>
-                    <button
+                    <Button
                       aria-label={`設定 ${chatbot.name}`}
                       className={ui.chatbotTitleButton}
                       title={chatbot.name}
-                      type="button"
+                      type="link"
                       onClick={() => goToSettings(chatbot.id)}
                     >
                       {chatbot.name}
-                    </button>
+                    </Button>
                   </h3>
                   <Dropdown
                     rootClassName={ui.chatbotDropdown}
