@@ -252,11 +252,14 @@ def create_meta_router(
         if not verify_signature(body, signature, app_secret):
             raise HTTPException(status_code=400, detail="Invalid Meta signature")
 
-        # 暫時記錄原始 payload，排查真實 Instagram 訊息進來後為何沒有任何處理紀錄
-        # （懷疑是 message_reactions／seen 等非文字訊息事件，而不是真正的 messages 事件）。
-        print(f"[Meta Webhook Debug] object={object_type} payload={json.dumps(payload, ensure_ascii=False)[:3000]}")
-
-        if object_type == "page":
+        # 實測發現：Facebook Messenger 與 Instagram（含「含 Instagram 登入的 API 設定」
+        # 這條新流程）的真實訊息事件格式是同一種 entry[].messaging[]（sender/recipient/
+        # message 都在 messaging 事件本身）。Meta 後台「messages 欄位」內建的合成測試
+        # 按鈕給的官方範例 payload（entry[].changes[]，value 裡才有 sender/recipient/
+        # message）跟真實訊息格式不同，只適用於那顆測試按鈕，拿真實訊息 log 出來比對後才
+        # 確認這件事——之前誤信官方範例，導致 Instagram 訊息進來後迴圈完全找不到資料可
+        # 處理，收到 200 但沒有任何 log、也不會回覆。
+        if object_type in ("page", "instagram"):
             for entry in entries:
                 for event in entry.get("messaging", []):
                     message = event.get("message", {})
@@ -272,48 +275,26 @@ def create_meta_router(
                     if not user_text or not sender_id:
                         continue
 
-                    page_access_token = chatbot.get("facebook_page_access_token")
-                    if not page_access_token:
-                        print("[Facebook Chat Error] page access token is not configured")
-                        continue
+                    if object_type == "page":
+                        page_access_token = chatbot.get("facebook_page_access_token")
+                        if not page_access_token:
+                            print("[Facebook Chat Error] page access token is not configured")
+                            continue
 
-                    reply_text = await _answer_and_log(user_text, chatbot_id, "Facebook")
-                    send_facebook_message(sender_id, reply_text, page_access_token)
+                        reply_text = await _answer_and_log(user_text, chatbot_id, "Facebook")
+                        send_facebook_message(sender_id, reply_text, page_access_token)
 
-        elif object_type == "instagram":
-            # Instagram 走「含 Instagram 登入的 API 設定」這條新流程，事件格式跟 Facebook
-            # Messenger 的 entry[].messaging[] 完全不同：是 entry[].changes[]，每個
-            # change 有 field（要挑 "messages"）跟 value（裡面才是 sender/recipient/
-            # message），這是用 Meta 後台「messages 欄位」內建測試工具送出官方範例 payload
-            # 實際比對出來的結構；之前誤用 messaging[] 解析，導致訊息進來後迴圈完全找不到
-            # 資料可處理，收到 200 但沒有任何 log、也不會回覆。
-            for entry in entries:
-                for change in entry.get("changes", []):
-                    if change.get("field") != "messages":
-                        continue
+                    else:
+                        instagram_business_id = chatbot.get("instagram_business_id")
+                        instagram_access_token = chatbot.get("instagram_access_token")
+                        if not instagram_business_id or not instagram_access_token:
+                            print("[Instagram Chat Error] instagram credentials are not configured")
+                            continue
 
-                    value = change.get("value", {})
-                    message = value.get("message", {})
-
-                    if not message or value.get("is_echo"):
-                        continue
-
-                    user_text = (message.get("text") or "").strip()
-                    sender_id = (value.get("sender") or {}).get("id")
-
-                    if not user_text or not sender_id:
-                        continue
-
-                    instagram_business_id = chatbot.get("instagram_business_id")
-                    instagram_access_token = chatbot.get("instagram_access_token")
-                    if not instagram_business_id or not instagram_access_token:
-                        print("[Instagram Chat Error] instagram credentials are not configured")
-                        continue
-
-                    reply_text = await _answer_and_log(user_text, chatbot_id, "Instagram")
-                    send_instagram_message(
-                        sender_id, reply_text, instagram_business_id, instagram_access_token
-                    )
+                        reply_text = await _answer_and_log(user_text, chatbot_id, "Instagram")
+                        send_instagram_message(
+                            sender_id, reply_text, instagram_business_id, instagram_access_token
+                        )
 
         # 其他 object 類型（例如未來的 whatsapp_business_account）先略過，不報錯。
 
