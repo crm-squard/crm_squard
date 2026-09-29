@@ -1,8 +1,10 @@
+import CopyOutlined from "@ant-design/icons/CopyOutlined";
 import Button from "antd/es/button";
 import Card from "antd/es/card";
 import Form from "antd/es/form";
 import Input from "antd/es/input";
 import message from "antd/es/message";
+import Tooltip from "antd/es/tooltip";
 import Typography from "antd/es/typography";
 import { useEffect, useState } from "react";
 import { Navigate } from "react-router-dom";
@@ -11,8 +13,10 @@ import { useAuth } from "../auth/AuthContext";
 import AdminPageLayout from "../components/AdminPageLayout";
 import ChatbotSettingsTabs from "../components/ChatbotSettingsTabs";
 import { ui } from "../uiStyles";
+import { useUpdateChatbotMutation } from "../hooks/useAdminQueries";
+import { useSelectedChatbot } from "../hooks/useSelectedChatbot";
 
-const { Text, Paragraph } = Typography;
+const { Text } = Typography;
 
 const API_BASE_URL =
   import.meta.env.VITE_RAG_API_URL || "http://localhost:8000";
@@ -24,18 +28,13 @@ interface LineBotSettingsForm {
 }
 
 export default function LineBotSettingsPage() {
-  const {
-    token,
-    chatbots,
-    selectedChatbotId,
-    refreshMe,
-  } = useAuth();
+  const { token } = useAuth();
+  const { chatbot, selectedChatbotId } = useSelectedChatbot();
+  const updateMutation = useUpdateChatbotMutation(token ?? "");
 
   const [messageApi, contextHolder] = message.useMessage();
   const [form] = Form.useForm<LineBotSettingsForm>();
   const [saving, setSaving] = useState(false);
-
-  const chatbot = chatbots.find((item) => item.id === selectedChatbotId);
 
   const webhookUrl = selectedChatbotId
     ? `${API_BASE_URL}/line/webhook/${encodeURIComponent(selectedChatbotId)}`
@@ -62,16 +61,19 @@ export default function LineBotSettingsPage() {
     setSaving(true);
 
     try {
-      await updateChatbot(token, selectedChatbotId, {
-        line_channel_id: values.line_channel_id ?? "",
+      await updateMutation.mutateAsync({
+        chatbotId: selectedChatbotId,
+        params: {
+          line_channel_id: values.line_channel_id ?? "",
 
-        ...(values.line_channel_secret
-          ? { line_channel_secret: values.line_channel_secret }
-          : {}),
+          ...(values.line_channel_secret
+            ? { line_channel_secret: values.line_channel_secret }
+            : {}),
 
-        ...(values.line_channel_access_token
-          ? { line_channel_access_token: values.line_channel_access_token }
-          : {}),
+          ...(values.line_channel_access_token
+            ? { line_channel_access_token: values.line_channel_access_token }
+            : {}),
+        },
       });
 
       form.setFieldsValue({
@@ -79,7 +81,6 @@ export default function LineBotSettingsPage() {
         line_channel_access_token: "",
       });
 
-      await refreshMe();
       messageApi.success("已儲存 LINE BOT 設定");
     } catch (error) {
       messageApi.error(
@@ -87,6 +88,15 @@ export default function LineBotSettingsPage() {
       );
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function copyWebhookUrl() {
+    try {
+      await navigator.clipboard.writeText(webhookUrl);
+      messageApi.success("已複製 Webhook URL");
+    } catch {
+      messageApi.error("複製失敗，請手動複製內容");
     }
   }
 
@@ -100,6 +110,7 @@ export default function LineBotSettingsPage() {
 
       {chatbot ? (
         <Form
+          className={ui.settingsCardGrid}
           form={form}
           layout="vertical"
           onFinish={handleSave}
@@ -135,26 +146,36 @@ export default function LineBotSettingsPage() {
               />
             </Form.Item>
 
-            <Form.Item label="Webhook URL">
-              <Paragraph type="secondary">
-                將此網址複製到 LINE Developers 的 Webhook URL。
-              </Paragraph>
-
-              <Text code copyable>
-                {webhookUrl}
-              </Text>
+            <Form.Item
+              label="Webhook URL"
+              extra="將此網址複製到 LINE Developers 的 Webhook URL。"
+            >
+              <Input.Search
+                aria-label="Webhook URL"
+                readOnly
+                value={webhookUrl}
+                enterButton={
+                  <Button
+                    aria-label="複製 Webhook URL"
+                    color="default"
+                    icon={
+                      <Tooltip title="複製 Webhook URL">
+                        <CopyOutlined />
+                      </Tooltip>
+                    }
+                    variant="outlined"
+                  />
+                }
+                onSearch={() => void copyWebhookUrl()}
+              />
             </Form.Item>
-
-            <div className={ui.settingsActions}>
-              <Button
-                type="primary"
-                htmlType="submit"
-                loading={saving}
-              >
-                儲存 LINE BOT 設定
-              </Button>
-            </div>
           </Card>
+
+          <div className={ui.settingsActions}>
+            <Button type="primary" htmlType="submit" loading={saving}>
+              儲存 LINE BOT 設定
+            </Button>
+          </div>
         </Form>
       ) : (
         <Card className={ui.settingsCard}>

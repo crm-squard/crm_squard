@@ -46,10 +46,13 @@ class ChatResponse(BaseModel):
 class QuestionCategory(BaseModel):
     name: str
     count: int
+    # 屬於這個主題的原始提問（逐字），前端點長條時展開查看
+    questions: List[str] = Field(default_factory=list)
 
 
-class DailySummaryResponse(BaseModel):
-    date: str
+class PeriodSummaryResponse(BaseModel):
+    start_date: str
+    end_date: str
     question_count: int
     categories: List[QuestionCategory] = Field(default_factory=list)
     # 無意義問題（測試訊息、亂打字、與業務無關的閒聊）：純備查，不需要管理者採取行動
@@ -57,6 +60,8 @@ class DailySummaryResponse(BaseModel):
     # 需商家關注：問題合理但太獨特無法歸類，或機器人明顯答不出來（見 app/summary.py 的
     # NO_INFO_ANSWER 訊號輔助判斷），管理者可能要補充知識庫或人工介入
     needs_merchant_attention: List[str] = Field(default_factory=list)
+    # 以「@<MCP 機器人名稱>」開頭的 MCP 指令：獨立一類，不算無意義也不算需商家關注
+    mcp_questions: List[str] = Field(default_factory=list)
     summary: str
 
 
@@ -175,6 +180,12 @@ class ChatbotInfo(BaseModel):
     # LINE Channel ID 僅供管理端記錄，不參與 Webhook 驗證或 LINE API 呼叫。
     line_channel_id: Optional[str] = None
 
+    # Facebook Page ID 僅供管理端記錄，不參與 Webhook 驗證或 Send API 呼叫。
+    facebook_page_id: Optional[str] = None
+
+    # Instagram Business ID 僅供管理端記錄（也是呼叫 Instagram Send API 網址中的 ig 帳號 ID）。
+    instagram_business_id: Optional[str] = None
+
     # 這台「伺服器」能不能做 rerank（總開關、非 Cloud Run、binary 存在，見 reranker.is_supported()）。
     # 不是公司的屬性，但放在每筆公司資料裡，前端不用另外多打一支 API；後台頁面據此決定要不要停用開關。
     rerank_available: bool = Field(default_factory=lambda: _rerank_available())
@@ -240,6 +251,18 @@ class ChatbotUpdateRequest(BaseModel):
     line_channel_id: Optional[str] = Field(default=None, max_length=200)
     line_channel_secret: Optional[str] = Field(default=None, max_length=500)
     line_channel_access_token: Optional[str] = Field(default=None, max_length=2000)
+
+    # Meta 平台（Facebook 粉專 + Instagram 私訊）設定；app_secret／verify_token 是 Meta App 層級
+    # 的憑證，兩個管道共用。Page ID／Instagram Business ID 目前僅供記錄。
+    facebook_page_id: Optional[str] = Field(default=None, max_length=200)
+    facebook_app_secret: Optional[str] = Field(default=None, max_length=500)
+    facebook_page_access_token: Optional[str] = Field(default=None, max_length=2000)
+    facebook_verify_token: Optional[str] = Field(default=None, max_length=200)
+    instagram_business_id: Optional[str] = Field(default=None, max_length=200)
+    instagram_access_token: Optional[str] = Field(default=None, max_length=2000)
+    # Instagram 這個子產品有自己獨立的 App Secret（跟 facebook_app_secret 不同），
+    # 驗證 Instagram 訊息的 Webhook 簽章要用這組，不能沿用主 App 的密鑰。
+    instagram_app_secret: Optional[str] = Field(default=None, max_length=500)
 
     _check_mcp_trigger_name = field_validator("mcp_trigger_name")(_normalize_mcp_trigger_name)
 

@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import BrandMark from "../components/BrandMark";
 import { useAuth } from "../auth/AuthContext";
+import { standardSpinProps } from "../config/spin";
 import { ui } from "../uiStyles";
 
 // Google Identity Services 由 index.html 的 <script> 標籤載入，型別上補一個最小宣告即可，
@@ -104,7 +105,7 @@ export default function LoginPage() {
           />
         ) : null}
         {error ? <Alert type="error" showIcon message={error} /> : null}
-        {loading ? <Spin /> : null}
+        {loading ? <Spin {...standardSpinProps} /> : null}
         {/* 登入中只隱藏、不卸載：卸載後 Google 按鈕的容器會被重建，但 GSI 只在 effect 裡繪製一次，
             登入失敗回到這個畫面時 Google 按鈕就會消失。 */}
         <div className={loading ? "hidden" : ui.loginActions}>

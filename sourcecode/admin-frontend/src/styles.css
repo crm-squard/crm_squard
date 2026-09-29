@@ -32,6 +32,15 @@
   --radius-agent-card: 1rem;
   --animate-rag-overlay-in: rag-overlay-in 140ms ease-out;
 
+  /* 行銷首頁（WelcomePage）暗色主題 token：與既有 admin-* 淺色主題刻意區隔，避免互相污染 */
+  --color-welcome-bg: #09090b;
+  --color-welcome-bg-card: #18181b;
+  --color-welcome-accent: #10b981;
+  --color-welcome-accent-text: #000000;
+  --color-welcome-text: #d4d4d8;
+  --color-welcome-text-muted: #8b8b93;
+  --color-welcome-border: rgb(255 255 255 / 0.08);
+
   @keyframes rag-overlay-in {
     from {
       opacity: 0;

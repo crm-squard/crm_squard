@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { Fragment, useEffect, useRef, type ReactNode } from "react";
 import type { ChatMessage } from "../types";
 import { assertNever } from "../utils/messages";
 import { tw } from "../utils/tw";
@@ -30,7 +30,7 @@ function Message({ message }: { message: ChatMessage }) {
         </div>
       );
     case "product":
-      return <ProductAnswer text={message.text} source={message.source} />;
+      return <ProductAnswer text={message.text} sources={message.sources} />;
     case "order":
       return (
         <OrderCard
@@ -47,9 +47,11 @@ function Message({ message }: { message: ChatMessage }) {
 export default function MessageList({
   messages,
   isSending,
+  header,
 }: {
   messages: ChatMessage[];
   isSending: boolean;
+  header?: ReactNode;
 }) {
   const listRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -59,7 +61,10 @@ export default function MessageList({
   return (
     <div className={widgetUi.messages} ref={listRef}>
       {messages.map((message, index) => (
-        <Message key={index} message={message} />
+        <Fragment key={index}>
+          <Message message={message} />
+          {index === 0 && header}
+        </Fragment>
       ))}
       {isSending && <TypingIndicator />}
     </div>

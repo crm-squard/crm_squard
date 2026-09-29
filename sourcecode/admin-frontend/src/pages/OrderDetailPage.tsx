@@ -4,14 +4,14 @@ import Button from "antd/es/button";
 import Descriptions from "antd/es/descriptions";
 import Result from "antd/es/result";
 import Skeleton from "antd/es/skeleton";
-import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { getOrder, OrderApiError } from "../api/orders";
+import { OrderApiError } from "../api/orders";
 import AdminPageLayout from "../components/AdminPageLayout";
 import StatusTag from "../components/StatusTag";
 import type { AdminOrder } from "../types/order";
 import { ui } from "../uiStyles";
 import { tw } from "../utils/tw";
+import { useOrderQuery } from "../hooks/useAdminQueries";
 
 const moneyFormatter = new Intl.NumberFormat("zh-TW", {
   style: "currency",
@@ -22,28 +22,17 @@ const moneyFormatter = new Intl.NumberFormat("zh-TW", {
 export default function OrderDetailPage() {
   const navigate = useNavigate();
   const { orderId = "" } = useParams();
-  const [order, setOrder] = useState<AdminOrder | null>(null);
-  const [error, setError] = useState<{
-    message: string;
-    status?: number;
-  } | null>(null);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    setError(null);
-    getOrder(orderId, controller.signal)
-      .then(setOrder)
-      .catch((reason: unknown) => {
-        if (reason instanceof DOMException && reason.name === "AbortError")
-          return;
-        setError({
-          message:
-            reason instanceof Error ? reason.message : "無法取得訂單資料。",
-          status: reason instanceof OrderApiError ? reason.status : undefined,
-        });
-      });
-    return () => controller.abort();
-  }, [orderId]);
+  const orderQuery = useOrderQuery(orderId);
+  const order = orderQuery.data ?? null;
+  const error = orderQuery.error
+    ? {
+        message: orderQuery.error.message,
+        status:
+          orderQuery.error instanceof OrderApiError
+            ? orderQuery.error.status
+            : undefined,
+      }
+    : null;
 
   const backButton = (
     <Button

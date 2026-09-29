@@ -53,21 +53,6 @@ def _post_chat(client, message, chatbot_id=None, provider="google"):
     )
 
 
-def test_store_info_returns_fixed_reply_without_touching_rag_or_mcp(client, monkeypatch):
-    """「店家資訊」是固定回覆：不經過 RAG／LLM，也不需要對得到公司（合併自 stage 的功能）。"""
-    from app import main as main_module
-
-    def _must_not_be_called():
-        raise AssertionError("店家資訊不該走 RAG")
-
-    monkeypatch.setattr(main_module, "get_agent", _must_not_be_called)
-
-    resp = _post_chat(client, "店家資訊")
-
-    assert resp.status_code == 200
-    assert resp.json()["type"] == "text"
-    assert "營業時間" in resp.json()["text"]
-
 
 def test_mcp_command_without_chatbot_returns_not_enabled_message(client):
     """X-Client-ID 對不到任何公司（"client_test" 不是合法 UUID）時，@mcp 回覆尚未開啟，不是 500。"""

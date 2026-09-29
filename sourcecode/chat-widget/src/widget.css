@@ -4,11 +4,18 @@
 
 @theme {
   --color-widget-on-primary: #ffffff;
-  --color-widget-background: #f4f7f9;
-  --color-widget-muted: #5d6b78;
-  --color-widget-subtle: #80909d;
-  --color-widget-success: #2e8b70;
-  --color-widget-border: #d7e0e8;
+  --color-widget-background: #fafbfc;
+  --color-widget-muted: #4a5568;
+  --color-widget-subtle: #718096;
+  --color-widget-success: #10b981;
+  --color-widget-border: #e2e8f0;
+  --spacing-widget-panel: 1.125rem;
+  --spacing-widget-message: 0.8125rem;
+  --spacing-widget-icon-gap: 0.3125rem;
+  --spacing-widget-icon: 2.125rem;
+  --spacing-widget-node: 1.625rem;
+  --spacing-widget-input-max: 6.625rem;
+  --leading-widget: 1.3125rem;
   --font-widget:
     "DM Sans", system-ui, -apple-system, "PingFang TC", "Noto Sans TC",
     "Microsoft JhengHei", sans-serif;

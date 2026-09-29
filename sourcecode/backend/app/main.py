@@ -8,13 +8,14 @@ FastAPI 入口。
 import os
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
+import asyncio
 import re
 import time
 from collections import defaultdict, deque
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
-from typing import Literal
+from typing import Callable, Literal
 
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -36,7 +37,7 @@ from app.schemas import (
     ChatbotListResponse,
     ChatbotUpdateRequest,
     McpTokenResponse,
-    DailySummaryResponse,
+    PeriodSummaryResponse,
     DocumentInfo,
     DocumentListResponse,
     GoogleLoginRequest,
@@ -53,9 +54,10 @@ from app.agent import get_agent
 from app.chat_log import init_db as init_chat_log_db, log_chat, log_tool_calls
 from app.mcp_chat import answer_with_mcp, parse_mcp_command
 from app.rag import reranker
-from app.summary import summarize_day
+from app.summary import summarize_period
 from app.providers import is_configured
 from app.line_webhook import create_line_router
+from app.meta_webhook import create_meta_router
 
 PROVIDER_LABELS = {
     "local": "本地 Qwen3.5-2B（免費，僅限 Apple Silicon 開發機）",
@@ -281,31 +283,44 @@ def widget_config(_client_id: str = Depends(_require_client_id)):
     )
 
 
-@app.get("/api/admin/summary", response_model=DailySummaryResponse)
+@app.get("/api/admin/summary", response_model=PeriodSummaryResponse)
 def admin_summary(
     chatbot_id: str = Query(...),
-    date: str | None = None,
+    start_date: str = Query(...),
+    end_date: str = Query(...),
     _account: dict = Depends(auth.require_chatbot_access),
 ):
     """
-    管理者查看指定公司、指定日期（預設今天，UTC）使用者提問的主題摘要。
+    管理者查看指定公司、自選區間（UTC，最多 31 日）使用者提問的主題摘要。
 
     chatbot_id 必填 + require_chatbot_access：只有 platform 帳號或綁定這家公司的帳號
     才能看到這家公司的顧客提問內容，比照 /api/admin/documents* 的驗證模式。
     """
-    if date is None:
-        date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    elif not DATE_PATTERN.match(date):
-        raise HTTPException(status_code=400, detail="date 格式須為 YYYY-MM-DD")
+    if not DATE_PATTERN.match(start_date) or not DATE_PATTERN.match(end_date):
+        raise HTTPException(status_code=400, detail="start_date 與 end_date 格式須為 YYYY-MM-DD")
 
     try:
-        result = summarize_day(date, chatbot_id)
+        start = datetime.strptime(start_date, "%Y-%m-%d").date()
+        end = datetime.strptime(end_date, "%Y-%m-%d").date()
+    except ValueError:
+        raise HTTPException(status_code=400, detail="start_date 與 end_date 必須是有效日期")
+
+    today = datetime.now(timezone.utc).date()
+    if start > end:
+        raise HTTPException(status_code=400, detail="start_date 不得晚於 end_date")
+    if (end - start).days > 30:
+        raise HTTPException(status_code=400, detail="摘要查詢區間最多一個月（31 日）")
+    if end > today:
+        raise HTTPException(status_code=400, detail="end_date 不得晚於今天")
+
+    try:
+        result = summarize_period(start_date, end_date, chatbot_id)
     except Exception as e:
         # 同 /api/chat：未預期的例外要在應用程式層處理掉，回傳正常的錯誤回應，
         # 避免整個請求掛掉變成 Cloud Run 層級的 502/503（不帶 CORS 標頭）。
         print(f"[Summary Error] {e}")
         raise HTTPException(status_code=502, detail="產生摘要時發生錯誤，請稍後再試。")
-    return DailySummaryResponse(**result)
+    return PeriodSummaryResponse(**result)
 
 
 def _get_llamaindex_index():
@@ -334,15 +349,59 @@ def list_documents(chatbot_id: str = Query(...), _account: dict = Depends(auth.r
     return DocumentListResponse(documents=[DocumentInfo(**d) for d in docs])
 
 
-def _read_md_upload(file: UploadFile) -> str:
-    """驗證上傳檔案是 .md，讀成文字。目前只支援純文字 markdown，其他格式一律拒絕。"""
-    if not file.filename or not file.filename.lower().endswith(".md"):
-        raise HTTPException(status_code=400, detail="目前只支援 .md 檔案。")
-    raw_bytes = file.file.read()
+def _extract_pdf_text(raw_bytes: bytes) -> str:
+    """讀出 PDF 每一頁的文字並用空行接起來；掃描圖片型 PDF 抽不出文字會回錯誤，
+    這類檔案需要 OCR 才能處理，目前不支援。"""
+    import io
+
+    from pypdf import PdfReader
+
     try:
-        return raw_bytes.decode("utf-8")
-    except UnicodeDecodeError:
-        raise HTTPException(status_code=400, detail="檔案編碼須為 UTF-8。")
+        pages = [page.extract_text() or "" for page in PdfReader(io.BytesIO(raw_bytes)).pages]
+    except Exception:
+        raise HTTPException(status_code=400, detail="無法解析 PDF 檔案內容，請確認檔案未損毀。")
+    text = "\n\n".join(p for p in pages if p.strip())
+    if not text.strip():
+        raise HTTPException(status_code=400, detail="PDF 檔案沒有可擷取的文字內容（掃描圖片型 PDF 暫不支援）。")
+    return text
+
+
+def _extract_docx_text(raw_bytes: bytes) -> str:
+    """讀出 Word 文件每個段落的文字並用空行接起來；不保留標題階層，統一交給
+    parse_plain_text 用 SentenceSplitter 依句子邊界切段（見 app/rag/documents_store.py 的說明）。"""
+    import io
+
+    from docx import Document
+
+    try:
+        paragraphs = [p.text for p in Document(io.BytesIO(raw_bytes)).paragraphs]
+    except Exception:
+        raise HTTPException(status_code=400, detail="無法解析 Word 檔案內容，請確認檔案未損毀。")
+    text = "\n\n".join(p for p in paragraphs if p.strip())
+    if not text.strip():
+        raise HTTPException(status_code=400, detail="Word 檔案沒有可擷取的文字內容。")
+    return text
+
+
+def _read_document_upload(file: UploadFile) -> tuple[bytes, str, Callable[[str, str], list[dict]]]:
+    """驗證上傳檔案格式（.md／.pdf／.docx），讀出原始 bytes，並回傳解析成文字後的內容
+    與對應的 chunk parser（.md 保留原本的 H1/H2 標題拆分；PDF/Word 沒有 Markdown 結構，
+    改用 parse_plain_text 的 SentenceSplitter 依句子邊界、token 數切段並保留 overlap，
+    見 app/rag/documents_store.py）。"""
+    from app.rag.documents_store import parse_generic_markdown, parse_plain_text
+
+    filename = (file.filename or "").lower()
+    raw_bytes = file.file.read()
+    if filename.endswith(".md"):
+        try:
+            return raw_bytes, raw_bytes.decode("utf-8"), parse_generic_markdown
+        except UnicodeDecodeError:
+            raise HTTPException(status_code=400, detail="檔案編碼須為 UTF-8。")
+    if filename.endswith(".pdf"):
+        return raw_bytes, _extract_pdf_text(raw_bytes), parse_plain_text
+    if filename.endswith(".docx"):
+        return raw_bytes, _extract_docx_text(raw_bytes), parse_plain_text
+    raise HTTPException(status_code=400, detail="目前只支援 .md、.pdf、.docx 檔案。")
 
 
 def _check_client_hash(server_hash: str, client_sha256: str):
@@ -419,17 +478,31 @@ def upsert_document(
 
     `file` 只有在真的需要新內容（新文件／內容變更）時才要帶；純改標籤或掛到既有內容
     （雜湊已經存在別處）不需要上傳檔案。帶了 file 的情況一律先驗證雜湊，跟 client_sha256
-    不符直接回 400（避免預檢後檔案內容又被改動）。
+    不符直接回 400（避免預檢後檔案內容又被改動）——雜湊比對的對象固定是原始檔案 bytes，
+    不是 PDF/Word 轉檔後的擷取文字（見 _read_document_upload()）。
+
+    支援 .md（保留原本的 H1/H2 標題拆分）、.pdf、.docx（沒有 Markdown 結構，改用 SentenceSplitter
+    依句子邊界、token 數切段並保留 overlap，見 app/rag/documents_store.py 的 parse_plain_text）。
     """
-    from app.rag.documents_store import hash_content, upsert_document as _upsert_document
+    from app.rag.documents_store import (
+        hash_content,
+        parse_generic_markdown,
+        upsert_document as _upsert_document,
+    )
 
     index = _get_llamaindex_index()
     raw_text = None
+    parser = parse_generic_markdown
+    file_size_bytes = None
     if file is not None:
-        raw_text = _read_md_upload(file)
-        _check_client_hash(hash_content(raw_text), client_sha256)
+        raw_bytes, raw_text, parser = _read_document_upload(file)
+        _check_client_hash(hash_content(raw_bytes), client_sha256)
+        file_size_bytes = len(raw_bytes)
     try:
-        result = _upsert_document(chatbot_id, path, tags, client_sha256, raw_text, index)
+        result = _upsert_document(
+            chatbot_id, path, tags, client_sha256, raw_text, index,
+            parser=parser, file_size_bytes=file_size_bytes,
+        )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -529,6 +602,13 @@ def update_chatbot(
         line_channel_id=req.line_channel_id,
         line_channel_secret=req.line_channel_secret,
         line_channel_access_token=req.line_channel_access_token,
+        facebook_page_id=req.facebook_page_id,
+        facebook_app_secret=req.facebook_app_secret,
+        facebook_page_access_token=req.facebook_page_access_token,
+        facebook_verify_token=req.facebook_verify_token,
+        instagram_business_id=req.instagram_business_id,
+        instagram_access_token=req.instagram_access_token,
+        instagram_app_secret=req.instagram_app_secret,
     )
     if chatbot is None:
         raise HTTPException(status_code=404, detail="查無這家公司。")
@@ -796,18 +876,6 @@ async def _handle_chat(
 
         return ChatResponse(type="text", text="請輸入您的問題。")
 
-    # 店家資訊：固定資料，不經過 Gemini / RAG
-    if text.strip() == "店家資訊":
-        return ChatResponse(
-            type="text",
-            text=(
-                "🏪 CRM 智慧客服\n\n"
-                "📍 地址：福爾摩沙省有夠偏縣找不到鄉問路村大馬路田邊小巷罵罵號\n"
-                "☎ 客服電話：02-XXXXXXXX\n"
-                "🕒 營業時間：週一～週五 09:00–18:00\n"
-                "🌐 官方網站：https://crm-squard-main-frontend-821217334800.europe-west1.run.app/"
-            ),
-        )
 
     # 訊息以「@<MCP 機器人名稱>」開頭（沒設定名稱時是 @MCP）：交給該公司 MCP server 的 tools 處理
     # （LLM 自己選 tool、整理成文字），不走 RAG；其他訊息維持原本的 RAG + LLM。見 app/mcp_chat.py。
@@ -828,7 +896,10 @@ async def _handle_chat(
     agent = get_agent()
     # 讀這家公司在後台設定的 k 與 rerank 偏好；查不到公司（沒帶或不合法的 X-Client-ID）就用系統預設。
     # rerank 偏好只是「想開」，伺服器不支援時（例如 Cloud Run）檢索層會靜默退回一般向量檢索。
-    answer, retrieved = agent.generate_answer(
+    # generate_answer 是同步函式（檢索 + 等線上 LLM 回應，動輒數秒），直接呼叫會佔住 event loop，
+    # 讓同一實例上其他使用者的請求排隊；丟到執行緒池執行才能真正並行處理多位使用者。
+    answer, retrieved = await asyncio.to_thread(
+        agent.generate_answer,
         text, history=history, provider=provider, chatbot_id=chatbot_id,
         top_k=chatbot["rag_top_k"] if chatbot else None,
         use_rerank=bool(chatbot and chatbot["rerank_enabled"]),
@@ -842,3 +913,5 @@ async def _handle_chat(
 
 # LINE Messaging API
 app.include_router(create_line_router(_handle_chat))
+# Meta 平台（Facebook 粉專 + Instagram 私訊，共用同一個 webhook 端點）
+app.include_router(create_meta_router(_handle_chat))

@@ -3,9 +3,7 @@ import type { ProviderId, ProviderInfo } from "../api-types";
 import { fetchProviders } from "../api/chat";
 
 export function useProviders(clientId: string) {
-  const [providers, setProviders] = useState<ProviderInfo[]>([
-    { id: "google", label: "Google Gemini", configured: true },
-  ]);
+  const [providers, setProviders] = useState<ProviderInfo[]>([]);
   const [provider, setProvider] = useState<ProviderId>("google");
   useEffect(() => {
     let active = true;

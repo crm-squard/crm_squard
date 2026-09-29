@@ -3,16 +3,7 @@ import type {
   PrecheckRequestItem,
   PrecheckResponse,
 } from "../types/documents";
-
-const API_BASE_URL =
-  import.meta.env.VITE_RAG_API_URL || "http://localhost:8000";
-
-async function throwIfNotOk(response: Response): Promise<void> {
-  if (!response.ok) {
-    const body = await response.text().catch(() => "");
-    throw new Error(`後端回應狀態碼 ${response.status}: ${body}`);
-  }
-}
+import { requestAdminApi } from "./apiClient";
 
 // path 可能含斜線（例如 "policy/faq/faq1.md"），需逐段 encode 再接回，
 // 避免整段 encodeURIComponent 把斜線也編碼成 %2F 導致後端 :path 路由解析錯誤。
@@ -35,14 +26,10 @@ export async function fetchDocuments(
   token: string,
   chatbotId: string,
 ): Promise<DocumentInfo[]> {
-  const response = await fetch(
-    `${API_BASE_URL}/api/admin/documents?chatbot_id=${encodeURIComponent(chatbotId)}`,
-    {
-      headers: { Authorization: `Bearer ${token}` },
-    },
+  const data = await requestAdminApi<{ documents: DocumentInfo[] }>(
+    `/api/admin/documents?chatbot_id=${encodeURIComponent(chatbotId)}`,
+    { token },
   );
-  await throwIfNotOk(response);
-  const data = (await response.json()) as { documents: DocumentInfo[] };
   return data.documents;
 }
 
@@ -52,19 +39,14 @@ export async function precheckDocuments(
   items: PrecheckRequestItem[],
   scopePrefix: string | null,
 ): Promise<PrecheckResponse> {
-  const response = await fetch(
-    `${API_BASE_URL}/api/admin/documents/precheck?chatbot_id=${encodeURIComponent(chatbotId)}`,
+  return requestAdminApi<PrecheckResponse>(
+    `/api/admin/documents/precheck?chatbot_id=${encodeURIComponent(chatbotId)}`,
     {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({ scope_prefix: scopePrefix, items }),
+      token,
+      json: { scope_prefix: scopePrefix, items },
     },
   );
-  await throwIfNotOk(response);
-  return (await response.json()) as PrecheckResponse;
 }
 
 interface UpsertDocumentParams {
@@ -86,16 +68,14 @@ export async function upsertDocument(
   params.tags.forEach((tag) => formData.append("tags", tag));
   formData.append("client_sha256", params.clientSha256);
   if (params.file) formData.append("file", params.file);
-  const response = await fetch(
-    `${API_BASE_URL}/api/admin/documents/${encodePathForUrl(params.path)}?chatbot_id=${encodeURIComponent(chatbotId)}`,
+  return requestAdminApi<DocumentInfo>(
+    `/api/admin/documents/${encodePathForUrl(params.path)}?chatbot_id=${encodeURIComponent(chatbotId)}`,
     {
       method: "PUT",
-      headers: { Authorization: `Bearer ${token}` },
+      token,
       body: formData,
     },
   );
-  await throwIfNotOk(response);
-  return (await response.json()) as DocumentInfo;
 }
 
 export async function deleteDocument(
@@ -103,12 +83,11 @@ export async function deleteDocument(
   chatbotId: string,
   path: string,
 ): Promise<void> {
-  const response = await fetch(
-    `${API_BASE_URL}/api/admin/documents/${encodePathForUrl(path)}?chatbot_id=${encodeURIComponent(chatbotId)}`,
+  await requestAdminApi<void>(
+    `/api/admin/documents/${encodePathForUrl(path)}?chatbot_id=${encodeURIComponent(chatbotId)}`,
     {
       method: "DELETE",
-      headers: { Authorization: `Bearer ${token}` },
+      token,
     },
   );
-  await throwIfNotOk(response);
 }

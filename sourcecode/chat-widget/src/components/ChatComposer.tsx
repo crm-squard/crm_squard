@@ -53,6 +53,7 @@ export default function ChatComposer({
         aria-label="輸入訊息"
       />
       <button
+        type="button"
         className={widgetUi.sendButton}
         onClick={onSend}
         disabled={!value.trim() || isSending}

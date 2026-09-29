@@ -1,5 +1,7 @@
 import BookOutlined from "@ant-design/icons/BookOutlined";
 import CodeOutlined from "@ant-design/icons/CodeOutlined";
+import CustomerServiceOutlined from "@ant-design/icons/CustomerServiceOutlined";
+import FacebookOutlined from "@ant-design/icons/FacebookOutlined";
 import FileTextOutlined from "@ant-design/icons/FileTextOutlined";
 import MessageOutlined from "@ant-design/icons/MessageOutlined";
 import SettingOutlined from "@ant-design/icons/SettingOutlined";
@@ -31,7 +33,16 @@ const items = [
     label: (
       <span>
         <MessageOutlined />
-        LineBot設定
+        LINE BOT 設定
+      </span>
+    ),
+  },
+  {
+    key: "/chatbots/meta-settings",
+    label: (
+      <span>
+        <FacebookOutlined />
+        Facebook / Instagram 設定
       </span>
     ),
   },
@@ -41,6 +52,15 @@ const items = [
       <span>
         <CodeOutlined />
         腳本設定
+      </span>
+    ),
+  },
+  {
+    key: "/chatbots/summary",
+    label: (
+      <span>
+        <CustomerServiceOutlined />
+        客服摘要
       </span>
     ),
   },

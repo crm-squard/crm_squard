@@ -1,27 +1,32 @@
+import CopyOutlined from "@ant-design/icons/CopyOutlined";
 import Button from "antd/es/button";
 import Card from "antd/es/card";
 import Form from "antd/es/form";
 import Input from "antd/es/input";
-import List from "antd/es/list";
 import message from "antd/es/message";
 import Popconfirm from "antd/es/popconfirm";
+import Tooltip from "antd/es/tooltip";
 import Typography from "antd/es/typography";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
-import { createAccount, deleteAccount, listAccounts } from "../api/accounts";
-import type { Account } from "../api/auth";
-import {
-  deleteChatbot,
-  getChatbotMcpToken,
-  updateChatbot,
-} from "../api/chatbots";
+import { createAccount, deleteAccount } from "../api/accounts";
+import { getChatbotMcpToken } from "../api/chatbots";
 import { useAuth } from "../auth/AuthContext";
+import AccountManagementCard from "../components/AccountManagementCard";
 import AdminPageLayout from "../components/AdminPageLayout";
 import ChatbotSettingsTabs from "../components/ChatbotSettingsTabs";
-import CopyableIdentifier from "../components/CopyableIdentifier";
+import type { Account } from "../types/auth";
 import { ui } from "../uiStyles";
+import { queryClient } from "../queryClient";
+import { queryKeys } from "../api/queryKeys";
+import {
+  useAccountsQuery,
+  useDeleteChatbotMutation,
+  useUpdateChatbotMutation,
+} from "../hooks/useAdminQueries";
+import { useSelectedChatbot } from "../hooks/useSelectedChatbot";
 
-const { Text, Paragraph } = Typography;
+const { Text } = Typography;
 const { TextArea } = Input;
 const DEFAULT_MCP_TRIGGER_NAME = "MCP";
 const DEFAULT_QUICK_REPLIES = ["無線滑鼠支援多少 DPI？", "退貨要幾天內申請？"];
@@ -43,54 +48,29 @@ export default function ChatbotSettingsPage() {
   const {
     token,
     account: currentAccount,
-    chatbots,
     selectedChatbotId,
     selectChatbot,
-    refreshMe,
   } = useAuth();
+  const { chatbot } = useSelectedChatbot();
   const [messageApi, contextHolder] = message.useMessage();
   const [form] = Form.useForm<ChatbotSettingsForm>();
   const [accountForm] = Form.useForm<{ email: string }>();
   const [saving, setSaving] = useState(false);
-  const [deleting, setDeleting] = useState(false);
   const [revealedMcpToken, setRevealedMcpToken] = useState<string | null>(null);
   const [revealingToken, setRevealingToken] = useState(false);
   const [clearingToken, setClearingToken] = useState(false);
-  const [accounts, setAccounts] = useState<Account[]>([]);
+  const accountsQuery = useAccountsQuery(token, selectedChatbotId ?? undefined);
+  const accounts = accountsQuery.data ?? [];
+  const updateMutation = useUpdateChatbotMutation(token ?? "");
+  const deleteMutation = useDeleteChatbotMutation(token ?? "");
   const [addingAccount, setAddingAccount] = useState(false);
   const triggerNameInput = Form.useWatch("mcp_trigger_name", form);
   const triggerName =
     (triggerNameInput ?? "").trim().replace(/^[@＠]+/, "") ||
     DEFAULT_MCP_TRIGGER_NAME;
-  const chatbot = chatbots.find((item) => item.id === selectedChatbotId);
-
-  const loadAccounts = useCallback(() => {
-    if (!token || !selectedChatbotId) return;
-    listAccounts(token, selectedChatbotId)
-      .then(setAccounts)
-      .catch((error) =>
-        messageApi.error(
-          error instanceof Error ? error.message : "帳號清單載入失敗",
-        ),
-      );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token, selectedChatbotId]);
-
-  useEffect(() => {
-    loadAccounts();
-  }, [loadAccounts]);
-
   useEffect(() => {
     setRevealedMcpToken(null);
   }, [selectedChatbotId]);
-
-  useEffect(() => {
-    if (!token || !selectedChatbotId) return;
-    refreshMe().catch(() => {
-      // 更新失敗時沿用現有快取，不中斷設定頁。
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token, selectedChatbotId]);
 
   useEffect(() => {
     if (!chatbot) return;
@@ -120,17 +100,19 @@ export default function ChatbotSettingsPage() {
         .filter(Boolean);
 
       if (!selectedChatbotId) return;
-      await updateChatbot(token, selectedChatbotId, {
-        name: values.name.trim(),
-        mcp_url: values.mcp_url ?? "",
-        mcp_trigger_name: values.mcp_trigger_name ?? "",
-        ...(values.mcp_token ? { mcp_token: values.mcp_token } : {}),
-        welcome_message: values.welcome_message ?? "",
-        quick_replies: quickReplies,
+      await updateMutation.mutateAsync({
+        chatbotId: selectedChatbotId,
+        params: {
+          name: values.name.trim(),
+          mcp_url: values.mcp_url ?? "",
+          mcp_trigger_name: values.mcp_trigger_name ?? "",
+          ...(values.mcp_token ? { mcp_token: values.mcp_token } : {}),
+          welcome_message: values.welcome_message ?? "",
+          quick_replies: quickReplies,
+        },
       });
       form.setFieldValue("mcp_token", "");
       setRevealedMcpToken(null);
-      await refreshMe();
       messageApi.success("已儲存 ChatBot 設定");
     } catch (error) {
       messageApi.error(error instanceof Error ? error.message : "儲存失敗");
@@ -157,9 +139,11 @@ export default function ChatbotSettingsPage() {
     if (!token || !selectedChatbotId) return;
     setClearingToken(true);
     try {
-      await updateChatbot(token, selectedChatbotId, { mcp_token: "" });
+      await updateMutation.mutateAsync({
+        chatbotId: selectedChatbotId,
+        params: { mcp_token: "" },
+      });
       setRevealedMcpToken(null);
-      await refreshMe();
       messageApi.success("已清除 MCP 金鑰");
     } catch (error) {
       messageApi.error(error instanceof Error ? error.message : "清除金鑰失敗");
@@ -178,7 +162,9 @@ export default function ChatbotSettingsPage() {
         chatbot_id: selectedChatbotId,
       });
       accountForm.resetFields();
-      loadAccounts();
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.accounts.byChatbot(selectedChatbotId),
+      });
       messageApi.success("已新增管理帳號");
     } catch (error) {
       messageApi.error(error instanceof Error ? error.message : "新增失敗");
@@ -191,7 +177,9 @@ export default function ChatbotSettingsPage() {
     if (!token || !selectedChatbotId) return;
     try {
       await deleteAccount(token, accountId, selectedChatbotId);
-      loadAccounts();
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.accounts.byChatbot(selectedChatbotId),
+      });
       messageApi.success("已移除管理帳號");
     } catch (error) {
       messageApi.error(error instanceof Error ? error.message : "移除失敗");
@@ -200,17 +188,22 @@ export default function ChatbotSettingsPage() {
 
   async function handleDeleteChatbot() {
     if (!token || !selectedChatbotId) return;
-    setDeleting(true);
     try {
-      await deleteChatbot(token, selectedChatbotId);
+      await deleteMutation.mutateAsync(selectedChatbotId);
       selectChatbot(null);
-      await refreshMe();
       messageApi.success("已刪除商家服務");
       navigate("/chatbots", { replace: true });
     } catch (error) {
       messageApi.error(error instanceof Error ? error.message : "刪除失敗");
-    } finally {
-      setDeleting(false);
+    }
+  }
+
+  async function copyValue(value: string, label: string) {
+    try {
+      await navigator.clipboard.writeText(value);
+      messageApi.success(`已複製${label}`);
+    } catch {
+      messageApi.error("複製失敗，請手動複製內容");
     }
   }
 
@@ -222,11 +215,6 @@ export default function ChatbotSettingsPage() {
   const basicContent = (
     <div className={ui.settingsCardGrid}>
       <Card className={ui.settingsCard} title="基本資料">
-        {chatbot ? (
-          <Paragraph type="secondary">
-            <CopyableIdentifier label="商家識別碼" value={chatbot.id} />
-          </Paragraph>
-        ) : null}
         <Form.Item
           name="name"
           label="名稱"
@@ -238,12 +226,56 @@ export default function ChatbotSettingsPage() {
           <Input placeholder="例如：客服 ChatBot" />
         </Form.Item>
         {chatbot ? (
-          <Paragraph type="secondary">
-            機器人網址：
-            <Text code copyable>
-              {`${CHAT_WIDGET_PREVIEW_ORIGIN}/?clientId=${chatbot.id}`}
-            </Text>
-          </Paragraph>
+          <Form.Item label="商家識別碼">
+            <Input.Search
+              aria-label="商家識別碼"
+              readOnly
+              value={chatbot.id}
+              enterButton={
+                <Button
+                  aria-label="複製商家識別碼"
+                  color="default"
+                  icon={
+                    <Tooltip title="複製商家識別碼">
+                      <CopyOutlined />
+                    </Tooltip>
+                  }
+                  variant="outlined"
+                />
+              }
+              onSearch={() => void copyValue(chatbot.id, "商家識別碼")}
+            />
+          </Form.Item>
+        ) : null}
+
+        {chatbot ? (
+          <>
+            <Form.Item label="機器人網址">
+              <Input.Search
+                aria-label="機器人網址"
+                readOnly
+                value={`${CHAT_WIDGET_PREVIEW_ORIGIN}/?clientId=${chatbot.id}`}
+                enterButton={
+                  <Button
+                    aria-label="複製機器人網址"
+                    color="default"
+                    icon={
+                      <Tooltip title="複製機器人網址">
+                        <CopyOutlined />
+                      </Tooltip>
+                    }
+                    variant="outlined"
+                  />
+                }
+                onSearch={() =>
+                  void copyValue(
+                    `${CHAT_WIDGET_PREVIEW_ORIGIN}/?clientId=${chatbot.id}`,
+                    "機器人網址",
+                  )
+                }
+              />
+            </Form.Item>
+          </>
         ) : null}
       </Card>
 
@@ -302,9 +334,28 @@ export default function ChatbotSettingsPage() {
               </Button>
             ) : (
               <>
-                <Text code copyable>
-                  {revealedMcpToken}
-                </Text>
+                <Form.Item label="MCP 金鑰">
+                  <Input.Search
+                    aria-label="MCP 金鑰"
+                    readOnly
+                    value={revealedMcpToken}
+                    enterButton={
+                      <Button
+                        aria-label="複製 MCP 金鑰"
+                        color="default"
+                        icon={
+                          <Tooltip title="複製 MCP 金鑰">
+                            <CopyOutlined />
+                          </Tooltip>
+                        }
+                        variant="outlined"
+                      />
+                    }
+                    onSearch={() =>
+                      void copyValue(revealedMcpToken, "MCP 金鑰")
+                    }
+                  />
+                </Form.Item>
                 <Button onClick={() => setRevealedMcpToken(null)}>隱藏</Button>
               </>
             )}
@@ -321,74 +372,29 @@ export default function ChatbotSettingsPage() {
         ) : null}
       </Card>
 
-      <Card className={ui.settingsCard} title="管理商家帳號">
-        <>
-          <List
-            dataSource={accounts}
-            locale={{ emptyText: "目前只有你自己在管理這家商家服務。" }}
-            renderItem={(account) => (
-              <List.Item
-                actions={
-                  canManageAccounts && account.id !== currentAccount?.id
-                    ? [
-                        <Popconfirm
-                          key="remove"
-                          title="確定要移除這個帳號嗎？"
-                          onConfirm={() => handleRemoveAccount(account.id)}
-                        >
-                          <Button danger size="small">
-                            移除
-                          </Button>
-                        </Popconfirm>,
-                      ]
-                    : []
-                }
-              >
-                <List.Item.Meta
-                  title={account.email}
-                  description={
-                    account.chatbot_role === "primary" ? "主帳號" : "協作帳號"
-                  }
-                />
-              </List.Item>
-            )}
-          />
-          {canManageAccounts ? (
-            <Form
-              className={ui.settingsAccountForm}
-              form={accountForm}
-              layout="inline"
-              onFinish={handleAddAccount}
-            >
-              <Form.Item
-                name="email"
-                rules={[
-                  {
-                    required: true,
-                    type: "email",
-                    message: "請輸入有效的 gmail 地址",
-                  },
-                ]}
-              >
-                <Input placeholder="要新增的 gmail 地址" />
-              </Form.Item>
-              <Form.Item>
-                <Button
-                  type="primary"
-                  htmlType="submit"
-                  loading={addingAccount}
-                >
-                  新增帳號
-                </Button>
-              </Form.Item>
-            </Form>
-          ) : (
-            <Paragraph type="secondary">
-              只有主帳號能新增或移除協作帳號。
-            </Paragraph>
-          )}
-        </>
-      </Card>
+      <AccountManagementCard
+        title="管理商家帳號"
+        accounts={accounts}
+        loading={accountsQuery.isLoading}
+        loadingLabel="商家帳號讀取中"
+        adding={addingAccount}
+        canManage={canManageAccounts}
+        currentAccountId={currentAccount?.id}
+        emptyText="目前只有你自己在管理這家商家服務。"
+        readonlyText="只有主帳號能新增或移除協作帳號。"
+        inputPlaceholder="要新增的 gmail 地址"
+        addButtonText="新增帳號"
+        removeConfirmTitle="確定要移除這個帳號嗎？"
+        form={accountForm}
+        getRoleLabel={(account) =>
+          account.chatbot_role === "primary" ? "主帳號" : "協作帳號"
+        }
+        getRoleTagColor={(account) =>
+          account.chatbot_role === "primary" ? "primary" : "default"
+        }
+        onAdd={handleAddAccount}
+        onRemove={handleRemoveAccount}
+      />
 
       <div className={ui.settingsActions}>
         {/* <Popconfirm
@@ -397,7 +403,7 @@ export default function ChatbotSettingsPage() {
           onConfirm={handleDeleteChatbot}
           okButtonProps={{ danger: true }}
         >
-          <Button danger loading={deleting}>
+          <Button danger loading={deleteMutation.isPending}>
             刪除這家商家服務
           </Button>
         </Popconfirm> */}

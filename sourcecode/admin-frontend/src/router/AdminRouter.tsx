@@ -13,14 +13,14 @@ const OrderDetailPage = lazy(() => import("../pages/OrderDetailPage"));
 const OrdersPage = lazy(() => import("../pages/OrdersPage"));
 const RagPage = lazy(() => import("../pages/RagPage"));
 const LoginPage = lazy(() => import("../pages/LoginPage"));
+const WelcomePage = lazy(() => import("../pages/WelcomePage"));
 const ChatbotSettingsPage = lazy(() => import("../pages/ChatbotSettingsPage"));
 const ChatbotsPage = lazy(() => import("../pages/ChatbotsPage"));
 const ChatbotPlaceholderPage = lazy(
   () => import("../pages/ChatbotPlaceholderPage"),
 );
-const LineBotSettingsPage = lazy(
-  () => import("../pages/LineBotSettingsPage"),
-);
+const LineBotSettingsPage = lazy(() => import("../pages/LineBotSettingsPage"));
+const MetaBotSettingsPage = lazy(() => import("../pages/MetaBotSettingsPage"));
 const SummaryPage = lazy(() => import("../pages/SummaryPage"));
 const AdminAccountsPage = lazy(() => import("../pages/AdminAccountsPage"));
 const AuditLogPage = lazy(() => import("../pages/AuditLogPage"));
@@ -39,6 +39,7 @@ function loadPage(page: ReactNode) {
 
 const router = createBrowserRouter([
   { path: "login", element: loadPage(<LoginPage />) },
+  { path: "welcome", element: loadPage(<WelcomePage />) },
   { path: "select-chatbot", element: <Navigate to="/chatbots" replace /> },
   {
     element: (
@@ -59,9 +60,14 @@ const router = createBrowserRouter([
         element: loadPage(<LineBotSettingsPage />),
       },
       {
+        path: "chatbots/meta-settings",
+        element: loadPage(<MetaBotSettingsPage />),
+      },
+      {
         path: "chatbots/script-settings",
         element: loadPage(<ChatbotPlaceholderPage />),
       },
+      { path: "chatbots/summary", element: loadPage(<SummaryPage />) },
       {
         path: "chatbots/audit-log",
         element: loadPage(<AuditLogPage />),
@@ -84,7 +90,6 @@ const router = createBrowserRouter([
         path: "audit-log",
         element: <Navigate to="/chatbots/audit-log" replace />,
       },
-      { path: "summary", element: loadPage(<SummaryPage />) },
       { path: "admin-accounts", element: loadPage(<AdminAccountsPage />) },
       { path: "*", element: <Navigate to="/" replace /> },
     ],

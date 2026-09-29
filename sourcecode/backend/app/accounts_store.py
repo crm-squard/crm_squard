@@ -80,6 +80,39 @@ def _ensure_schema() -> None:
         conn.execute(sql_text(
             "ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS line_channel_access_token TEXT"
         ))
+        # Meta 平台（Facebook 粉專 + Instagram 私訊，共用同一個 webhook）設定。
+        # facebook_app_secret／facebook_verify_token 其實是「這個 Meta App」層級的憑證，
+        # Facebook 與 Instagram 共用；欄位名沿用第一版的 facebook_* 命名，不因為 Instagram
+        # 加入而改名（這個資料庫本機與正式環境共用，一貫只用 ADD COLUMN 累加，不對既有
+        # 欄位改名，見上面 mcp_token 的說明）。
+        # facebook_page_id 僅供管理端記錄，不參與驗證；page_access_token 呼叫 Facebook Send API。
+        conn.execute(sql_text(
+            "ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS facebook_page_id TEXT"
+        ))
+        conn.execute(sql_text(
+            "ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS facebook_app_secret TEXT"
+        ))
+        conn.execute(sql_text(
+            "ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS facebook_page_access_token TEXT"
+        ))
+        conn.execute(sql_text(
+            "ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS facebook_verify_token TEXT"
+        ))
+        # instagram_business_id 僅供管理端記錄（也是呼叫 Instagram Send API 時網址裡的 ig 帳號 ID）；
+        # instagram_access_token 呼叫 Instagram Send API 回覆用。Verify Token 沿用上面的
+        # facebook_verify_token（Meta App 層級，兩個管道共用）；但簽章驗證用的 App Secret
+        # 不共用——Meta 在 App 後台建立「Instagram API」這個子產品時會產生獨立的
+        # Instagram App ID／App Secret，Instagram 的 webhook 請求是用這組密鑰簽的，
+        # 不是主 App 的 facebook_app_secret，所以另外存一欄。
+        conn.execute(sql_text(
+            "ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS instagram_business_id TEXT"
+        ))
+        conn.execute(sql_text(
+            "ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS instagram_access_token TEXT"
+        ))
+        conn.execute(sql_text(
+            "ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS instagram_app_secret TEXT"
+        ))
         # RAG 檢索設定（後台「Chatbot 設定」頁可調）。兩個欄位都允許 NULL，NULL 代表「用系統預設」
         # （rag_top_k → settings.RAG_DEFAULT_TOP_K；rerank_enabled → 關閉），所以既有公司不需要回填。
         # 這個資料庫本機與正式環境共用，正式環境跑的舊版程式只會 SELECT 自己認得的欄位，加欄位不影響它。
@@ -380,6 +413,13 @@ def _row_to_chatbot(row) -> dict:
         "line_channel_id": getattr(row, "line_channel_id", None),
         "line_channel_secret": getattr(row, "line_channel_secret", None),
         "line_channel_access_token": getattr(row, "line_channel_access_token", None),
+        "facebook_page_id": getattr(row, "facebook_page_id", None),
+        "facebook_app_secret": getattr(row, "facebook_app_secret", None),
+        "facebook_page_access_token": getattr(row, "facebook_page_access_token", None),
+        "facebook_verify_token": getattr(row, "facebook_verify_token", None),
+        "instagram_business_id": getattr(row, "instagram_business_id", None),
+        "instagram_access_token": getattr(row, "instagram_access_token", None),
+        "instagram_app_secret": getattr(row, "instagram_app_secret", None),
         "created_at": row.created_at.isoformat() if row.created_at is not None else None,
         # 只有透過 list_chatbots_visible_to() 查出來的公司才有這個欄位（SELECT 裡有多帶
         # your_role）；get_chatbot()／create_chatbot()／update_chatbot() 回傳的公司資訊
@@ -423,6 +463,13 @@ def update_chatbot(
     line_channel_id: Optional[str] = None,
     line_channel_secret: Optional[str] = None,
     line_channel_access_token: Optional[str] = None,
+    facebook_page_id: Optional[str] = None,
+    facebook_app_secret: Optional[str] = None,
+    facebook_page_access_token: Optional[str] = None,
+    facebook_verify_token: Optional[str] = None,
+    instagram_business_id: Optional[str] = None,
+    instagram_access_token: Optional[str] = None,
+    instagram_app_secret: Optional[str] = None,
 ) -> Optional[dict]:
     """
     只更新有帶值的欄位（None 代表「這次沒有要改這個欄位」，不是「要清空」）——
@@ -451,10 +498,20 @@ def update_chatbot(
                     mcp_trigger_name = COALESCE(:mcp_trigger_name, mcp_trigger_name),
                     line_channel_id = COALESCE(:line_channel_id, line_channel_id),
                     line_channel_secret = COALESCE(:line_channel_secret, line_channel_secret),
-                    line_channel_access_token = COALESCE(:line_channel_access_token, line_channel_access_token)
+                    line_channel_access_token = COALESCE(:line_channel_access_token, line_channel_access_token),
+                    facebook_page_id = COALESCE(:facebook_page_id, facebook_page_id),
+                    facebook_app_secret = COALESCE(:facebook_app_secret, facebook_app_secret),
+                    facebook_page_access_token = COALESCE(:facebook_page_access_token, facebook_page_access_token),
+                    facebook_verify_token = COALESCE(:facebook_verify_token, facebook_verify_token),
+                    instagram_business_id = COALESCE(:instagram_business_id, instagram_business_id),
+                    instagram_access_token = COALESCE(:instagram_access_token, instagram_access_token),
+                    instagram_app_secret = COALESCE(:instagram_app_secret, instagram_app_secret)
                 WHERE id = :id
                 RETURNING id, name, mcp_url, welcome_message, quick_replies, rag_top_k, rerank_enabled, mcp_trigger_name,
-                          line_channel_id, line_channel_secret, line_channel_access_token, created_at, """
+                          line_channel_id, line_channel_secret, line_channel_access_token,
+                          facebook_page_id, facebook_app_secret, facebook_page_access_token, facebook_verify_token,
+                          instagram_business_id, instagram_access_token, instagram_app_secret,
+                          created_at, """
             + _HAS_MCP_TOKEN_SQL
             ),
             {
@@ -466,6 +523,13 @@ def update_chatbot(
                 "line_channel_id": line_channel_id,
                 "line_channel_secret": line_channel_secret,
                 "line_channel_access_token": line_channel_access_token,
+                "facebook_page_id": facebook_page_id,
+                "facebook_app_secret": facebook_app_secret,
+                "facebook_page_access_token": facebook_page_access_token,
+                "facebook_verify_token": facebook_verify_token,
+                "instagram_business_id": instagram_business_id,
+                "instagram_access_token": instagram_access_token,
+                "instagram_app_secret": instagram_app_secret,
             },
         ).fetchone()
     return _row_to_chatbot(row) if row is not None else None
@@ -478,7 +542,9 @@ def get_chatbot(chatbot_id: str) -> Optional[dict]:
         row = conn.execute(
             sql_text(
                 "SELECT id, name, mcp_url, welcome_message, quick_replies, rag_top_k, rerank_enabled, mcp_trigger_name, "
-                "line_channel_id, line_channel_secret, line_channel_access_token, created_at, "
+                "line_channel_id, line_channel_secret, line_channel_access_token, "
+                "facebook_page_id, facebook_app_secret, facebook_page_access_token, facebook_verify_token, "
+                "instagram_business_id, instagram_access_token, instagram_app_secret, created_at, "
                 + _HAS_MCP_TOKEN_SQL + " FROM chatbots WHERE id = :id"
             ),
             {"id": chatbot_id},
@@ -524,7 +590,8 @@ def list_chatbots_visible_to(account: dict) -> list[dict]:
     engine = get_engine()
     if account["role"] in PLATFORM_ROLES:
         sql = sql_text(
-            "SELECT id, name, mcp_url, welcome_message, quick_replies, rag_top_k, rerank_enabled, mcp_trigger_name, line_channel_id, created_at, "
+            "SELECT id, name, mcp_url, welcome_message, quick_replies, rag_top_k, rerank_enabled, mcp_trigger_name, line_channel_id, "
+            "facebook_page_id, instagram_business_id, created_at, "
             + _HAS_MCP_TOKEN_SQL + ", NULL AS your_role FROM chatbots ORDER BY created_at"
         )
         params = {}
@@ -532,7 +599,7 @@ def list_chatbots_visible_to(account: dict) -> list[dict]:
         sql = sql_text(
             """
             SELECT c.id, c.name, c.mcp_url, c.welcome_message, c.quick_replies, c.rag_top_k, c.rerank_enabled, c.mcp_trigger_name,
-                   c.line_channel_id, c.created_at,
+                   c.line_channel_id, c.facebook_page_id, c.instagram_business_id, c.created_at,
                    (c.mcp_token IS NOT NULL AND c.mcp_token <> '') AS has_mcp_token,
                    ca.role AS your_role
             FROM chatbots c

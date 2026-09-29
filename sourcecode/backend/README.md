@@ -172,8 +172,9 @@ top-k**，不報錯、行為與沒開一樣。伺服器不支援時，後台開�
 ## 知識庫文件管理
 
 下列 API 依賴 llamaindex 引擎的 pgvector 索引（唯一支援的引擎）。
-新增/更新是上傳 `.md` 檔（`multipart/form-data`），不是 JSON body；**目前只支援 `.md`**，
-其他副檔名或非 UTF-8 編碼一律回 400：
+新增/更新是上傳檔案（`multipart/form-data`），不是 JSON body；**支援 `.md`（需 UTF-8）、`.pdf`、`.docx`**，
+其他副檔名、非 UTF-8 的 `.md`、或 PDF/Word 解析失敗一律回 400（PDF/Word 沒有 Markdown 標題結構，
+改用 LlamaIndex SentenceSplitter 依句子邊界、token 數切段並保留 overlap，見 `app/rag/documents_store.py` 的 `parse_plain_text`）：
 
 | Method | Path | 說明 |
 |---|---|---|
@@ -220,6 +221,6 @@ metadata，含 `content_hash`/`uploaded_at`/`file_size_bytes`）就是唯一資�
 
 回傳可選的 LLM 清單與是否已設定 key，供前端畫下拉選單用。
 
-### `GET /api/admin/summary?date=YYYY-MM-DD`
+### `GET /api/admin/summary?chatbot_id=<id>&start_date=YYYY-MM-DD&end_date=YYYY-MM-DD`
 
-回傳指定日期（預設今天，UTC）使用者提問的主題摘要，`date` 省略時查今天。
+回傳指定 UTC 週區間使用者提問的主題摘要。歷史週的 `start_date` 必須為週一、`end_date` 必須為週日；本週的 `end_date` 必須是今天，查詢範圍最多七日。

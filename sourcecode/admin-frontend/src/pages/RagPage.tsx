@@ -20,7 +20,6 @@ import Modal from "antd/es/modal";
 import Popconfirm from "antd/es/popconfirm";
 import Select from "antd/es/select";
 import Space from "antd/es/space";
-import Spin from "antd/es/spin";
 import Switch from "antd/es/switch";
 import Table from "antd/es/table";
 import Tag from "antd/es/tag";
@@ -29,10 +28,10 @@ import Upload from "antd/es/upload";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Navigate, useBeforeUnload, useBlocker } from "react-router-dom";
 import AdminPageLayout from "../components/AdminPageLayout";
+import CardLoading from "../components/CardLoading";
 import ChatbotSettingsTabs from "../components/ChatbotSettingsTabs";
 import {
   deleteDocument,
-  fetchDocuments,
   precheckDocuments,
   sha256Hex,
   upsertDocument,
@@ -46,12 +45,22 @@ import { useAuth } from "../auth/AuthContext";
 import ChatWidgetPreview from "../components/ChatWidgetPreview";
 import { updateChatbot } from "../api/chatbots";
 import { ui } from "../uiStyles";
+import { queryKeys } from "../api/queryKeys";
+import { queryClient } from "../queryClient";
+import {
+  useDocumentsQuery,
+  useUpdateChatbotMutation,
+} from "../hooks/useAdminQueries";
+import { useSelectedChatbot } from "../hooks/useSelectedChatbot";
 import { tw } from "../utils/tw";
 
 const { Text } = Typography;
 const { Dragger } = Upload;
 
-const ACCEPTED_EXTENSION = ".md";
+const ACCEPTED_EXTENSIONS = [".md", ".pdf", ".docx"];
+// 後端 embedding 是本地 CPU 推論（onnxruntime，見 backend/app/rag/onnx_embedding.py）。
+// 曾因 Cloud Run 只有 1 vCPU，並行處理搶同一顆 CPU 導致誤判失敗；已在 cloudbuild.yaml
+// 的 backend-deploy 加上 --cpu=2 --concurrency=10 給予足夠運算資源，這裡維持並行處理。
 const CONCURRENCY_LIMIT = 4;
 const DEFAULT_RAG_TOP_K = 5;
 const MAX_RAG_TOP_K = 10;
@@ -77,8 +86,9 @@ interface StaleRow {
   progress: RowProgress;
 }
 
-function isMarkdownFile(file: File): boolean {
-  return file.name.toLowerCase().endsWith(ACCEPTED_EXTENSION);
+function isAcceptedFile(file: File): boolean {
+  const name = file.name.toLowerCase();
+  return ACCEPTED_EXTENSIONS.some((ext) => name.endsWith(ext));
 }
 
 function formatBytes(bytes: number | null): string {
@@ -201,8 +211,11 @@ function TagChipsInput({
 }
 
 export default function AdminDocumentsPage() {
-  const { token, selectedChatbotId, chatbots, refreshMe } = useAuth();
-  const chatbot = chatbots.find((item) => item.id === selectedChatbotId);
+  const { token } = useAuth();
+  const { chatbot, selectedChatbotId } = useSelectedChatbot();
+  const updateMutation = useUpdateChatbotMutation(token ?? "");
+  const documentsQuery = useDocumentsQuery(token, selectedChatbotId);
+  const loadDocuments = () => documentsQuery.refetch();
   const [settingsForm] = Form.useForm<{
     rag_top_k: number;
     rerank_enabled: boolean;
@@ -214,7 +227,7 @@ export default function AdminDocumentsPage() {
   const folderInputRef = useRef<HTMLInputElement>(null);
   const fileDragDepthRef = useRef(0);
   const [documents, setDocuments] = useState<DocumentInfo[]>([]);
-  const [loading, setLoading] = useState(true);
+  const loading = documentsQuery.isLoading;
   const [notice, setNotice] = useState<string | null>(null);
 
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
@@ -236,6 +249,10 @@ export default function AdminDocumentsPage() {
   const navigationBlocker = useBlocker(hasUnanalyzedFiles);
 
   useEffect(() => {
+    setDocuments([]);
+  }, [selectedChatbotId]);
+
+  useEffect(() => {
     if (!chatbot) return;
     settingsForm.setFieldsValue({
       rag_top_k: chatbot.rag_top_k ?? DEFAULT_RAG_TOP_K,
@@ -250,13 +267,15 @@ export default function AdminDocumentsPage() {
     if (!token || !selectedChatbotId) return;
     setSavingSettings(true);
     try {
-      await updateChatbot(token, selectedChatbotId, {
-        rag_top_k: values.rag_top_k,
-        ...(values.rerank_enabled !== !!chatbot?.rerank_enabled
-          ? { rerank_enabled: values.rerank_enabled }
-          : {}),
+      await updateMutation.mutateAsync({
+        chatbotId: selectedChatbotId,
+        params: {
+          rag_top_k: values.rag_top_k,
+          ...(values.rerank_enabled !== !!chatbot?.rerank_enabled
+            ? { rerank_enabled: values.rerank_enabled }
+            : {}),
+        },
       });
-      await refreshMe();
       messageApi.success("已儲存知識設定");
     } catch (error) {
       messageApi.error(error instanceof Error ? error.message : "儲存失敗");
@@ -290,24 +309,10 @@ export default function AdminDocumentsPage() {
     });
   }, [modalApi, navigationBlocker]);
 
-  async function loadDocuments() {
-    if (!token || !selectedChatbotId) return;
-    setLoading(true);
-    try {
-      const docs = await fetchDocuments(token, selectedChatbotId);
-      setDocuments(docs);
-    } catch (err) {
-      messageApi.error(err instanceof Error ? err.message : "載入文件列表失敗");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  // selectedChatbotId 變動（使用者切換公司）時要重新拉取該公司的文件列表。
+  // query key 包含 selectedChatbotId；切換公司時不會短暫顯示另一家文件。
   useEffect(() => {
-    loadDocuments();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token, selectedChatbotId]);
+    if (documentsQuery.data) setDocuments(documentsQuery.data);
+  }, [documentsQuery.data]);
 
   useEffect(() => {
     function hasFiles(event: DragEvent): boolean {
@@ -369,16 +374,16 @@ export default function AdminDocumentsPage() {
   }
 
   function addSelectedFiles(files: File[]) {
-    const mdFiles = files.filter(isMarkdownFile);
-    const rejectedCount = files.length - mdFiles.length;
+    const acceptedFiles = files.filter(isAcceptedFile);
+    const rejectedCount = files.length - acceptedFiles.length;
     if (rejectedCount > 0) setSkippedCount((count) => count + rejectedCount);
-    if (mdFiles.length === 0) return;
+    if (acceptedFiles.length === 0) return;
 
     setSelectedFiles((currentFiles) => {
       const merged = new Map(
         currentFiles.map((file) => [getSelectionKey(file), file]),
       );
-      mdFiles.forEach((file) => merged.set(getSelectionKey(file), file));
+      acceptedFiles.forEach((file) => merged.set(getSelectionKey(file), file));
       return Array.from(merged.values());
     });
     invalidatePrecheck();
@@ -565,7 +570,10 @@ export default function AdminDocumentsPage() {
     setNotice(null);
     try {
       await deleteDocument(token, selectedChatbotId, path);
-      setDocuments((prev) => prev.filter((doc) => doc.path !== path));
+      queryClient.setQueryData<DocumentInfo[]>(
+        queryKeys.documents.byChatbot(selectedChatbotId),
+        (current) => current?.filter((doc) => doc.path !== path),
+      );
     } catch (err) {
       messageApi.error(err instanceof Error ? err.message : "刪除文件失敗");
     }
@@ -669,10 +677,10 @@ export default function AdminDocumentsPage() {
                     <InboxOutlined />
                   </p>
                   <p className="ant-upload-text">
-                    拖曳 Markdown 檔案或整個資料夾至此
+                    拖曳 Markdown／PDF／Word 檔案或整個資料夾至此
                   </p>
                   <p className="ant-upload-hint">
-                    支援單一檔案、多檔案與資料夾；只會加入 .md
+                    支援單一檔案、多檔案與資料夾；只會加入 .md、.pdf、.docx
                     檔案，不會立即上傳。
                   </p>
                   <Space className={ui.ragPickerActions} wrap>
@@ -701,7 +709,7 @@ export default function AdminDocumentsPage() {
                   ref={filesInputRef}
                   className={ui.visuallyHidden}
                   type="file"
-                  accept={ACCEPTED_EXTENSION}
+                  accept={ACCEPTED_EXTENSIONS.join(",")}
                   multiple
                   onChange={handleFilesInputChange}
                 />
@@ -767,10 +775,10 @@ export default function AdminDocumentsPage() {
                 <div className={ui.ragSelectionSummary}>
                   <Text type="secondary">
                     {selectedFiles.length > 0
-                      ? `已選取 ${selectedFiles.length} 個 .md 檔案`
+                      ? `已選取 ${selectedFiles.length} 個檔案`
                       : "尚未選取檔案"}
                     {skippedCount > 0
-                      ? `，已略過 ${skippedCount} 個非 .md 檔案`
+                      ? `，已略過 ${skippedCount} 個不支援的檔案`
                       : ""}
                   </Text>
                   <Button
@@ -779,7 +787,7 @@ export default function AdminDocumentsPage() {
                     disabled={selectedFiles.length === 0}
                     onClick={analyzeSelection}
                   >
-                    上傳分析檔案
+                    上傳檔案
                   </Button>
                 </div>
 
@@ -995,7 +1003,9 @@ export default function AdminDocumentsPage() {
           </Button>
         </div>
 
-        <Spin spinning={loading}>
+        {loading ? (
+          <CardLoading label="文件列表讀取中" />
+        ) : (
           <Table<DocumentInfo>
             rowKey="path"
             dataSource={filteredDocuments}
@@ -1047,7 +1057,7 @@ export default function AdminDocumentsPage() {
                 render: formatBytes,
               },
               {
-                title: "更新時間",
+                title: "最後更新時間",
                 dataIndex: "uploaded_at",
                 key: "uploaded_at",
                 width: 190,
@@ -1075,7 +1085,7 @@ export default function AdminDocumentsPage() {
               },
             ]}
           />
-        </Spin>
+        )}
       </Card>
     </AdminPageLayout>
   );

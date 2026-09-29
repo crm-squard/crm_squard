@@ -2,15 +2,13 @@
 測試共用設定。
 
 兩個重點：
-1. 把 backend 目錄加進 sys.path 並 chdir 過去，讓 `import app...` 跟 chat_log.db
-   這類相對路徑的行為，跟 `run_dev.sh`（cd 進 backend 再啟動）一致，
+1. 把 backend 目錄加進 sys.path 並 chdir 過去，讓 `import app...` 這類相對路徑的行為，跟 `run_dev.sh`（cd 進 backend 再啟動）一致，
    不管實際從哪個目錄執行 pytest 都一樣。
-2. 在任何測試 import app.config / app.main 之前，把 CHAT_LOG_DB_PATH 指到暫存檔，
-   避免 /api/chat 測試把對話紀錄寫進共用的 chat_log.db。
+2. 對話紀錄（chat_log）已改存 Postgres，與帳號／pgvector 測試共用同一個資料庫，
+   跑測試前需確認 RAG_PG_* 連得上。
 """
 import os
 import sys
-import tempfile
 import uuid
 from pathlib import Path
 
@@ -18,9 +16,6 @@ import pytest
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BACKEND_DIR))
-
-_tmp_dir = tempfile.mkdtemp(prefix="crm_backend_test_")
-os.environ["CHAT_LOG_DB_PATH"] = str(Path(_tmp_dir) / "chat_log_test.db")
 
 os.chdir(BACKEND_DIR)
 

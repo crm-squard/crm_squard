@@ -42,7 +42,13 @@ export const ui = {
     "h-10.5! w-10.5! rounded-control! border! border-solid! border-[#dce4ee]! text-icon-control! text-[#173664]! hover:bg-[#eef5ff]! hover:text-admin-primary!",
   ),
   account: tw(
-    "flex cursor-pointer items-center gap-2.5 text-[#738099] [&_.ant-avatar]:bg-[#c8d0dc] [&_small]:text-xs [&_span]:grid [&_span]:leading-[1.25] max-[620px]:[&_span]:hidden [&_strong]:text-caption",
+    "h-auto! border-0! bg-transparent! p-0! text-left! text-[#738099] hover:bg-transparent! [&_.ant-avatar]:bg-[#c8d0dc] [&_small]:text-xs [&_span]:grid [&_span]:leading-[1.25] max-[620px]:[&_span]:hidden [&_strong]:text-caption",
+  ),
+  accountDropdown: tw(
+    "w-40! max-w-40! min-w-40! [&_.ant-dropdown-menu]:w-full!",
+  ),
+  accountDropdownEmail: tw(
+    "cursor-default! text-xs! text-admin-text-subtle! opacity-100! [&_.ant-dropdown-menu-title-content]:break-all",
   ),
   adminContent: tw(
     "min-w-0 px-7 pt-5.5 pb-10 max-[899px]:px-4 max-[899px]:pt-5 max-[899px]:pb-8",
@@ -69,7 +75,7 @@ export const ui = {
     "flex min-w-0 items-center gap-3 [&_h3]:m-0 [&_h3]:overflow-hidden [&_h3]:text-base [&_h3]:text-ellipsis [&_h3]:whitespace-nowrap [&_h3]:text-admin-agent-title",
   ),
   chatbotTitleButton: tw(
-    "block max-w-full cursor-pointer overflow-hidden border-0 bg-transparent p-0 text-left text-base font-bold text-ellipsis whitespace-nowrap text-admin-agent-title hover:text-admin-agent-action focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-admin-agent-action",
+    "block! h-auto! max-w-full! overflow-hidden! p-0! text-left! text-base! font-bold! text-ellipsis! whitespace-nowrap! text-admin-agent-title! hover:text-admin-agent-action!",
   ),
   chatbotAvatar: tw(
     "grid size-10 shrink-0 place-items-center rounded-full bg-admin-agent-avatar-bg text-base text-admin-agent-avatar",
@@ -99,8 +105,17 @@ export const ui = {
   settingsActions: tw(
     "flex items-center justify-end gap-3 pt-1 max-[620px]:flex-col-reverse max-[620px]:items-stretch [&_.ant-btn]:min-w-24",
   ),
+  auditLogTableToolbar: tw(
+    "mb-4.5 flex items-center justify-end gap-2 max-[620px]:items-stretch max-[620px]:[&_.ant-select]:w-full",
+  ),
   settingsAccountForm: tw(
-    "mt-4 flex gap-2 max-[620px]:flex-col [&_.ant-form-item]:mb-0 max-[620px]:[&_.ant-form-item]:w-full max-[620px]:[&_.ant-input]:w-full",
+    "mb-4! flex gap-2 max-[620px]:flex-col [&_.ant-form-item]:mb-0 max-[620px]:[&_.ant-form-item]:w-full max-[620px]:[&_.ant-input]:w-full",
+  ),
+  accountRoleTagPrimary: tw(
+    "m-0! rounded-full! bg-admin-agent-avatar-bg! px-3! py-1! text-caption! font-semibold! text-admin-agent-avatar!",
+  ),
+  accountRoleTagDefault: tw(
+    "m-0! rounded-full! bg-admin-surface-subtle! px-3! py-1! text-caption! font-semibold! text-admin-text-subtle!",
   ),
   pageHeading: tw(
     "flex min-h-19 items-start justify-between gap-6 [&_h1]:mt-0 [&_h1]:mb-1.25 [&_h1]:text-[clamp(27px,2.3vw,34px)] [&_h1]:tracking-[-.035em] [&_h1]:text-admin-heading [&_p]:m-0 [&_p]:text-sm [&_p]:text-admin-muted [&_time]:pt-2.5 [&_time]:text-caption [&_time]:text-admin-muted max-[899px]:[&_time]:hidden",
@@ -176,7 +191,7 @@ export const ui = {
     "relative z-[1001] [&.ant-upload-wrapper_.ant-upload-drag]:border-admin-primary [&.ant-upload-wrapper_.ant-upload-drag]:bg-[#f7fbff] [&.ant-upload-wrapper_.ant-upload-drag]:shadow-[0_0_0_4px_rgb(23_105_224/.18),0_18px_48px_rgb(7_28_62/.24)]",
   ),
   ragDragger: tw(
-    "[&.ant-upload-wrapper_.ant-upload-drag]:rounded-toast [&_.ant-upload-drag-icon]:mb-2.5! [&_.ant-upload-drag-icon_.anticon]:text-[42px]! [&_.ant-upload-drag-icon_.anticon]:text-admin-primary! [&_.ant-upload-hint]:text-xs! [&_.ant-upload-hint]:text-[#7c899d]! [&_.ant-upload-hint]:select-none [&_.ant-upload-text]:text-base! [&_.ant-upload-text]:font-[650]! [&_.ant-upload-text]:text-[#20345e]! [&_.ant-upload-text]:select-none [&.ant-upload-wrapper_.ant-upload-btn]:px-5 [&.ant-upload-wrapper_.ant-upload-btn]:pt-6.5 [&.ant-upload-wrapper_.ant-upload-btn]:pb-5.5 max-[620px]:[&.ant-upload-wrapper_.ant-upload-btn]:px-3.5 [&.ant-upload-wrapper_.ant-upload-drag]:border-admin-border [&.ant-upload-wrapper_.ant-upload-drag]:bg-[linear-gradient(145deg,#f8fbff,#f4f8fd)] [&.ant-upload-wrapper_.ant-upload-drag:hover]:border-admin-primary [&.ant-upload-wrapper_.ant-upload-drag:hover]:bg-[#f2f7ff]",
+    "[&_.ant-upload-drag-icon]:mb-2.5! [&_.ant-upload-drag-icon_.anticon]:text-[42px]! [&_.ant-upload-drag-icon_.anticon]:text-admin-primary! [&_.ant-upload-hint]:text-xs! [&_.ant-upload-hint]:text-[#7c899d]! [&_.ant-upload-hint]:select-none [&_.ant-upload-text]:text-base! [&_.ant-upload-text]:font-[650]! [&_.ant-upload-text]:text-[#20345e]! [&_.ant-upload-text]:select-none [&.ant-upload-wrapper_.ant-upload-btn]:px-5 [&.ant-upload-wrapper_.ant-upload-btn]:pt-6.5 [&.ant-upload-wrapper_.ant-upload-btn]:pb-5.5 max-[620px]:[&.ant-upload-wrapper_.ant-upload-btn]:px-3.5 [&.ant-upload-wrapper_.ant-upload-drag]:rounded-surface [&.ant-upload-wrapper_.ant-upload-drag]:border-admin-border [&.ant-upload-wrapper_.ant-upload-drag]:bg-[linear-gradient(145deg,#f8fbff,#f4f8fd)] [&.ant-upload-wrapper_.ant-upload-drag:hover]:border-admin-primary [&.ant-upload-wrapper_.ant-upload-drag:hover]:bg-[#f2f7ff]",
   ),
   ragPickerActions: tw(
     "mt-4 justify-center max-[620px]:grid [&_.ant-btn]:min-w-33 [&_.ant-btn]:bg-white/86 max-[620px]:[&_.ant-btn]:w-full",
@@ -210,27 +225,28 @@ export const ui = {
   ragTableTools: tw(
     "mb-4.5 grid grid-cols-[minmax(220px,1.2fr)_minmax(220px,1fr)_auto] gap-3 max-[620px]:grid-cols-1",
   ),
-  summaryChart: tw("grid gap-2.5"),
-  summaryChartRow: tw(
-    "grid grid-cols-[minmax(120px,180px)_1fr_auto] items-center gap-3 text-caption",
+  summaryPeriodControl: tw(
+    "mb-4.5 flex items-center justify-between gap-3 max-[620px]:flex-col max-[620px]:items-stretch",
   ),
-  summaryChartLabel: tw(
-    "overflow-hidden text-ellipsis whitespace-nowrap text-[#334360]",
+  summaryTable: tw(
+    "[&_.ant-table-cell]:align-top [&_.ant-table-cell:first-child]:font-medium [&_.ant-table-cell:first-child]:text-[#20345e]",
   ),
-  summaryChartTrack: tw(
-    "h-4.5 overflow-hidden rounded-full bg-admin-surface-subtle",
+  summaryChartLayout: tw(
+    "grid min-w-0 grid-cols-[minmax(0,1.25fr)_minmax(260px,0.75fr)] gap-5 max-[760px]:grid-cols-1",
   ),
-  summaryChartBar: tw(
-    "h-full rounded-full bg-admin-primary transition-[width]",
+  summaryChart: tw(
+    "grid min-w-0 gap-3 overflow-hidden rounded-none [&_.g2-legend]:max-w-full [&_.g2-legend]:flex-wrap [&+section]:border-admin-border max-[760px]:[&+section]:border-t min-[760px]:[&+section]:border-l",
   ),
-  summaryChartCount: tw("text-right font-semibold text-[#10234b]"),
-  summaryAttentionSection: tw(
-    "mt-5 rounded-control border border-solid border-[#ffd8a8] bg-[#fff8ef] p-4.5",
+  summaryPieChart: tw(
+    "max-w-full min-w-0 max-[620px]:[&_.g2-legend-item]:text-caption [&_canvas]:max-w-full",
   ),
-  summaryAttentionList: tw(
-    "m-0 mt-2 grid list-none gap-1.5 p-0 [&_li]:rounded-compact [&_li]:bg-white [&_li]:px-3 [&_li]:py-2 [&_li]:text-caption [&_li]:text-[#5a4321]",
+  summaryChartDetails: tw("p-3.5"),
+  summaryChartDetailsHeading: tw(
+    "flex items-start justify-between gap-3 max-[620px]:flex-wrap",
   ),
-  summaryMeaninglessList: tw(
-    "m-0 mt-2 grid list-none gap-1.25 p-0 [&_li]:text-caption [&_li]:text-admin-text-subtle",
+  summaryTableParagraph: tw("m-0! whitespace-pre-wrap"),
+  summaryTableList: tw(
+    "m-0 list-none p-0 [&_li]:pt-2 [&_li]:text-caption [&_li]:text-[#334360]",
   ),
+  cardLoading: tw("grid min-h-60 place-items-center"),
 };

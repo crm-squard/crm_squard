@@ -29,6 +29,7 @@ import re
 from typing import Callable, Optional
 
 from llama_index.core import VectorStoreIndex
+from llama_index.core.node_parser import SentenceSplitter
 from llama_index.core.schema import NodeRelationship, RelatedNodeInfo, TextNode
 from sqlalchemy import text as sql_text
 
@@ -38,8 +39,11 @@ from app.db import get_engine as _get_engine
 Parser = Callable[[str, str], list[dict]]
 
 
-def hash_content(raw_text: str) -> str:
-    return hashlib.sha256(raw_text.encode("utf-8")).hexdigest()
+def hash_content(raw_bytes: bytes) -> str:
+    """雜湊的是原始上傳檔案 bytes，不是解析／轉檔後的文字——PDF/Word 轉出的純文字沒辦法在
+    瀏覽器端重現，client_sha256 只能由前端對原始檔案 bytes 計算，所以身分比對一律以這個為準
+    （見 app/main.py 的 _check_client_hash() 呼叫端）。"""
+    return hashlib.sha256(raw_bytes).hexdigest()
 
 
 # 通用 markdown 拆分邏輯：依 H1（文件標題）/H2（小節標題）切段落，每個 H2 小節是一個 chunk。
@@ -70,6 +74,29 @@ def parse_generic_markdown(raw_text: str, source: str) -> list[dict]:
             "product_id": "",
         })
     return chunks
+
+
+# PDF／Word 轉出的純文字沒有 Markdown 標題結構可循（PDF 更是完全沒有語意標記可言），硬套
+# parse_generic_markdown 的 H1/H2 規則在沒有 "##" 段落標題時會直接產出 0 個 chunk。改用
+# LlamaIndex 內建的 SentenceSplitter（本專案已經依賴 llama-index-core，見檔案頂端說明）：
+# 依句子邊界、以 token 數（而非字元數）切段，相鄰 chunk 間保留 overlap，避免答案剛好跨在
+# 切點上時檢索不到完整脈絡。chunk_size/chunk_overlap 選比預設值（1024/200）小的 512/50，
+# 對應 RAG 檢索偏好較小、較精準的 chunk。
+_PLAIN_TEXT_SPLITTER = SentenceSplitter(chunk_size=512, chunk_overlap=50)
+
+
+def parse_plain_text(raw_text: str, source: str) -> list[dict]:
+    """給沒有 Markdown 結構的純文字使用（PDF／Word 轉出的內容），見上方 _PLAIN_TEXT_SPLITTER 說明。"""
+    return [
+        {
+            "text": text,
+            "source": source,
+            "topic": f"{source}：第 {i + 1} 段",
+            "category": "",
+            "product_id": "",
+        }
+        for i, text in enumerate(_PLAIN_TEXT_SPLITTER.split_text(raw_text))
+    ]
 
 
 def _build_nodes(
@@ -146,6 +173,7 @@ def _ensure_schema() -> None:
                 path       TEXT NOT NULL,
                 tags       TEXT[] NOT NULL DEFAULT '{}',
                 created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
                 UNIQUE (chatbot_id, path)
             )
             """
@@ -158,6 +186,24 @@ def _ensure_schema() -> None:
         ))
         conn.execute(sql_text(
             "CREATE INDEX IF NOT EXISTS kb_document_labels_chatbot_id_idx ON kb_document_labels (chatbot_id)"
+        ))
+        # 舊資料庫的 labels 表沒有 updated_at；以既有建立時間回填後再設為必填，
+        # 讓 migration 與新 schema 都能安全使用同一個排序欄位。
+        conn.execute(sql_text(
+            "ALTER TABLE kb_document_labels ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ"
+        ))
+        conn.execute(sql_text(
+            "UPDATE kb_document_labels SET updated_at = created_at WHERE updated_at IS NULL"
+        ))
+        conn.execute(sql_text(
+            "ALTER TABLE kb_document_labels ALTER COLUMN updated_at SET DEFAULT now()"
+        ))
+        conn.execute(sql_text(
+            "ALTER TABLE kb_document_labels ALTER COLUMN updated_at SET NOT NULL"
+        ))
+        conn.execute(sql_text(
+            "CREATE INDEX IF NOT EXISTS kb_document_labels_chatbot_updated_at_idx "
+            "ON kb_document_labels (chatbot_id, updated_at DESC)"
         ))
     _schema_ready = True
 
@@ -218,7 +264,8 @@ def _relabel_and_collect_orphan(
                 """
                 INSERT INTO kb_document_labels (doc_id, chatbot_id, path, tags)
                 VALUES (:doc_id, :chatbot_id, :path, :tags)
-                ON CONFLICT (chatbot_id, path) DO UPDATE SET doc_id = EXCLUDED.doc_id, tags = EXCLUDED.tags
+                ON CONFLICT (chatbot_id, path) DO UPDATE
+                SET doc_id = EXCLUDED.doc_id, tags = EXCLUDED.tags, updated_at = now()
                 """
             ),
             {"doc_id": doc_id, "chatbot_id": chatbot_id, "path": path, "tags": tags},
@@ -246,11 +293,20 @@ def _finalize_orphan_deletion(doc_id: int, index: VectorStoreIndex) -> None:
 
 
 def _create_document_with_embedding(
-    chatbot_id: str, path: str, raw_text: str, index: VectorStoreIndex, parser: Parser = parse_generic_markdown
+    chatbot_id: str,
+    path: str,
+    raw_text: str,
+    content_hash: str,
+    file_size_bytes: int,
+    index: VectorStoreIndex,
+    parser: Parser = parse_generic_markdown,
 ) -> dict:
-    """真的解析＋embed 一份新內容：新增 kb_documents 一筆，插入對應的向量，回傳新 doc_id 與 chunk 數。"""
-    encoded = raw_text.encode("utf-8")
-    content_hash = hashlib.sha256(encoded).hexdigest()
+    """真的解析＋embed 一份新內容：新增 kb_documents 一筆，插入對應的向量，回傳新 doc_id 與 chunk 數。
+
+    content_hash／file_size_bytes 直接信任呼叫端（app/main.py 的 PUT /api/admin/documents/{path}）
+    已經核對過的原始檔案 client_sha256／bytes 長度，不在這裡從 raw_text 重算——raw_text 對 PDF/Word
+    來說是轉檔後的擷取文字，跟原始檔案 bytes 是兩回事，「內容身分」必須以使用者實際上傳的檔案為準。
+    """
     engine = _get_engine()
     with engine.begin() as conn:
         doc_id = conn.execute(
@@ -260,7 +316,7 @@ def _create_document_with_embedding(
                 VALUES (:chatbot_id, :h, :s, 0) RETURNING doc_id
                 """
             ),
-            {"chatbot_id": chatbot_id, "h": content_hash, "s": len(encoded)},
+            {"chatbot_id": chatbot_id, "h": content_hash, "s": file_size_bytes},
         ).scalar_one()
 
     chunks = parser(raw_text, path)
@@ -283,6 +339,8 @@ def upsert_document(
     client_sha256: str,
     raw_text: Optional[str],
     index: VectorStoreIndex,
+    parser: Parser = parse_generic_markdown,
+    file_size_bytes: Optional[int] = None,
 ) -> dict:
     """
     知識庫文件管理的唯一寫入入口：不需要呼叫端提供任何 doc_id，純粹依「公司 + 路徑」跟
@@ -317,7 +375,9 @@ def upsert_document(
     if raw_text is None:
         raise ValueError("需要上傳檔案內容才能新增或更新這份文件。")
 
-    created = _create_document_with_embedding(chatbot_id, path, raw_text, index)
+    created = _create_document_with_embedding(
+        chatbot_id, path, raw_text, client_sha256, file_size_bytes, index, parser=parser
+    )
     orphan = _relabel_and_collect_orphan(chatbot_id, path, created["doc_id"], tags, old_doc_id)
     if orphan is not None:
         _finalize_orphan_deletion(orphan, index)
@@ -330,10 +390,10 @@ def list_documents(chatbot_id: str) -> list[dict]:
     _ensure_schema()
     sql = sql_text(
         """
-        SELECT l.path, l.tags, d.chunk_count, d.file_size_bytes, d.created_at, d.content_hash
+        SELECT l.path, l.tags, d.chunk_count, d.file_size_bytes, l.updated_at, d.content_hash
         FROM kb_document_labels l JOIN kb_documents d ON d.doc_id = l.doc_id
         WHERE l.chatbot_id = :chatbot_id
-        ORDER BY l.path
+        ORDER BY l.updated_at DESC, l.path ASC
         """
     )
     engine = _get_engine()
@@ -345,7 +405,7 @@ def list_documents(chatbot_id: str) -> list[dict]:
             "tags": list(row.tags) if row.tags is not None else [],
             "chunk_count": row.chunk_count,
             "file_size_bytes": row.file_size_bytes,
-            "uploaded_at": row.created_at.isoformat() if row.created_at is not None else None,
+            "uploaded_at": row.updated_at.isoformat() if row.updated_at is not None else None,
             "content_hash": row.content_hash,
         }
         for row in rows

@@ -1,4 +1,3 @@
-import CustomerServiceOutlined from "@ant-design/icons/CustomerServiceOutlined";
 import HomeOutlined from "@ant-design/icons/HomeOutlined";
 import LogoutOutlined from "@ant-design/icons/LogoutOutlined";
 import MenuOutlined from "@ant-design/icons/MenuOutlined";
@@ -15,9 +14,10 @@ import Menu from "antd/es/menu";
 import Tooltip from "antd/es/tooltip";
 import { useEffect, useState } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
-import BrandMark from "./BrandMark";
 import { useAuth } from "../auth/AuthContext";
+import { ACCOUNT_ROLE_DISPLAY } from "../config/accountRoles";
 import { ui } from "../uiStyles";
+import BrandMark from "./BrandMark";
 
 const { Header, Sider, Content } = Layout;
 
@@ -25,7 +25,6 @@ const navigationItems = [
   { key: "/chatbots", icon: <RobotOutlined />, label: "ChatBot" },
   // { key: "/dashboard", icon: <HomeOutlined />, label: "儀表板" },
   // { key: "/orders", icon: <ShoppingOutlined />, label: "訂單管理" },
-  { key: "/summary", icon: <CustomerServiceOutlined />, label: "客服摘要" },
 ];
 
 // 「管理者帳號」頁籤只給 platform_primary／platform_secondary 看，商家帳號完全看不到這個入口。
@@ -39,9 +38,14 @@ function resolveSelectedKey(pathname: string) {
   if (pathname.startsWith("/orders")) return "/orders";
   if (pathname.startsWith("/chatbots")) return "/chatbots";
   if (pathname.startsWith("/dashboard")) return "/dashboard";
-  if (pathname.startsWith("/summary")) return "/summary";
   if (pathname.startsWith("/admin-accounts")) return "/admin-accounts";
   return "/chatbots";
+}
+
+function getAccountName(email?: string) {
+  if (!email) return "-";
+  const atIndex = email.indexOf("@");
+  return atIndex > 0 ? email.slice(0, atIndex) : email;
 }
 
 export default function AdminLayout() {
@@ -58,6 +62,10 @@ export default function AdminLayout() {
   const menuItems = isPlatformRole
     ? [...navigationItems, ADMIN_ACCOUNTS_ITEM]
     : navigationItems;
+  const accountRoleDisplay = account
+    ? ACCOUNT_ROLE_DISPLAY[account.role]
+    : null;
+  const accountName = getAccountName(account?.email);
 
   async function handleLogout() {
     await logout();
@@ -138,8 +146,16 @@ export default function AdminLayout() {
             />
           </Tooltip>
           <Dropdown
+            rootClassName={ui.accountDropdown}
             menu={{
               items: [
+                {
+                  key: "account-email",
+                  className: ui.accountDropdownEmail,
+                  disabled: true,
+                  label: account?.email ?? "-",
+                },
+                { type: "divider" },
                 { key: "logout", icon: <LogoutOutlined />, label: "登出" },
               ],
               onClick: ({ key }) => {
@@ -147,13 +163,20 @@ export default function AdminLayout() {
               },
             }}
           >
-            <div className={ui.account} aria-label="帳號選單">
+            <Button
+              aria-haspopup="menu"
+              aria-label="帳號選單"
+              className={ui.account}
+              type="text"
+            >
               <Avatar icon={<UserOutlined />} />
               <span>
-                <strong>{account?.email ?? "-"}</strong>
-                <small>{account?.role ?? ""}</small>
+                <strong>{accountName}</strong>
+                <small className="text-admin-text-secondary">
+                  {accountRoleDisplay?.label ?? ""}
+                </small>
               </span>
-            </div>
+            </Button>
           </Dropdown>
         </Header>
         <Content className={ui.adminContent}>

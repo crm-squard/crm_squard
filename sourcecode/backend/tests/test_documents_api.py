@@ -28,8 +28,62 @@ def _sha256(content: str) -> str:
     return hashlib.sha256(content.encode("utf-8")).hexdigest()
 
 
+def _sha256_bytes(raw: bytes) -> str:
+    return hashlib.sha256(raw).hexdigest()
+
+
 def _md_file(content: str, filename: str = TEST_PATH):
     return {"file": (filename, content.encode("utf-8"), "text/markdown")}
+
+
+def _minimal_pdf_bytes(text: str) -> bytes:
+    """手刻一份最小可用的單頁 PDF（Helvetica 純文字），足夠讓 pypdf 抽出文字，
+    不需要額外套件（例如 reportlab）就能產生測試檔案。"""
+    stream = f"BT /F1 18 Tf 10 100 Td ({text}) Tj ET"
+    pdf = f"""%PDF-1.4
+1 0 obj<< /Type /Catalog /Pages 2 0 R >>endobj
+2 0 obj<< /Type /Pages /Kids [3 0 R] /Count 1 >>endobj
+3 0 obj<< /Type /Page /Parent 2 0 R /Resources << /Font << /F1 4 0 R >> >> /MediaBox [0 0 300 144] /Contents 5 0 R >>endobj
+4 0 obj<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>endobj
+5 0 obj<< /Length {len(stream)} >>stream
+{stream}
+endstream
+endobj
+xref
+0 6
+0000000000 65535 f
+trailer<< /Size 6 /Root 1 0 R >>
+startxref
+0
+%%EOF"""
+    return pdf.encode("latin-1")
+
+
+def _docx_bytes(paragraphs: list[str]) -> bytes:
+    import io
+
+    from docx import Document
+
+    doc = Document()
+    for p in paragraphs:
+        doc.add_paragraph(p)
+    buf = io.BytesIO()
+    doc.save(buf)
+    return buf.getvalue()
+
+
+def _pdf_file(raw: bytes, filename: str):
+    return {"file": (filename, raw, "application/pdf")}
+
+
+def _docx_file(raw: bytes, filename: str):
+    return {
+        "file": (
+            filename,
+            raw,
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        )
+    }
 
 
 @pytest.fixture(autouse=True)
@@ -171,6 +225,56 @@ def test_delete_nested_path(client):
     delete_resp = client.delete(f"/api/admin/documents/{nested_path}")
     assert delete_resp.status_code == 200
     assert delete_resp.json() == {"status": "deleted", "path": nested_path}
+
+
+def test_upsert_pdf_file_extracts_and_chunks_text(client):
+    """.pdf 上傳應該能被解析成至少一個 chunk（見 app/main.py 的 _extract_pdf_text、
+    app/rag/documents_store.py 的 parse_plain_text——PDF 沒有 Markdown 標題結構，
+    依字數切段）。雜湊比對的是原始 PDF bytes，不是抽出來的文字。"""
+    path = "pytest_pdf_upload.pdf"
+    raw = _minimal_pdf_bytes("Pytest PDF chunking test content")
+    try:
+        resp = client.put(
+            f"/api/admin/documents/{path}",
+            data={"tags": ["pdf"], "client_sha256": _sha256_bytes(raw)},
+            files=_pdf_file(raw, path),
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["chunk_count"] > 0
+        assert body["content_changed"] is True
+    finally:
+        client.delete(f"/api/admin/documents/{path}")
+
+
+def test_upsert_docx_file_extracts_and_chunks_text(client):
+    """.docx 上傳應該能被解析成至少一個 chunk，流程與 .pdf 相同。"""
+    path = "pytest_docx_upload.docx"
+    raw = _docx_bytes(["測試標題", "這是 pytest 建立的 Word 測試內容。"])
+    try:
+        resp = client.put(
+            f"/api/admin/documents/{path}",
+            data={"tags": ["docx"], "client_sha256": _sha256_bytes(raw)},
+            files=_docx_file(raw, path),
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["chunk_count"] > 0
+        assert body["content_changed"] is True
+    finally:
+        client.delete(f"/api/admin/documents/{path}")
+
+
+def test_upsert_rejects_unsupported_extension(client):
+    """非 .md／.pdf／.docx 的副檔名一律回 400。"""
+    path = "pytest_unsupported.txt"
+    raw = b"plain text"
+    resp = client.put(
+        f"/api/admin/documents/{path}",
+        data={"tags": [], "client_sha256": _sha256_bytes(raw)},
+        files={"file": (path, raw, "text/plain")},
+    )
+    assert resp.status_code == 400
 
 
 def test_linked_status_shares_content_without_reembed(client):
