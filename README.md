@@ -1,56 +1,23 @@
-# Subagent 套件安裝說明
+# CRM Squad
 
-這個壓縮檔裡包含 4 個 Claude Code subagent，已加上 `memory: project` 讓每個角色能跨 session 累積自己的知識。
+## 專案摘要
 
-## 資料夾結構
+CRM Squad 是一套智慧 CRM 展示專案，整合企業購物前台、管理後台、可嵌入式 Chat Widget、FastAPI 後端、RAG 知識庫問答與 MCP 工具查詢，提供產品諮詢、訂單查詢、Chatbot 管理等功能。
 
-```
-.claude/
-└── agents/
-    ├── frontend-developer.md
-    ├── backend-developer.md
-    ├── qa-test-engineer.md
-    └── security-auditor.md
-```
+可執行原始碼、安裝需求、環境設定、啟動方式及各服務架構均集中於 [`sourcecode/README.md`](sourcecode/README.md)，根目錄 README 僅提供專案摘要與資料結構導覽。
 
-## 安裝方式
+## 根目錄結構
 
-1. 解壓縮這個檔案。
-2. 把裡面的 `.claude` 資料夾整個複製到你的專案根目錄（跟 `.git` 同一層）。
-   - 如果專案裡已經有 `.claude` 資料夾，只需要把 `agents` 子資料夾合併進去即可，不要整個覆蓋。
-3. 若這是你在這個專案第一次新增 `.claude/agents/`（原本完全沒有這個資料夾），需要**重新啟動 Claude Code**才會偵測到；之後修改檔案內容則會自動偵測，不用重啟。
-4. 建議把 `.claude/agents/` 加入 git 版本控制，讓組員共用同一套角色設定；`.claude/agent-memory/`（各角色自己的記憶檔，第一次執行後才會產生）也建議加入版本控制，讓所有人共享累積下來的知識。
-
-## 使用方式
-
-自動委派（不用特別指定，Claude 會依任務內容自動判斷）：
-
-```
-幫我做訂單查詢的 API
-```
-
-明確指定：
-
-```
-用 security-auditor 檢查一下這次的認證邏輯改動
-```
-
-串接多個角色：
-
-```
-用 backend-developer 實作訂單查詢 API，完成後用 qa-test-engineer 補測試，
-測試通過後用 security-auditor 檢查一次
-```
-
-## 記憶功能
-
-每個角色會在 `.claude/agent-memory/<角色名稱>/` 底下累積自己的知識，跨 session 保留。第一次使用某個角色前記憶是空的，屬正常現象——用得越多，累積的知識越多。
-
-可以主動請它們讀取或更新記憶，例如：
-
-```
-用 security-auditor 檢查這次改動，先看看你之前記錄過的模式
-```
-```
-稽核完成了，把你這次學到的存到記憶裡
+```text
+crm-squard/
+├── sourcecode/           # 可執行原始碼、服務設定與詳細專案文件
+├── knowledge-base/       # Chatbot 產品介紹、使用流程與常見問題內容
+├── design-system/        # 商城介面設計規範與頁面設計文件
+├── images/               # 產品圖片等靜態素材
+├── products_20_quirky.md # 範例產品資料
+├── AGENTS.md             # Codex 專案協作規則
+├── CLAUDE.md             # Claude Code 專案協作規則與 Subagent 說明
+├── GEMINI.md             # Gemini CLI 專案協作規則
+├── LICENSE               # 專案授權條款
+└── README.md             # 專案摘要與根目錄導覽
 ```
